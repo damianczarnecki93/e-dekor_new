@@ -40,7 +40,7 @@ const api = {
     // Pobiera wszystkie produkty. Backend powinien wczytać i połączyć oba pliki CSV.
     getProducts: async () => {
         try {
-            const response = await fetch('/api/products'); // GET /api/products
+const response = await fetch('https://system-magazynowy-backend.onrender.com/api/products');
             if (!response.ok) throw new Error('Błąd pobierania produktów');
             return await response.json();
         } catch (error) {
