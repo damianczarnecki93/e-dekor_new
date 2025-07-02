@@ -51,7 +51,7 @@ const response = await fetch('https://system-magazynowy-backend.onrender.com/api
     // Zapisuje nowe zamówienie
     saveOrder: async (order, token) => {
         try {
-            const response = await fetch('/api/orders', { // POST /api/orders
+const response = await fetch('https://system-magazynowy-backend.onrender.com/api/products');
                 method: 'POST',
                 headers: { 
                     'Content-Type': 'application/json',
@@ -69,7 +69,7 @@ const response = await fetch('https://system-magazynowy-backend.onrender.com/api
     // Pobiera listę zapisanych zamówień
     getOrders: async (token) => {
         try {
-            const response = await fetch('/api/orders', { // GET /api/orders
+const response = await fetch('https://system-magazynowy-backend.onrender.com/api/products');
                  headers: { 'Authorization': `Bearer ${token}` }
             });
             if (!response.ok) throw new Error('Błąd pobierania zamówień');
@@ -82,7 +82,7 @@ const response = await fetch('https://system-magazynowy-backend.onrender.com/api
     // Loguje użytkownika i zwraca token
     login: async (username, password) => {
         try {
-            const response = await fetch('/api/login', { // POST /api/login
+const response = await fetch('https://system-magazynowy-backend.onrender.com/api/products');
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username, password }),
@@ -103,7 +103,7 @@ const response = await fetch('https://system-magazynowy-backend.onrender.com/api
         formData.append('products', file); // 'products' to nazwa pola oczekiwana przez backend (np. multer)
 
         try {
-            const response = await fetch('/api/admin/upload', { // POST /api/admin/upload
+const response = await fetch('https://system-magazynowy-backend.onrender.com/api/products');
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${token}` },
                 body: formData,
