@@ -82,11 +82,21 @@ const api = {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username, password }),
             });
-            if (!response.ok) {
-                 const errorData = await response.json();
-                 throw new Error(errorData.message || 'Błąd logowania');
+            
+            if (response.ok) {
+                return await response.json();
+            } else {
+                // POPRAWKA: Bezpieczne parsowanie odpowiedzi błędu
+                const errorText = await response.text();
+                try {
+                    // Spróbuj sparsować tekst jako JSON
+                    const errorData = JSON.parse(errorText);
+                    throw new Error(errorData.message || `Błąd serwera: ${response.status}`);
+                } catch (e) {
+                    // Jeśli parsowanie się nie uda (np. pusty tekst), rzuć ogólny błąd
+                    throw new Error(`Błąd logowania: ${response.status} ${response.statusText}`);
+                }
             }
-            return await response.json();
         } catch (error) {
             console.error("API Error login:", error);
             throw error;
