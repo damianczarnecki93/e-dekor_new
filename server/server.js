@@ -1,126 +1,89 @@
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const fs = require('fs');
+const mongoose = require('mongoose');
 const path = require('path');
-const csv = require('csv-parser');
-const multer = require('multer'); // Do obsługi uploadu plików
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// --- Zmienne przechowujące dane w pamięci ---
-let products = [];
-let orders = []; // Dodajemy tablicę na zamówienia
+// --- Połączenie z bazą danych MongoDB ---
+mongoose.connect(process.env.DATABASE_URL, { useNewUrlParser: true, useUnifiedTopology: true })
+  .then(() => console.log('Połączono z MongoDB Atlas!'))
+  .catch(err => console.error('Błąd połączenia z MongoDB:', err));
 
-// --- Wczytywanie produktów z plików CSV ---
-const loadProducts = () => {
-    const tempProducts = [];
-    const files = ['produkty.csv', 'produkty2.csv'];
-    let filesToProcess = files.length;
+// --- Definicje schematów i modeli ---
+const productSchema = new mongoose.Schema({
+    id: String,
+    name: String,
+    product_code: String,
+    barcode: String,
+    price: Number,
+    quantity: Number,
+    availability: Boolean
+});
+const Product = mongoose.model('Product', productSchema);
 
-    if (filesToProcess === 0) {
-        console.log('Brak plików CSV do przetworzenia.');
-        return;
-    }
-
-    files.forEach(file => {
-        const filePath = path.join(__dirname, file);
-        if (fs.existsSync(filePath)) {
-            fs.createReadStream(filePath)
-                .pipe(csv())
-                .on('data', (data) => {
-                    tempProducts.push({
-                        ...data,
-                        id: data.id || data.barcode,
-                        price: parseFloat(data.price) || 0,
-                        quantity: parseInt(data.quantity) || 0,
-                        availability: (data.availability || 'true').toLowerCase() === 'true'
-                    });
-                })
-                .on('end', () => {
-                    filesToProcess--;
-                    if (filesToProcess === 0) {
-                        products = tempProducts;
-                        console.log(`Załadowano ${products.length} produktów.`);
-                    }
-                })
-                .on('error', (error) => {
-                    console.error(`Błąd podczas wczytywania pliku ${file}:`, error);
-                    filesToProcess--;
-                });
-        } else {
-            console.log(`Plik ${file} nie znaleziony.`);
-            filesToProcess--;
-        }
-    });
-};
+const orderSchema = new mongoose.Schema({
+    id: { type: String, required: true },
+    customerName: String,
+    items: Array,
+    total: Number,
+    status: String,
+    date: { type: Date, default: Date.now }
+});
+const Order = mongoose.model('Order', orderSchema);
 
 // --- API Endpoints ---
-
-// Endpoint logowania - ZAWSZE zwraca JSON
 app.post('/api/login', (req, res) => {
     const { username, password } = req.body;
-    console.log(`Próba logowania dla użytkownika: ${username}`);
-
     if (username === 'admin' && password === 'admin123') {
-        console.log('Logowanie admina udane.');
-        return res.status(200).json({ 
-            user: { username: 'admin', role: 'administrator' }, 
-            token: 'mock-jwt-token-for-admin' 
-        });
+        return res.status(200).json({ user: { username: 'admin', role: 'administrator' }, token: 'mock-jwt-token-for-admin' });
     }
     if (username === 'user' && password === 'user123') {
-        console.log('Logowanie użytkownika udane.');
-        return res.status(200).json({ 
-            user: { username: 'user', role: 'user' }, 
-            token: 'mock-jwt-token-for-user' 
-        });
+        return res.status(200).json({ user: { username: 'user', role: 'user' }, token: 'mock-jwt-token-for-user' });
     }
-    
-    console.log('Logowanie nieudane - nieprawidłowe dane.');
-    // Zawsze zwracaj błąd w formacie JSON
     return res.status(401).json({ message: 'Nieprawidłowe dane logowania' });
 });
 
-// Endpoint zwracający produkty
-app.get('/api/products', (req, res) => {
-    res.status(200).json(products);
-});
-
-// Endpoint do zapisywania zamówień
-app.post('/api/orders', (req, res) => {
-    const newOrder = req.body;
-    newOrder.id = `ZAM-${Date.now()}`;
-    newOrder.date = new Date().toISOString();
-    newOrder.status = 'Zapisane'; // Domyślny status
-    orders.push(newOrder);
-    console.log('Zapisano nowe zamówienie:', newOrder.id);
-    res.status(201).json({ message: 'Zamówienie zapisane!', order: newOrder });
-});
-
-// Endpoint do pobierania zamówień
-app.get('/api/orders', (req, res) => {
-    res.status(200).json(orders);
-});
-
-// Endpoint do wgrywania plików (dla panelu admina)
-const upload = multer({ dest: 'uploads/' }); // Pliki będą tymczasowo w folderze /uploads
-app.post('/api/admin/upload', upload.single('products'), (req, res) => {
-    if (!req.file) {
-        return res.status(400).json({ message: 'Nie wybrano pliku.' });
+app.get('/api/products', async (req, res) => {
+    try {
+        const products = await Product.find();
+        res.status(200).json(products);
+    } catch (error) {
+        res.status(500).json({ message: 'Błąd pobierania produktów', error });
     }
-    console.log('Otrzymano plik:', req.file.originalname);
-    // Tutaj powinna być logika przetwarzania pliku i aktualizacji bazy `products`
-    // Po przetworzeniu, można ponownie załadować produkty
-    loadProducts();
-    res.status(200).json({ message: `Plik ${req.file.originalname} został wgrany.` });
 });
 
+app.post('/api/orders', async (req, res) => {
+    const orderData = req.body;
+    const newOrder = new Order({
+        id: `ZAM-${Date.now()}`,
+        customerName: orderData.customerName,
+        items: orderData.items,
+        total: orderData.total,
+        status: 'Zapisane'
+    });
+    try {
+        const savedOrder = await newOrder.save();
+        res.status(201).json({ message: 'Zamówienie zapisane!', order: savedOrder });
+    } catch (error) {
+        res.status(400).json({ message: 'Błąd zapisywania zamówienia', error });
+    }
+});
+
+app.get('/api/orders', async (req, res) => {
+    try {
+        const orders = await Order.find().sort({ date: -1 }); // Sortuj od najnowszych
+        res.status(200).json(orders);
+    } catch (error) {
+        res.status(500).json({ message: 'Błąd pobierania zamówień', error });
+    }
+});
 
 // --- Start serwera ---
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
     console.log(`Serwer działa na porcie ${PORT}`);
-    loadProducts(); // Wczytaj produkty przy starcie
 });
