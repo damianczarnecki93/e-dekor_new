@@ -33,12 +33,12 @@ const useNotification = () => useContext(NotificationContext);
 
 
 // --- API Client (Komunikacja z serwerem Node.js) ---
+const API_BASE_URL = 'https://dekor.onrender.com';
+
 const api = {
     getProducts: async () => {
         try {
-            // UWAGA: Przed wdrożeniem produkcyjnym zmień ten adres na URL Twojego backendu na Render.com
-            // const response = await fetch('https://twoj-backend.onrender.com/api/products');
-            const response = await fetch('https://dekor.onrender.com/api/products');
+            const response = await fetch(`${API_BASE_URL}/api/products`);
             if (!response.ok) throw new Error('Błąd pobierania produktów');
             return await response.json();
         } catch (error) {
@@ -48,7 +48,7 @@ const api = {
     },
     saveOrder: async (order, token) => {
         try {
-            const response = await fetch('https://dekor.onrender.com/api/orders', {
+            const response = await fetch(`${API_BASE_URL}/api/orders`, {
                 method: 'POST',
                 headers: { 
                     'Content-Type': 'application/json',
@@ -65,7 +65,7 @@ const api = {
     },
     getOrders: async (token) => {
         try {
-            const response = await fetch('https://dekor.onrender.com/api/orders', {
+            const response = await fetch(`${API_BASE_URL}/api/orders`, {
                  headers: { 'Authorization': `Bearer ${token}` }
             });
             if (!response.ok) throw new Error('Błąd pobierania zamówień');
@@ -77,7 +77,7 @@ const api = {
     },
     login: async (username, password) => {
         try {
-            const response = await fetch('https://dekor.onrender.com/api/login', {
+            const response = await fetch(`${API_BASE_URL}/api/login`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username, password }),
@@ -86,14 +86,11 @@ const api = {
             if (response.ok) {
                 return await response.json();
             } else {
-                // POPRAWKA: Bezpieczne parsowanie odpowiedzi błędu
                 const errorText = await response.text();
                 try {
-                    // Spróbuj sparsować tekst jako JSON
                     const errorData = JSON.parse(errorText);
                     throw new Error(errorData.message || `Błąd serwera: ${response.status}`);
                 } catch (e) {
-                    // Jeśli parsowanie się nie uda (np. pusty tekst), rzuć ogólny błąd
                     throw new Error(`Błąd logowania: ${response.status} ${response.statusText}`);
                 }
             }
@@ -107,7 +104,7 @@ const api = {
         formData.append('products', file);
 
         try {
-            const response = await fetch('https://dekor.onrender.com/api/admin/upload', {
+            const response = await fetch(`${API_BASE_URL}/api/admin/upload`, {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${token}` },
                 body: formData,
