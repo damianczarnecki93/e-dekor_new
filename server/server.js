@@ -124,5 +124,3 @@ app.listen(PORT, () => {
     console.log(`Serwer działa na porcie ${PORT}`);
     loadProducts(); // Wczytaj produkty przy starcie
 });
-```
-Po podmianie tego pliku i ponownym wdrożeniu, problem z logowaniem powinien ostatecznie znikn
