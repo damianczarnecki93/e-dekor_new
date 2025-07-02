@@ -57,7 +57,7 @@ app.post('/api/login', (req, res) => {
     return res.status(401).json({ message: 'Nieprawidłowe dane logowania' });
 });
 
-// ZAKTUALIZOWANY ENDPOINT WYSZUKIWANIA z LOGOWANIEM
+// ZAKTUALIZOWANY ENDPOINT WYSZUKIWANIA z POPRAWKĄ
 app.get('/api/products', async (req, res) => {
     try {
         const { search } = req.query;
@@ -66,12 +66,12 @@ app.get('/api/products', async (req, res) => {
         console.log(`Otrzymano zapytanie o produkty. Szukana fraza: "${search}"`);
 
         if (search) {
-            const regex = new RegExp(search, 'i'); // 'i' for case-insensitive
+            // POPRAWKA: Przekazujemy string bezpośrednio do zapytania, zamiast obiektu RegExp
             query = {
                 $or: [
-                    { name: { $regex: regex } },
-                    { product_code: { $regex: regex } },
-                    { barcode: { $regex: regex } }
+                    { name: { $regex: search, $options: 'i' } },
+                    { product_code: { $regex: search, $options: 'i' } },
+                    { barcode: { $regex: search, $options: 'i' } }
                 ]
             };
         }
