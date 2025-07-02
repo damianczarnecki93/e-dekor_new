@@ -1,7 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, createContext, useContext } from 'react';
 import { Search, Package, List, Wrench, User, Sun, Moon, LogOut, FileDown, Printer, Save, CheckCircle, AlertTriangle, Upload, Trash2, XCircle } from 'lucide-react';
-import { CSVLink } from 'react-csv';
-import { useReactToPrint } from 'react-to-print';
 
 // --- Kontekst Powiadomień ---
 const NotificationContext = createContext();
@@ -35,12 +33,10 @@ const useNotification = () => useContext(NotificationContext);
 
 
 // --- API Client (Komunikacja z serwerem Node.js) ---
-// Te funkcje będą wysyłać zapytania do Twojego backendu.
 const api = {
-    // Pobiera wszystkie produkty. Backend powinien wczytać i połączyć oba pliki CSV.
     getProducts: async () => {
         try {
-const response = await fetch('https://system-magazynowy-backend.onrender.com/api/products');
+            const response = await fetch('/api/products');
             if (!response.ok) throw new Error('Błąd pobierania produktów');
             return await response.json();
         } catch (error) {
@@ -48,14 +44,13 @@ const response = await fetch('https://system-magazynowy-backend.onrender.com/api
             throw error;
         }
     },
-    // Zapisuje nowe zamówienie
     saveOrder: async (order, token) => {
         try {
-const response = await fetch('https://system-magazynowy-backend.onrender.com/api/products');
+            const response = await fetch('/api/orders', {
                 method: 'POST',
                 headers: { 
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}` // Przesyłanie tokena JWT
+                    'Authorization': `Bearer ${token}`
                 },
                 body: JSON.stringify(order),
             });
@@ -66,10 +61,9 @@ const response = await fetch('https://system-magazynowy-backend.onrender.com/api
             throw error;
         }
     },
-    // Pobiera listę zapisanych zamówień
     getOrders: async (token) => {
         try {
-const response = await fetch('https://system-magazynowy-backend.onrender.com/api/products');
+            const response = await fetch('/api/orders', {
                  headers: { 'Authorization': `Bearer ${token}` }
             });
             if (!response.ok) throw new Error('Błąd pobierania zamówień');
@@ -79,10 +73,9 @@ const response = await fetch('https://system-magazynowy-backend.onrender.com/api
             throw error;
         }
     },
-    // Loguje użytkownika i zwraca token
     login: async (username, password) => {
         try {
-const response = await fetch('https://system-magazynowy-backend.onrender.com/api/products');
+            const response = await fetch('/api/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username, password }),
@@ -97,13 +90,12 @@ const response = await fetch('https://system-magazynowy-backend.onrender.com/api
             throw error;
         }
     },
-    // Wgrywa plik CSV z produktami
     uploadProducts: async (file, token) => {
         const formData = new FormData();
-        formData.append('products', file); // 'products' to nazwa pola oczekiwana przez backend (np. multer)
+        formData.append('products', file);
 
         try {
-const response = await fetch('https://system-magazynowy-backend.onrender.com/api/products');
+            const response = await fetch('/api/admin/upload', {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${token}` },
                 body: formData,
@@ -117,7 +109,7 @@ const response = await fetch('https://system-magazynowy-backend.onrender.com/api
     }
 };
 
-// --- Komponenty UI (bez zmian, oprócz powiadomień) ---
+// --- Komponenty UI ---
 
 const Tooltip = ({ children, text }) => (
   <div className="relative flex items-center group">
@@ -158,7 +150,6 @@ const SearchView = ({ allProducts }) => {
             setSuggestions([]);
             return;
         }
-        // Filtrowanie odbywa się po stronie klienta na podstawie pobranej listy
         const lowerCaseQuery = query.toLowerCase();
         const results = allProducts.filter(p =>
             p.name.toLowerCase().includes(lowerCaseQuery) ||
@@ -267,9 +258,7 @@ const OrderView = ({ allProducts, user }) => {
             if (suggestions.length > 0) {
                 addProductToOrder(suggestions[0]);
             } else {
-                const customItem = {
-                    id: `custom-${Date.now()}`, name: inputValue, product_code: 'N/A', price: 0.00, quantity: 1, isCustom: true,
-                };
+                const customItem = { id: `custom-${Date.now()}`, name: inputValue, product_code: 'N/A', price: 0.00, quantity: 1, isCustom: true };
                 setOrderItems([...orderItems, customItem]);
                 setInputValue('');
                 setSuggestions([]);
@@ -299,25 +288,58 @@ const OrderView = ({ allProducts, user }) => {
         }
     };
     
-    const handlePrint = useReactToPrint({
-        content: () => printRef.current,
-        documentTitle: `Zamowienie-${customerName.replace(/\s/g, '_')}`,
-    });
+    // --- Custom Print and CSV Export Functions ---
+    const handlePrint = () => {
+        const content = printRef.current;
+        if (content) {
+            const printWindow = window.open('', '_blank');
+            printWindow.document.write('<html><head><title>Wydruk Zamówienia</title>');
+            printWindow.document.write('<script src="https://cdn.tailwindcss.com"></script>');
+            printWindow.document.write('<style>.print-header { display: block !important; } body { padding: 2rem; }</style>');
+            printWindow.document.write('</head><body>');
+            printWindow.document.write(content.innerHTML);
+            printWindow.document.write('</body></html>');
+            printWindow.document.close();
+            printWindow.focus();
+            setTimeout(() => {
+                printWindow.print();
+                printWindow.close();
+            }, 500);
+        }
+    };
 
-    const getCsvData = () => [
-        ["Nazwa", "Kod produktu", "Cena", "Ilość", "Wartość"],
-        ...orderItems.map(item => [item.name, item.product_code, item.price.toFixed(2), item.quantity, (item.price * item.quantity).toFixed(2)])
-    ];
+    const handleExportCsv = () => {
+        const headers = ["Nazwa", "Kod produktu", "Cena", "Ilość", "Wartość"];
+        const data = orderItems.map(item => [
+            `"${item.name.replace(/"/g, '""')}"`,
+            item.product_code,
+            item.price.toFixed(2),
+            item.quantity,
+            (item.price * item.quantity).toFixed(2)
+        ]);
+        
+        const csvContent = [headers.join(','), ...data.map(row => row.join(','))].join('\n');
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a");
+        const url = URL.createObjectURL(blob);
+        link.setAttribute("href", url);
+        const filename = `Zamowienie-${customerName.replace(/\s/g, '_') || 'nowe'}.csv`;
+        link.setAttribute("download", filename);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
 
     return (
         <div className="h-full flex flex-col">
-            <div className="p-4 md:p-8 pb-48"> {/* Dodany padding na dole */}
+            <div className="p-4 md:p-8 pb-48">
                 <div className="flex-shrink-0">
                     <h1 className="text-3xl font-bold mb-4 text-gray-800 dark:text-white">Nowe Zamówienie</h1>
                     <input type="text" value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="Wprowadź nazwę klienta" className="w-full max-w-lg p-3 mb-6 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
                 </div>
 
-                <div ref={printRef} className="flex-grow overflow-y-auto bg-gray-50 dark:bg-gray-900 p-4 rounded-lg shadow-inner mb-4">
+                <div ref={printRef} className="flex-grow bg-gray-50 dark:bg-gray-900 p-4 rounded-lg shadow-inner mb-4">
                     <div className="print-header hidden p-4">
                         <h2 className="text-2xl font-bold">Zamówienie dla: {customerName}</h2>
                         <p>Data: {new Date().toLocaleDateString()}</p>
@@ -344,7 +366,7 @@ const OrderView = ({ allProducts, user }) => {
                     </div>
                     <div className="flex justify-end space-x-3 mt-4">
                         <button onClick={handleSaveOrder} className="flex items-center justify-center px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"><Save className="w-5 h-5 mr-2"/> Zapisz</button>
-                        <CSVLink data={getCsvData()} filename={`Zamowienie-${customerName.replace(/\s/g, '_') || 'nowe'}.csv`} className="flex items-center justify-center px-5 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"><FileDown className="w-5 h-5 mr-2"/> CSV</CSVLink>
+                        <button onClick={handleExportCsv} className="flex items-center justify-center px-5 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"><FileDown className="w-5 h-5 mr-2"/> CSV</button>
                         <button onClick={handlePrint} className="flex items-center justify-center px-5 py-2.5 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"><Printer className="w-5 h-5 mr-2"/> Drukuj</button>
                     </div>
                 </div>
@@ -626,9 +648,8 @@ const LoginView = ({ onLogin }) => {
         setIsLoading(true);
         setError('');
         try {
-            // W odpowiedzi serwer powinien zwrócić obiekt użytkownika i token JWT
             const { user, token } = await api.login(username, password);
-            onLogin({ ...user, token }); // Przekazujemy użytkownika i token do stanu aplikacji
+            onLogin({ ...user, token });
         } catch (err) {
             setError(err.message);
         } finally {
@@ -640,7 +661,6 @@ const LoginView = ({ onLogin }) => {
         <div className="flex items-center justify-center h-screen bg-gray-100 dark:bg-gray-900">
             <div className="w-full max-w-md p-8 space-y-8 bg-white dark:bg-gray-800 rounded-xl shadow-lg">
                 <div className="text-center">
-                    {/* Zmieniono na ścieżkę względną - plik musi być w folderze /public */}
                     <img src="/logo.png" onError={(e) => { e.currentTarget.src = 'https://placehold.co/150x50/4f46e5/ffffff?text=Logo'; }} alt="Logo" className="mx-auto mb-4 h-12" />
                     <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Zaloguj się do systemu</h2>
                 </div>
@@ -672,12 +692,10 @@ function App() {
     }, [isDarkMode]);
 
     const handleLogin = (loggedInUser) => {
-        // Zapisz token w localStorage, aby przetrwać odświeżenie strony
         localStorage.setItem('userToken', loggedInUser.token);
         localStorage.setItem('userData', JSON.stringify(loggedInUser));
         setUser(loggedInUser);
         
-        // Po zalogowaniu pobierz listę produktów
         api.getProducts()
             .then(data => setProducts(data))
             .catch(err => showNotification(err.message, 'error'))
@@ -694,7 +712,6 @@ function App() {
         setActiveView('search');
     };
     
-    // Sprawdź przy starcie aplikacji, czy użytkownik nie był już zalogowany
     useEffect(() => {
         const token = localStorage.getItem('userToken');
         const userData = localStorage.getItem('userData');
@@ -703,7 +720,7 @@ function App() {
         } else {
             setIsLoading(false);
         }
-    }, []); // Pusta tablica zależności - uruchom tylko raz
+    }, []);
 
     if (isLoading && !user) {
       return <div className="flex items-center justify-center h-screen">Ładowanie...</div>
@@ -724,7 +741,6 @@ function App() {
     const availableNavItems = navItems.filter(item => item.roles.includes(user.role));
 
     const renderView = () => {
-        // Przekazujemy pobrane produkty do komponentów, które ich potrzebują
         switch (activeView) {
             case 'search': return <SearchView allProducts={products} />;
             case 'order': return <OrderView allProducts={products} user={user} />;
@@ -760,10 +776,6 @@ function App() {
 
 // Główny punkt wejścia aplikacji z dostawcą powiadomień
 export default function AppWrapper() {
-    // INSTRUKCJA DOTYCZĄCA FAVICON:
-    // Aby dodać favicon, umieść plik favicon.ico (lub .png, .svg) w folderze /public
-    // a następnie w pliku /public/index.html, w sekcji <head>, dodaj lub zmodyfikuj linię:
-    // <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
     return (
         <NotificationProvider>
             <App />
