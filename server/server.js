@@ -45,17 +45,68 @@ const orderSchema = new mongoose.Schema({
 const Order = mongoose.models.Order || mongoose.model('Order', orderSchema);
 
 
+// --- Endpoint do importu danych (ULEPSZONY) ---
+app.get('/api/import-data-now', async (req, res) => {
+    try {
+        console.log('Rozpoczęto proces importu danych (wersja poprawiona)...');
+        await Product.deleteMany({});
+        console.log('Kolekcja produktów wyczyszczona.');
+
+        const productsToImport = [];
+        const files = ['produkty.csv', 'produkty2.csv'];
+
+        for (const file of files) {
+            const filePath = path.join(__dirname, file);
+            if (fs.existsSync(filePath)) {
+                console.log(`Wczytywanie pliku: ${file}...`);
+                await new Promise((resolve, reject) => {
+                    fs.createReadStream(filePath)
+                        .pipe(csv())
+                        .on('data', (row) => {
+                            // Poprawiona, bardziej odporna logika mapowania
+                            const product = {
+                                id: row.id || row.barcode || `fallback-${Math.random()}`,
+                                name: row.name,
+                                product_code: row.product_code,
+                                barcode: row.barcode,
+                                price: parseFloat(row.price) || 0,
+                                quantity: parseInt(row.quantity) || 0,
+                                availability: String(row.availability).toLowerCase() === 'true'
+                            };
+                            productsToImport.push(product);
+                        })
+                        .on('end', resolve)
+                        .on('error', reject);
+                });
+            }
+        }
+
+        if (productsToImport.length > 0) {
+            console.log(`Importowanie ${productsToImport.length} produktów...`);
+            await Product.insertMany(productsToImport);
+            console.log('Import zakończony sukcesem!');
+            res.status(200).send('<h1>Import danych zakończony sukcesem!</h1><p>Produkty zostały poprawnie zapisane w bazie danych.</p>');
+        } else {
+            res.status(404).send('Nie znaleziono plików CSV do importu.');
+        }
+
+    } catch (error) {
+        console.error('Wystąpił błąd podczas importu:', error);
+        res.status(500).send(`<h1>Wystąpił błąd podczas importu:</h1><pre>${error.message}</pre>`);
+    }
+});
+
+
 // --- Endpoint diagnostyczny (TYMCZASOWY) ---
 app.get('/api/diagnose-products', async (req, res) => {
     try {
         console.log('Uruchomiono diagnostykę produktów...');
-        const sampleProducts = await Product.find().limit(5); // Pobierz 5 przykładowych produktów
+        const sampleProducts = await Product.find().limit(5);
         
         if (sampleProducts.length === 0) {
-            return res.status(404).send('<h1>Diagnostyka: Baza danych jest pusta.</h1><p>Nie znaleziono żadnych produktów. Proszę, uruchom ponownie proces importu, jeśli to konieczne.</p>');
+            return res.status(404).send('<h1>Diagnostyka: Baza danych jest pusta.</h1>');
         }
 
-        // Formatuj odpowiedź jako czytelny HTML
         let htmlResponse = '<h1>Diagnostyka Produktów</h1>';
         htmlResponse += `<p>Znaleziono ${sampleProducts.length} przykładowych produktów. Oto one:</p>`;
         htmlResponse += '<pre style="background-color: #f0f0f0; padding: 15px; border-radius: 5px;">' + JSON.stringify(sampleProducts, null, 2) + '</pre>';
@@ -85,8 +136,6 @@ app.get('/api/products', async (req, res) => {
         const { search } = req.query;
         let query = {};
 
-        console.log(`Otrzymano zapytanie o produkty. Szukana fraza: "${search}"`);
-
         if (search) {
             query = {
                 $or: [
@@ -97,10 +146,7 @@ app.get('/api/products', async (req, res) => {
             };
         }
         
-        console.log('Wykonywane zapytanie do bazy:', JSON.stringify(query));
         const products = await Product.find(query).limit(20);
-        console.log(`Znaleziono ${products.length} produktów.`);
-        
         res.status(200).json(products);
     } catch (error) {
         console.error('Błąd w /api/products:', error);
@@ -119,22 +165,17 @@ app.post('/api/orders', async (req, res) => {
     });
     try {
         const savedOrder = await newOrder.save();
-        console.log('Zamówienie zapisane pomyślnie:', savedOrder.id);
         res.status(201).json({ message: 'Zamówienie zapisane!', order: savedOrder });
     } catch (error) {
-        console.error('Błąd w /api/orders (POST):', error);
         res.status(400).json({ message: 'Błąd zapisywania zamówienia', error: error.message });
     }
 });
 
 app.get('/api/orders', async (req, res) => {
     try {
-        console.log('Otrzymano zapytanie o listę zamówień.');
         const orders = await Order.find().sort({ date: -1 });
-        console.log(`Znaleziono ${orders.length} zamówień.`);
         res.status(200).json(orders);
     } catch (error) {
-        console.error('Błąd w /api/orders (GET):', error);
         res.status(500).json({ message: 'Błąd pobierania zamówień', error: error.message });
     }
 });
