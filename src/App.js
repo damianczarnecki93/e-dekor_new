@@ -36,13 +36,13 @@ const useNotification = () => useContext(NotificationContext);
 const API_BASE_URL = 'https://dekor.onrender.com';
 
 const api = {
-    getProducts: async () => {
+    searchProducts: async (searchTerm) => {
         try {
-            const response = await fetch(`${API_BASE_URL}/api/products`);
-            if (!response.ok) throw new Error('Błąd pobierania produktów');
+            const response = await fetch(`${API_BASE_URL}/api/products?search=${encodeURIComponent(searchTerm)}`);
+            if (!response.ok) throw new Error('Błąd wyszukiwania produktów');
             return await response.json();
         } catch (error) {
-            console.error("API Error getProducts:", error);
+            console.error("API Error searchProducts:", error);
             throw error;
         }
     },
@@ -149,24 +149,32 @@ const Modal = ({ isOpen, onClose, title, children }) => {
 
 // --- Główne Widoki (Moduły) ---
 
-const SearchView = ({ allProducts }) => {
+const SearchView = () => {
     const [query, setQuery] = useState('');
     const [suggestions, setSuggestions] = useState([]);
     const [selectedProduct, setSelectedProduct] = useState(null);
+    const [isLoading, setIsLoading] = useState(false);
 
     useEffect(() => {
         if (query.length < 2) {
             setSuggestions([]);
             return;
         }
-        const lowerCaseQuery = query.toLowerCase();
-        const results = allProducts.filter(p =>
-            p.name.toLowerCase().includes(lowerCaseQuery) ||
-            p.product_code.toLowerCase().includes(lowerCaseQuery) ||
-            p.barcode.toLowerCase().includes(lowerCaseQuery)
-        );
-        setSuggestions(results);
-    }, [query, allProducts]);
+
+        const handler = setTimeout(async () => {
+            setIsLoading(true);
+            try {
+                const results = await api.searchProducts(query);
+                setSuggestions(results);
+            } catch (error) {
+                console.error("Błąd wyszukiwania:", error);
+            } finally {
+                setIsLoading(false);
+            }
+        }, 300); // Debounce - opóźnienie, aby nie wysyłać zapytań przy każdym znaku
+
+        return () => clearTimeout(handler);
+    }, [query]);
 
     const handleSelect = (product) => {
         setSelectedProduct(product);
@@ -188,10 +196,11 @@ const SearchView = ({ allProducts }) => {
                         className="w-full p-4 bg-transparent focus:outline-none text-gray-900 dark:text-white"
                     />
                 </div>
+                {isLoading && <div className="absolute w-full mt-2 text-center text-gray-500">Szukam...</div>}
                 {suggestions.length > 0 && (
                     <ul className="absolute z-10 w-full mt-2 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg shadow-xl">
                         {suggestions.map(p => (
-                            <li key={p.id} onClick={() => handleSelect(p)} className="p-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 border-b dark:border-gray-600 last:border-b-0">
+                            <li key={p._id} onClick={() => handleSelect(p)} className="p-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 border-b dark:border-gray-600 last:border-b-0">
                                 <p className="font-semibold text-gray-800 dark:text-gray-100">{p.name}</p>
                                 <p className="text-sm text-gray-500 dark:text-gray-400">{p.product_code}</p>
                             </li>
@@ -220,7 +229,7 @@ const SearchView = ({ allProducts }) => {
     );
 };
 
-const OrderView = ({ allProducts, user }) => {
+const OrderView = ({ user }) => {
     const [customerName, setCustomerName] = useState('');
     const [orderItems, setOrderItems] = useState([]);
     const [inputValue, setInputValue] = useState('');
@@ -231,28 +240,29 @@ const OrderView = ({ allProducts, user }) => {
 
     const scrollToBottom = () => listEndRef.current?.scrollIntoView({ behavior: "smooth" });
     useEffect(scrollToBottom, [orderItems]);
-
-    const handleInputChange = (e) => {
-        const query = e.target.value;
-        setInputValue(query);
-        if (query.length > 1) {
-            const lowerCaseQuery = query.toLowerCase();
-            const results = allProducts.filter(p =>
-                p.name.toLowerCase().includes(lowerCaseQuery) ||
-                p.product_code.toLowerCase().includes(lowerCaseQuery) ||
-                p.barcode.toLowerCase().includes(lowerCaseQuery)
-            );
-            setSuggestions(results);
-        } else {
+    
+    useEffect(() => {
+        if (inputValue.length < 2) {
             setSuggestions([]);
+            return;
         }
-    };
+        const handler = setTimeout(async () => {
+            try {
+                const results = await api.searchProducts(inputValue);
+                setSuggestions(results);
+            } catch (error) {
+                showNotification('Błąd wyszukiwania produktów', 'error');
+            }
+        }, 300);
+        return () => clearTimeout(handler);
+    }, [inputValue, showNotification]);
+
 
     const addProductToOrder = (product) => {
-        const existingItem = orderItems.find(item => item.id === product.id);
+        const existingItem = orderItems.find(item => item._id === product._id);
         if (existingItem) {
             setOrderItems(orderItems.map(item =>
-                item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item
+                item._id === product._id ? { ...item, quantity: item.quantity + 1 } : item
             ));
         } else {
             setOrderItems([...orderItems, { ...product, quantity: 1, isCustom: false }]);
@@ -267,7 +277,7 @@ const OrderView = ({ allProducts, user }) => {
             if (suggestions.length > 0) {
                 addProductToOrder(suggestions[0]);
             } else {
-                const customItem = { id: `custom-${Date.now()}`, name: inputValue, product_code: 'N/A', price: 0.00, quantity: 1, isCustom: true };
+                const customItem = { _id: `custom-${Date.now()}`, name: inputValue, product_code: 'N/A', price: 0.00, quantity: 1, isCustom: true };
                 setOrderItems([...orderItems, customItem]);
                 setInputValue('');
                 setSuggestions([]);
@@ -355,7 +365,7 @@ const OrderView = ({ allProducts, user }) => {
                     {orderItems.length === 0 ? <p className="text-center text-gray-500">Brak pozycji na zamówieniu.</p> : (
                         <table className="w-full text-left">
                             <thead><tr className="border-b border-gray-200 dark:border-gray-700"><th className="p-3">Nazwa</th><th className="p-3">Kod produktu</th><th className="p-3 text-right">Cena</th><th className="p-3 text-center">Ilość</th><th className="p-3 text-right">Wartość</th></tr></thead>
-                            <tbody>{orderItems.map(item => <tr key={item.id} className={`border-b border-gray-200 dark:border-gray-700 last:border-0 ${item.isCustom ? 'text-red-500' : ''}`}><td className="p-3 font-medium">{item.name}</td><td className="p-3">{item.product_code}</td><td className="p-3 text-right">{item.price.toFixed(2)} PLN</td><td className="p-3 text-center">{item.quantity}</td><td className="p-3 text-right font-semibold">{(item.price * item.quantity).toFixed(2)} PLN</td></tr>)}</tbody>
+                            <tbody>{orderItems.map(item => <tr key={item._id} className={`border-b border-gray-200 dark:border-gray-700 last:border-0 ${item.isCustom ? 'text-red-500' : ''}`}><td className="p-3 font-medium">{item.name}</td><td className="p-3">{item.product_code}</td><td className="p-3 text-right">{item.price.toFixed(2)} PLN</td><td className="p-3 text-center">{item.quantity}</td><td className="p-3 text-right font-semibold">{(item.price * item.quantity).toFixed(2)} PLN</td></tr>)}</tbody>
                         </table>
                     )}
                     <div ref={listEndRef} />
@@ -369,8 +379,8 @@ const OrderView = ({ allProducts, user }) => {
                         <span className="text-2xl font-bold ml-4 text-indigo-600 dark:text-indigo-400">{totalValue.toFixed(2)} PLN</span>
                     </div>
                     <div className="relative">
-                        <input type="text" value={inputValue} onChange={handleInputChange} onKeyDown={handleKeyDown} placeholder="Dodaj produkt (zatwierdź Enterem)" className="w-full p-4 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"/>
-                        {suggestions.length > 0 && <ul className="absolute bottom-full mb-2 w-full bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg shadow-xl max-h-60 overflow-y-auto z-30">{suggestions.map(p => <li key={p.id} onClick={() => addProductToOrder(p)} className="p-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 border-b dark:border-gray-600 last:border-b-0"><p className="font-semibold text-gray-800 dark:text-gray-100">{p.name}</p><p className="text-sm text-gray-500 dark:text-gray-400">{p.product_code}</p></li>)}</ul>}
+                        <input type="text" value={inputValue} onChange={(e) => setInputValue(e.target.value)} onKeyDown={handleKeyDown} placeholder="Dodaj produkt (zatwierdź Enterem)" className="w-full p-4 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"/>
+                        {suggestions.length > 0 && <ul className="absolute bottom-full mb-2 w-full bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg shadow-xl max-h-60 overflow-y-auto z-30">{suggestions.map(p => <li key={p._id} onClick={() => addProductToOrder(p)} className="p-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 border-b dark:border-gray-600 last:border-b-0"><p className="font-semibold text-gray-800 dark:text-gray-100">{p.name}</p><p className="text-sm text-gray-500 dark:text-gray-400">{p.product_code}</p></li>)}</ul>}
                     </div>
                     <div className="flex justify-end space-x-3 mt-4">
                         <button onClick={handleSaveOrder} className="flex items-center justify-center px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"><Save className="w-5 h-5 mr-2"/> Zapisz</button>
@@ -432,9 +442,9 @@ const PickingView = ({ user }) => {
         
         const remainingQuantity = currentItem.quantity - quantity;
         if (remainingQuantity > 0) {
-            setToPickItems(toPickItems.map(item => item.id === currentItem.id ? { ...item, quantity: remainingQuantity } : item));
+            setToPickItems(toPickItems.map(item => item._id === currentItem._id ? { ...item, quantity: remainingQuantity } : item));
         } else {
-            setToPickItems(toPickItems.filter(item => item.id !== currentItem.id));
+            setToPickItems(toPickItems.filter(item => item._id !== currentItem._id));
         }
 
         setIsModalOpen(false);
@@ -467,7 +477,7 @@ const PickingView = ({ user }) => {
                 <h1 className="text-3xl font-bold mb-6 text-gray-800 dark:text-white">Kompletacja Zamówień</h1>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {orders.map(order => (
-                        <div key={order.id} onClick={() => handleSelectOrder(order)} className="p-4 bg-white dark:bg-gray-800 rounded-lg shadow-md cursor-pointer hover:shadow-lg hover:scale-105 transition-all">
+                        <div key={order._id} onClick={() => handleSelectOrder(order)} className="p-4 bg-white dark:bg-gray-800 rounded-lg shadow-md cursor-pointer hover:shadow-lg hover:scale-105 transition-all">
                             <p className="font-bold text-lg text-indigo-600 dark:text-indigo-400">{order.id}</p>
                             <p className="text-gray-700 dark:text-gray-300">{order.customerName}</p>
                             <p className="text-sm text-gray-500 dark:text-gray-400">{new Date(order.date).toLocaleDateString()}</p>
@@ -486,11 +496,11 @@ const PickingView = ({ user }) => {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 <div>
                     <h2 className="text-2xl font-semibold mb-4 text-gray-800 dark:text-white">Do skompletowania</h2>
-                    <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 space-y-3">{toPickItems.map(item => <div key={item.id} onClick={() => openModal(item)} className="flex justify-between items-center p-3 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer transition-colors"><div><p className="font-semibold">{item.name}</p><p className="text-sm text-gray-500 dark:text-gray-400">{item.product_code}</p></div><div className="text-lg font-bold px-3 py-1 bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 rounded-full">{item.quantity}</div></div>)} {toPickItems.length === 0 && <p className="text-gray-500 text-center p-4">Wszystko skompletowane.</p>}</div>
+                    <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 space-y-3">{toPickItems.map(item => <div key={item._id} onClick={() => openModal(item)} className="flex justify-between items-center p-3 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer transition-colors"><div><p className="font-semibold">{item.name}</p><p className="text-sm text-gray-500 dark:text-gray-400">{item.product_code}</p></div><div className="text-lg font-bold px-3 py-1 bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 rounded-full">{item.quantity}</div></div>)} {toPickItems.length === 0 && <p className="text-gray-500 text-center p-4">Wszystko skompletowane.</p>}</div>
                 </div>
                 <div>
                     <h2 className="text-2xl font-semibold mb-4 text-gray-800 dark:text-white">Skompletowano</h2>
-                    <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 space-y-3">{pickedItems.map(item => { const isMismatch = item.pickedQuantity !== item.originalQuantity; return (<div key={item.id} className={`flex justify-between items-center p-3 rounded-lg ${isMismatch ? 'bg-red-50 dark:bg-red-900/50' : 'bg-green-50 dark:bg-green-900/50'}`}><div><p className="font-semibold">{item.name}</p><p className="text-sm text-gray-500 dark:text-gray-400">{item.product_code}</p></div><div className={`text-lg font-bold px-3 py-1 rounded-full flex items-center gap-2 ${isMismatch ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>{isMismatch && <AlertTriangle className="w-4 h-4" />} {item.pickedQuantity} / {item.originalQuantity}</div></div>);})} {pickedItems.length === 0 && <p className="text-gray-500 text-center p-4">Brak pozycji.</p>}</div>
+                    <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 space-y-3">{pickedItems.map(item => { const isMismatch = item.pickedQuantity !== item.originalQuantity; return (<div key={item._id} className={`flex justify-between items-center p-3 rounded-lg ${isMismatch ? 'bg-red-50 dark:bg-red-900/50' : 'bg-green-50 dark:bg-green-900/50'}`}><div><p className="font-semibold">{item.name}</p><p className="text-sm text-gray-500 dark:text-gray-400">{item.product_code}</p></div><div className={`text-lg font-bold px-3 py-1 rounded-full flex items-center gap-2 ${isMismatch ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>{isMismatch && <AlertTriangle className="w-4 h-4" />} {item.pickedQuantity} / {item.originalQuantity}</div></div>);})} {pickedItems.length === 0 && <p className="text-gray-500 text-center p-4">Brak pozycji.</p>}</div>
                 </div>
             </div>
             {isCompleted && <div className="mt-8 text-center p-6 bg-green-100 dark:bg-green-900/50 rounded-lg"><CheckCircle className="w-12 h-12 mx-auto text-green-500 mb-4" /><h3 className="text-2xl font-bold text-green-800 dark:text-green-200">Zamówienie skompletowane!</h3><div className="mt-4 flex justify-center gap-4"><button className="px-6 py-3 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition-colors">Zatwierdź</button><button onClick={exportCompletion} className="flex items-center justify-center px-5 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"><FileDown className="w-5 h-5 mr-2"/> Eksportuj</button></div></div>}
@@ -516,7 +526,7 @@ const PickingView = ({ user }) => {
     );
 };
 
-const InventoryView = ({ allProducts }) => {
+const InventoryView = () => {
     const [listName, setListName] = useState('');
     const [inventoryItems, setInventoryItems] = useState([]);
     const [inputValue, setInputValue] = useState('');
@@ -526,26 +536,26 @@ const InventoryView = ({ allProducts }) => {
     const scrollToBottom = () => listEndRef.current?.scrollIntoView({ behavior: "smooth" });
     useEffect(scrollToBottom, [inventoryItems]);
 
-    const handleInputChange = (e) => {
-        const query = e.target.value;
-        setInputValue(query);
-        if (query.length > 1) {
-            const lowerCaseQuery = query.toLowerCase();
-            const results = allProducts.filter(p =>
-                p.name.toLowerCase().includes(lowerCaseQuery) ||
-                p.product_code.toLowerCase().includes(lowerCaseQuery) ||
-                p.barcode.toLowerCase().includes(lowerCaseQuery)
-            );
-            setSuggestions(results);
-        } else {
+    useEffect(() => {
+        if (inputValue.length < 2) {
             setSuggestions([]);
+            return;
         }
-    };
+        const handler = setTimeout(async () => {
+            try {
+                const results = await api.searchProducts(inputValue);
+                setSuggestions(results);
+            } catch (error) {
+                console.error('Błąd wyszukiwania w Inwentaryzacji', error);
+            }
+        }, 300);
+        return () => clearTimeout(handler);
+    }, [inputValue]);
 
     const addProductToInventory = (product) => {
-        const existingItem = inventoryItems.find(item => item.id === product.id);
+        const existingItem = inventoryItems.find(item => item._id === product._id);
         if (existingItem) {
-            setInventoryItems(inventoryItems.map(item => item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item));
+            setInventoryItems(inventoryItems.map(item => item._id === product._id ? { ...item, quantity: item.quantity + 1 } : item));
         } else {
             setInventoryItems([...inventoryItems, { ...product, quantity: 1, isCustom: false }]);
         }
@@ -559,7 +569,7 @@ const InventoryView = ({ allProducts }) => {
             if (suggestions.length > 0) {
                 addProductToInventory(suggestions[0]);
             } else {
-                const customItem = { id: `custom-${Date.now()}`, name: inputValue, product_code: 'N/A', quantity: 1, isCustom: true };
+                const customItem = { _id: `custom-${Date.now()}`, name: inputValue, product_code: 'N/A', quantity: 1, isCustom: true };
                 setInventoryItems([...inventoryItems, customItem]);
                 setInputValue('');
                 setSuggestions([]);
@@ -569,10 +579,10 @@ const InventoryView = ({ allProducts }) => {
     
     const updateQuantity = (id, newQuantity) => {
       const quant = parseInt(newQuantity, 10);
-      if (quant > 0) setInventoryItems(inventoryItems.map(item => item.id === id ? {...item, quantity: quant} : item));
+      if (quant > 0) setInventoryItems(inventoryItems.map(item => item._id === id ? {...item, quantity: quant} : item));
     };
     
-    const removeItem = (id) => setInventoryItems(inventoryItems.filter(item => item.id !== id));
+    const removeItem = (id) => setInventoryItems(inventoryItems.filter(item => item._id !== id));
 
     return (
         <div className="h-full flex flex-col">
@@ -582,14 +592,14 @@ const InventoryView = ({ allProducts }) => {
                     <input type="text" value={listName} onChange={(e) => setListName(e.target.value)} placeholder="Wprowadź nazwę listy spisowej" className="w-full max-w-lg p-3 mb-6 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"/>
                 </div>
                 <div className="flex-grow overflow-y-auto bg-gray-50 dark:bg-gray-900 p-4 rounded-lg shadow-inner mb-4">
-                    {inventoryItems.length > 0 ? <table className="w-full text-left"><thead><tr className="border-b border-gray-200 dark:border-gray-700"><th className="p-3">Nazwa</th><th className="p-3">Kod produktu</th><th className="p-3 text-center">Ilość</th><th className="p-3 text-center">Akcje</th></tr></thead><tbody>{inventoryItems.map(item => <tr key={item.id} className={`border-b border-gray-200 dark:border-gray-700 last:border-0 ${item.isCustom ? 'text-red-500' : ''}`}><td className="p-2 font-medium">{item.name}</td><td className="p-2">{item.product_code}</td><td className="p-2 text-center"><input type="number" value={item.quantity} onChange={(e) => updateQuantity(item.id, e.target.value)} className="w-20 text-center bg-transparent border rounded-md p-1"/></td><td className="p-2 text-center"><button onClick={() => removeItem(item.id)} className="text-red-500 hover:text-red-700"><Trash2 className="w-5 h-5" /></button></td></tr>)}</tbody></table> : <p className="text-center text-gray-500">Brak pozycji na liście.</p>}
+                    {inventoryItems.length > 0 ? <table className="w-full text-left"><thead><tr className="border-b border-gray-200 dark:border-gray-700"><th className="p-3">Nazwa</th><th className="p-3">Kod produktu</th><th className="p-3 text-center">Ilość</th><th className="p-3 text-center">Akcje</th></tr></thead><tbody>{inventoryItems.map(item => <tr key={item._id} className={`border-b border-gray-200 dark:border-gray-700 last:border-0 ${item.isCustom ? 'text-red-500' : ''}`}><td className="p-2 font-medium">{item.name}</td><td className="p-2">{item.product_code}</td><td className="p-2 text-center"><input type="number" value={item.quantity} onChange={(e) => updateQuantity(item._id, e.target.value)} className="w-20 text-center bg-transparent border rounded-md p-1"/></td><td className="p-2 text-center"><button onClick={() => removeItem(item._id)} className="text-red-500 hover:text-red-700"><Trash2 className="w-5 h-5" /></button></td></tr>)}</tbody></table> : <p className="text-center text-gray-500">Brak pozycji na liście.</p>}
                     <div ref={listEndRef} />
                 </div>
             </div>
             <div className="fixed bottom-0 left-0 lg:left-64 right-0 p-4 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 shadow-top z-20">
                 <div className="max-w-4xl mx-auto relative">
-                    <input type="text" value={inputValue} onChange={handleInputChange} onKeyDown={handleKeyDown} placeholder="Dodaj produkt (zatwierdź Enterem)" className="w-full p-4 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"/>
-                    {suggestions.length > 0 && <ul className="absolute bottom-full mb-2 w-full bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg shadow-xl max-h-60 overflow-y-auto z-30">{suggestions.map(p => <li key={p.id} onClick={() => addProductToInventory(p)} className="p-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 border-b dark:border-gray-600 last:border-b-0"><p className="font-semibold text-gray-800 dark:text-gray-100">{p.name}</p><p className="text-sm text-gray-500 dark:text-gray-400">{p.product_code}</p></li>)}</ul>}
+                    <input type="text" value={inputValue} onChange={(e) => setInputValue(e.target.value)} onKeyDown={handleKeyDown} placeholder="Dodaj produkt (zatwierdź Enterem)" className="w-full p-4 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"/>
+                    {suggestions.length > 0 && <ul className="absolute bottom-full mb-2 w-full bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg shadow-xl max-h-60 overflow-y-auto z-30">{suggestions.map(p => <li key={p._id} onClick={() => addProductToInventory(p)} className="p-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 border-b dark:border-gray-600 last:border-b-0"><p className="font-semibold text-gray-800 dark:text-gray-100">{p.name}</p><p className="text-sm text-gray-500 dark:text-gray-400">{p.product_code}</p></li>)}</ul>}
                 </div>
             </div>
         </div>
@@ -597,19 +607,9 @@ const InventoryView = ({ allProducts }) => {
 };
 
 const AdminView = ({ user }) => {
-    // eslint-disable-next-line no-unused-vars
-    const [users, setUsers] = useState([]); // Dane będą pobierane z API
     const { showNotification } = useNotification();
-
-    // TODO: Dodać funkcję pobierającą użytkowników z /api/admin/users
     
-    // eslint-disable-next-line no-unused-vars
-    const handleApproveUser = (userId) => {
-        // API CALL: POST /api/admin/users/approve { userId }
-        showNotification(`Akceptowanie użytkownika ${userId}...`, 'success');
-    };
-    
-    const handleFileUpload = async (e, fileType) => {
+    const handleFileUpload = async (e) => {
       const file = e.target.files[0];
       if (file) {
         try {
@@ -626,21 +626,17 @@ const AdminView = ({ user }) => {
             <h1 className="text-3xl font-bold mb-6 text-gray-800 dark:text-white">Panel Administratora</h1>
             <div className="mb-8">
                 <h2 className="text-2xl font-semibold mb-4 text-gray-800 dark:text-white">Zarządzanie Użytkownikami</h2>
-                <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4"><p className="text-gray-500">Moduł zarządzania użytkownikami wymaga implementacji API.</p></div>
+                <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4"><p className="text-gray-500">Moduł zarządzania użytkownikami wymaga implementacji.</p></div>
             </div>
             <div>
                 <h2 className="text-2xl font-semibold mb-4 text-gray-800 dark:text-white">Zarządzanie Bazą Danych</h2>
-                <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
                     <div className="border border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-6 text-center">
-                        <h3 className="text-lg font-medium mb-2">Baza produktów (produkty.csv)</h3>
-                        <label className="cursor-pointer px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 inline-flex items-center"><Upload className="w-4 h-4 mr-2"/> Zmień plik<input type="file" className="hidden" accept=".csv" onChange={(e) => handleFileUpload(e, 'produkty.csv')} /></label>
-                    </div>
-                    <div className="border border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-6 text-center">
-                        <h3 className="text-lg font-medium mb-2">Baza produktów 2 (produkty2.csv)</h3>
-                        <label className="cursor-pointer px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 inline-flex items-center"><Upload className="w-4 h-4 mr-2"/> Zmień plik<input type="file" className="hidden" accept=".csv" onChange={(e) => handleFileUpload(e, 'produkty2.csv')} /></label>
+                        <h3 className="text-lg font-medium mb-2">Importuj produkty z pliku CSV</h3>
+                        <p className="text-sm text-gray-500 mb-4">Wgranie nowego pliku nadpisze istniejące dane w bazie.</p>
+                        <label className="cursor-pointer px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 inline-flex items-center"><Upload className="w-4 h-4 mr-2"/> Wybierz plik<input type="file" className="hidden" accept=".csv" onChange={handleFileUpload} /></label>
                     </div>
                 </div>
-                 <div className="mt-4 text-sm text-gray-500 dark:text-gray-400"><p><AlertTriangle className="inline w-4 h-4 mr-1"/> <strong>Uwaga:</strong> Wgranie nowego pliku nadpisze istniejące dane produktów na serwerze.</p></div>
             </div>
         </div>
     );
@@ -691,9 +687,7 @@ function App() {
     const [user, setUser] = useState(null);
     const [activeView, setActiveView] = useState('search');
     const [isDarkMode, setIsDarkMode] = useState(false);
-    const [products, setProducts] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
-    const { showNotification } = useNotification();
 
     useEffect(() => {
         if (isDarkMode) document.documentElement.classList.add('dark');
@@ -704,20 +698,14 @@ function App() {
         localStorage.setItem('userToken', loggedInUser.token);
         localStorage.setItem('userData', JSON.stringify(loggedInUser));
         setUser(loggedInUser);
-        
-        api.getProducts()
-            .then(data => setProducts(data))
-            .catch(err => showNotification(err.message, 'error'))
-            .finally(() => setIsLoading(false));
-
+        setIsLoading(false);
         setActiveView(loggedInUser.role === 'administrator' ? 'admin' : 'order');
-    }, [showNotification]);
+    }, []);
 
     const handleLogout = () => {
         localStorage.removeItem('userToken');
         localStorage.removeItem('userData');
         setUser(null);
-        setProducts([]);
         setActiveView('search');
     };
     
@@ -731,7 +719,7 @@ function App() {
         }
     }, [handleLogin]);
 
-    if (isLoading && !user) {
+    if (isLoading) {
       return <div className="flex items-center justify-center h-screen">Ładowanie...</div>
     }
 
@@ -751,12 +739,12 @@ function App() {
 
     const renderView = () => {
         switch (activeView) {
-            case 'search': return <SearchView allProducts={products} />;
-            case 'order': return <OrderView allProducts={products} user={user} />;
+            case 'search': return <SearchView />;
+            case 'order': return <OrderView user={user} />;
             case 'picking': return <PickingView user={user} />;
-            case 'inventory': return <InventoryView allProducts={products} />;
+            case 'inventory': return <InventoryView />;
             case 'admin': return <AdminView user={user} />;
-            default: return <SearchView allProducts={products} />;
+            default: return <SearchView />;
         }
     };
 
