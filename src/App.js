@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, createContext, useContext } from 'react';
+import React, { useState, useEffect, useRef, useMemo, createContext, useContext, useCallback } from 'react';
 import { Search, Package, List, Wrench, User, Sun, Moon, LogOut, FileDown, Printer, Save, CheckCircle, AlertTriangle, Upload, Trash2, XCircle } from 'lucide-react';
 
 // --- Kontekst Powiadomień ---
@@ -36,6 +36,8 @@ const useNotification = () => useContext(NotificationContext);
 const api = {
     getProducts: async () => {
         try {
+            // UWAGA: Przed wdrożeniem produkcyjnym zmień ten adres na URL Twojego backendu na Render.com
+            // const response = await fetch('https://twoj-backend.onrender.com/api/products');
             const response = await fetch('/api/products');
             if (!response.ok) throw new Error('Błąd pobierania produktów');
             return await response.json();
@@ -288,7 +290,6 @@ const OrderView = ({ allProducts, user }) => {
         }
     };
     
-    // --- Custom Print and CSV Export Functions ---
     const handlePrint = () => {
         const content = printRef.current;
         if (content) {
@@ -589,11 +590,13 @@ const InventoryView = ({ allProducts }) => {
 };
 
 const AdminView = ({ user }) => {
+    // eslint-disable-next-line no-unused-vars
     const [users, setUsers] = useState([]); // Dane będą pobierane z API
     const { showNotification } = useNotification();
 
     // TODO: Dodać funkcję pobierającą użytkowników z /api/admin/users
     
+    // eslint-disable-next-line no-unused-vars
     const handleApproveUser = (userId) => {
         // API CALL: POST /api/admin/users/approve { userId }
         showNotification(`Akceptowanie użytkownika ${userId}...`, 'success');
@@ -603,7 +606,6 @@ const AdminView = ({ user }) => {
       const file = e.target.files[0];
       if (file) {
         try {
-            // Backend powinien rozpoznać 'fileType' i przetworzyć odpowiedni plik.
             const result = await api.uploadProducts(file, user.token);
             showNotification(result.message || `Plik ${file.name} został wgrany.`, 'success');
         } catch(error) {
@@ -691,7 +693,7 @@ function App() {
         else document.documentElement.classList.remove('dark');
     }, [isDarkMode]);
 
-    const handleLogin = (loggedInUser) => {
+    const handleLogin = useCallback((loggedInUser) => {
         localStorage.setItem('userToken', loggedInUser.token);
         localStorage.setItem('userData', JSON.stringify(loggedInUser));
         setUser(loggedInUser);
@@ -702,7 +704,7 @@ function App() {
             .finally(() => setIsLoading(false));
 
         setActiveView(loggedInUser.role === 'administrator' ? 'admin' : 'order');
-    };
+    }, [showNotification]);
 
     const handleLogout = () => {
         localStorage.removeItem('userToken');
@@ -720,7 +722,7 @@ function App() {
         } else {
             setIsLoading(false);
         }
-    }, []);
+    }, [handleLogin]);
 
     if (isLoading && !user) {
       return <div className="flex items-center justify-center h-screen">Ładowanie...</div>
@@ -758,7 +760,19 @@ function App() {
                      <img src={isDarkMode ? "/logo-dark.png" : "/logo.png"} onError={(e) => { e.currentTarget.src = 'https://placehold.co/120x40/4f46e5/ffffff?text=Logo'; }} alt="Logo" className="h-10 hidden lg:block" />
                      <Package className="h-8 w-8 text-indigo-500 lg:hidden" />
                 </div>
-                <ul className="flex-grow">{availableNavItems.map(item => <li key={item.id}><a href="#" onClick={() => setActiveView(item.id)} className={`flex items-center justify-center lg:justify-start h-16 px-6 text-lg transition-colors duration-200 ${activeView === item.id ? 'bg-indigo-50 dark:bg-gray-700 text-indigo-600 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'}`}><item.icon className="h-6 w-6" /><span className="ml-4 hidden lg:block">{item.label}</span></a></li>)}</ul>
+                <ul className="flex-grow">
+                    {availableNavItems.map(item => (
+                        <li key={item.id}>
+                            <button
+                                onClick={() => setActiveView(item.id)}
+                                className={`w-full flex items-center justify-center lg:justify-start h-16 px-6 text-lg transition-colors duration-200 text-left ${activeView === item.id ? 'bg-indigo-50 dark:bg-gray-700 text-indigo-600 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
+                            >
+                                <item.icon className="h-6 w-6" />
+                                <span className="ml-4 hidden lg:block">{item.label}</span>
+                            </button>
+                        </li>
+                    ))}
+                </ul>
                 <div className="p-4 border-t border-gray-200 dark:border-gray-700">
                     <div className="flex items-center justify-center lg:justify-between mb-4">
                         <div className="hidden lg:block"><p className="font-semibold">{user.username}</p><p className="text-sm text-gray-500">{user.role}</p></div>
