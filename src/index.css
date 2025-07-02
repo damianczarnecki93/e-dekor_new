@@ -2,7 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Możesz tutaj dodać dodatkowe globalne style, jeśli będą potrzebne */
+/* Możesz tutaj dodać dodatkowe globalne style */
 body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
