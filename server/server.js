@@ -45,6 +45,29 @@ const orderSchema = new mongoose.Schema({
 const Order = mongoose.models.Order || mongoose.model('Order', orderSchema);
 
 
+// --- Endpoint diagnostyczny (TYMCZASOWY) ---
+app.get('/api/diagnose-products', async (req, res) => {
+    try {
+        console.log('Uruchomiono diagnostykę produktów...');
+        const sampleProducts = await Product.find().limit(5); // Pobierz 5 przykładowych produktów
+        
+        if (sampleProducts.length === 0) {
+            return res.status(404).send('<h1>Diagnostyka: Baza danych jest pusta.</h1><p>Nie znaleziono żadnych produktów. Proszę, uruchom ponownie proces importu, jeśli to konieczne.</p>');
+        }
+
+        // Formatuj odpowiedź jako czytelny HTML
+        let htmlResponse = '<h1>Diagnostyka Produktów</h1>';
+        htmlResponse += `<p>Znaleziono ${sampleProducts.length} przykładowych produktów. Oto one:</p>`;
+        htmlResponse += '<pre style="background-color: #f0f0f0; padding: 15px; border-radius: 5px;">' + JSON.stringify(sampleProducts, null, 2) + '</pre>';
+        
+        res.status(200).send(htmlResponse);
+    } catch (error) {
+        console.error('Błąd podczas diagnostyki:', error);
+        res.status(500).send(`<h1>Wystąpił błąd podczas diagnostyki:</h1><pre>${error.message}</pre>`);
+    }
+});
+
+
 // --- Główne API Endpoints ---
 app.post('/api/login', (req, res) => {
     const { username, password } = req.body;
@@ -57,7 +80,6 @@ app.post('/api/login', (req, res) => {
     return res.status(401).json({ message: 'Nieprawidłowe dane logowania' });
 });
 
-// ZAKTUALIZOWANY ENDPOINT WYSZUKIWANIA z POPRAWKĄ
 app.get('/api/products', async (req, res) => {
     try {
         const { search } = req.query;
@@ -66,7 +88,6 @@ app.get('/api/products', async (req, res) => {
         console.log(`Otrzymano zapytanie o produkty. Szukana fraza: "${search}"`);
 
         if (search) {
-            // POPRAWKA: Przekazujemy string bezpośrednio do zapytania, zamiast obiektu RegExp
             query = {
                 $or: [
                     { name: { $regex: search, $options: 'i' } },
