@@ -57,11 +57,13 @@ app.post('/api/login', (req, res) => {
     return res.status(401).json({ message: 'Nieprawidłowe dane logowania' });
 });
 
-// ZAKTUALIZOWANY ENDPOINT WYSZUKIWANIA
+// ZAKTUALIZOWANY ENDPOINT WYSZUKIWANIA z LOGOWANIEM
 app.get('/api/products', async (req, res) => {
     try {
         const { search } = req.query;
         let query = {};
+
+        console.log(`Otrzymano zapytanie o produkty. Szukana fraza: "${search}"`);
 
         if (search) {
             const regex = new RegExp(search, 'i'); // 'i' for case-insensitive
@@ -73,11 +75,15 @@ app.get('/api/products', async (req, res) => {
                 ]
             };
         }
-
-        const products = await Product.find(query).limit(20); // Ograniczamy wyniki do 20 dla wydajności
+        
+        console.log('Wykonywane zapytanie do bazy:', JSON.stringify(query));
+        const products = await Product.find(query).limit(20);
+        console.log(`Znaleziono ${products.length} produktów.`);
+        
         res.status(200).json(products);
     } catch (error) {
-        res.status(500).json({ message: 'Błąd pobierania produktów', error });
+        console.error('Błąd w /api/products:', error);
+        res.status(500).json({ message: 'Błąd pobierania produktów', error: error.message });
     }
 });
 
@@ -92,18 +98,23 @@ app.post('/api/orders', async (req, res) => {
     });
     try {
         const savedOrder = await newOrder.save();
+        console.log('Zamówienie zapisane pomyślnie:', savedOrder.id);
         res.status(201).json({ message: 'Zamówienie zapisane!', order: savedOrder });
     } catch (error) {
-        res.status(400).json({ message: 'Błąd zapisywania zamówienia', error });
+        console.error('Błąd w /api/orders (POST):', error);
+        res.status(400).json({ message: 'Błąd zapisywania zamówienia', error: error.message });
     }
 });
 
 app.get('/api/orders', async (req, res) => {
     try {
+        console.log('Otrzymano zapytanie o listę zamówień.');
         const orders = await Order.find().sort({ date: -1 });
+        console.log(`Znaleziono ${orders.length} zamówień.`);
         res.status(200).json(orders);
     } catch (error) {
-        res.status(500).json({ message: 'Błąd pobierania zamówień', error });
+        console.error('Błąd w /api/orders (GET):', error);
+        res.status(500).json({ message: 'Błąd pobierania zamówień', error: error.message });
     }
 });
 
