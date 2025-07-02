@@ -3,16 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "dependencies": {
-    "@testing-library/jest-dom": "^5.17.0",
-    "@testing-library/react": "^13.4.0",
-    "@testing-library/user-event": "^13.5.0",
     "lucide-react": "^0.379.0",
     "react": "^18.3.1",
-    "react-csv": "^2.2.2",
     "react-dom": "^18.3.1",
-    "react-scripts": "5.0.1",
-    "react-to-print": "^2.15.1",
-    "web-vitals": "^2.1.4"
+    "react-scripts": "5.0.1"
   },
   "scripts": {
     "start": "react-scripts start",
@@ -42,6 +36,5 @@
     "autoprefixer": "^10.4.19",
     "postcss": "^8.4.38",
     "tailwindcss": "^3.4.3"
-  },
-  "proxy": "http://localhost:3001"
+  }
 }
