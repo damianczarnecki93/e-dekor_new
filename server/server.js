@@ -32,7 +32,6 @@ const productSchema = new mongoose.Schema({
     quantity: Number,
     availability: Boolean
 });
-// Zapobiega tworzeniu nowego modelu przy każdym restarcie serwera na Render.com
 const Product = mongoose.models.Product || mongoose.model('Product', productSchema);
 
 const orderSchema = new mongoose.Schema({
@@ -44,59 +43,6 @@ const orderSchema = new mongoose.Schema({
     date: { type: Date, default: Date.now }
 });
 const Order = mongoose.models.Order || mongoose.model('Order', orderSchema);
-
-
-// --- Endpoint do importu danych (TYMCZASOWY) ---
-app.get('/api/import-data-now', async (req, res) => {
-    try {
-        console.log('Rozpoczęto proces importu danych...');
-
-        // 1. Czyszczenie istniejącej kolekcji produktów
-        console.log('Czyszczenie kolekcji produktów...');
-        await Product.deleteMany({});
-        console.log('Kolekcja wyczyszczona.');
-
-        // 2. Wczytywanie danych z plików CSV
-        const productsToImport = [];
-        const files = ['produkty.csv', 'produkty2.csv'];
-
-        for (const file of files) {
-            const filePath = path.join(__dirname, file);
-            if (fs.existsSync(filePath)) {
-                console.log(`Wczytywanie pliku: ${file}...`);
-                await new Promise((resolve, reject) => {
-                    fs.createReadStream(filePath)
-                        .pipe(csv())
-                        .on('data', (data) => {
-                            productsToImport.push({
-                                ...data,
-                                id: data.id || data.barcode,
-                                price: parseFloat(data.price) || 0,
-                                quantity: parseInt(data.quantity) || 0,
-                                availability: (data.availability || 'true').toLowerCase() === 'true'
-                            });
-                        })
-                        .on('end', resolve)
-                        .on('error', reject);
-                });
-            }
-        }
-
-        // 3. Zapisywanie nowych danych do bazy
-        if (productsToImport.length > 0) {
-            console.log(`Importowanie ${productsToImport.length} produktów do bazy danych...`);
-            await Product.insertMany(productsToImport);
-            console.log('Import zakończony sukcesem!');
-            res.status(200).send('<h1>Import danych zakończony sukcesem!</h1><p>Możesz teraz zamknąć tę kartę. Ten adres URL zadziałał tylko raz.</p>');
-        } else {
-            res.status(404).send('Nie znaleziono plików CSV do importu.');
-        }
-
-    } catch (error) {
-        console.error('Wystąpił błąd podczas importu:', error);
-        res.status(500).send(`<h1>Wystąpił błąd podczas importu:</h1><pre>${error.message}</pre>`);
-    }
-});
 
 
 // --- Główne API Endpoints ---
@@ -111,9 +57,24 @@ app.post('/api/login', (req, res) => {
     return res.status(401).json({ message: 'Nieprawidłowe dane logowania' });
 });
 
+// ZAKTUALIZOWANY ENDPOINT WYSZUKIWANIA
 app.get('/api/products', async (req, res) => {
     try {
-        const products = await Product.find();
+        const { search } = req.query;
+        let query = {};
+
+        if (search) {
+            const regex = new RegExp(search, 'i'); // 'i' for case-insensitive
+            query = {
+                $or: [
+                    { name: { $regex: regex } },
+                    { product_code: { $regex: regex } },
+                    { barcode: { $regex: regex } }
+                ]
+            };
+        }
+
+        const products = await Product.find(query).limit(20); // Ograniczamy wyniki do 20 dla wydajności
         res.status(200).json(products);
     } catch (error) {
         res.status(500).json({ message: 'Błąd pobierania produktów', error });
