@@ -48,7 +48,7 @@ const Order = mongoose.models.Order || mongoose.model('Order', orderSchema);
 // --- Endpoint do importu danych (ULEPSZONY) ---
 app.get('/api/import-data-now', async (req, res) => {
     try {
-        console.log('Rozpoczęto proces importu danych (wersja poprawiona)...');
+        console.log('Rozpoczęto proces importu danych (wersja 3)...');
         await Product.deleteMany({});
         console.log('Kolekcja produktów wyczyszczona.');
 
@@ -61,9 +61,11 @@ app.get('/api/import-data-now', async (req, res) => {
                 console.log(`Wczytywanie pliku: ${file}...`);
                 await new Promise((resolve, reject) => {
                     fs.createReadStream(filePath)
-                        .pipe(csv())
+                        // POPRAWKA: Dodanie opcji `bom: true` do obsługi specjalnych znaków na początku pliku
+                        .pipe(csv({ bom: true }))
                         .on('data', (row) => {
-                            // Poprawiona, bardziej odporna logika mapowania
+                            // Dodatkowe logowanie, aby zobaczyć, co odczytuje parser
+                            console.log('Odczytany wiersz z CSV:', row); 
                             const product = {
                                 id: row.id || row.barcode || `fallback-${Math.random()}`,
                                 name: row.name,
