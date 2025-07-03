@@ -100,12 +100,23 @@ const api = {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username, password }),
             });
-            if (response.ok) return await response.json();
-            const errorData = await response.json();
-            throw new Error(errorData.message || `Błąd serwera: ${response.status}`);
+
+            const responseText = await response.text();
+            if (!response.ok) {
+                try {
+                    const errorJson = JSON.parse(responseText);
+                    throw new Error(errorJson.message || `Błąd serwera: ${response.status}`);
+                } catch (e) {
+                    // Jeśli odpowiedź błędu nie jest w formacie JSON
+                    throw new Error(`Błąd serwera: ${response.status}. Otrzymano nieprawidłową odpowiedź.`);
+                }
+            }
+            
+            return JSON.parse(responseText);
+
         } catch (error) {
             console.error("API Error login:", error);
-            throw new Error(error.message || 'Nie udało się zalogować.');
+            throw new Error(error.message || 'Nie udało się zalogować. Sprawdź połączenie z internetem.');
         }
     },
     register: async (username, password) => {
