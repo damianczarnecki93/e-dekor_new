@@ -2,27 +2,38 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
-const path = require('path');
-const fs = require('fs');
-const csv = require('csv-parser');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// --- Sprawdzenie, czy adres do bazy danych jest ustawiony ---
+// --- Konfiguracja i połączenie z bazą danych ---
 const dbUrl = process.env.DATABASE_URL;
+const jwtSecret = process.env.JWT_SECRET || 'super-tajny-klucz-do-zmiany'; // Zmień to w zmiennych środowiskowych!
+
 if (!dbUrl) {
   console.error('BŁĄD KRYTYCZNY: Zmienna środowiskowa DATABASE_URL nie jest ustawiona!');
   process.exit(1); 
 }
 
-// --- Połączenie z bazą danych MongoDB ---
 mongoose.connect(dbUrl, { useNewUrlParser: true, useUnifiedTopology: true })
   .then(() => console.log('Połączono z MongoDB Atlas!'))
   .catch(err => console.error('Błąd połączenia z MongoDB:', err));
 
 // --- Definicje schematów i modeli ---
+
+// Model Użytkownika
+const userSchema = new mongoose.Schema({
+    username: { type: String, required: true, unique: true, lowercase: true },
+    password: { type: String, required: true },
+    role: { type: String, default: 'user' },
+    status: { type: String, enum: ['oczekujący', 'zaakceptowany'], default: 'oczekujący' }
+});
+const User = mongoose.models.User || mongoose.model('User', userSchema);
+
+// Model Produktu
 const productSchema = new mongoose.Schema({
     id: String,
     name: String,
@@ -34,6 +45,7 @@ const productSchema = new mongoose.Schema({
 });
 const Product = mongoose.models.Product || mongoose.model('Product', productSchema);
 
+// Model Zamówienia
 const orderSchema = new mongoose.Schema({
     id: { type: String, required: true },
     customerName: String,
@@ -45,132 +57,119 @@ const orderSchema = new mongoose.Schema({
 const Order = mongoose.models.Order || mongoose.model('Order', orderSchema);
 
 
-// --- Endpoint do importu danych (WERSJA OSTATECZNA Z POPRAWNYM MAPOWANIEM) ---
-app.get('/api/import-data-now', async (req, res) => {
+// --- API Endpoints - Uwierzytelnianie ---
+
+// Rejestracja
+app.post('/api/register', async (req, res) => {
     try {
-        console.log('Rozpoczęto proces importu danych (wersja 5 - poprawne mapowanie)...');
-        await Product.deleteMany({});
-        console.log('Kolekcja produktów wyczyszczona.');
+        const { username, password } = req.body;
+        if (!username || !password) {
+            return res.status(400).json({ message: 'Nazwa użytkownika i hasło są wymagane.' });
+        }
 
-        const productsToImport = [];
-        const files = ['produkty.csv', 'produkty2.csv'];
+        const existingUser = await User.findOne({ username });
+        if (existingUser) {
+            return res.status(400).json({ message: 'Użytkownik o tej nazwie już istnieje.' });
+        }
+
+        const hashedPassword = await bcrypt.hash(password, 10);
+        const newUser = new User({ username, password: hashedPassword });
         
-        // POPRAWKA: Prawidłowa kolejność nagłówków zgodnie z przykładem
-        const csvHeaders = ['barcode', 'name', 'price', 'product_code', 'quantity', 'availability'];
+        // Pierwszy zarejestrowany użytkownik staje się adminem
+        const userCount = await User.countDocuments();
+        if (userCount === 0) {
+            newUser.role = 'administrator';
+            newUser.status = 'zaakceptowany';
+        }
 
-        for (const file of files) {
-            const filePath = path.join(__dirname, file);
-            if (fs.existsSync(filePath)) {
-                console.log(`Wczytywanie pliku: ${file}...`);
-                await new Promise((resolve, reject) => {
-                    fs.createReadStream(filePath)
-                        .pipe(csv({ 
-                            headers: csvHeaders,
-                            skipLines: 1 
-                        }))
-                        .on('data', (row) => {
-                            // POPRAWKA: Zamiana przecinka na kropkę w cenie
-                            const priceString = (row.price || '0').replace(',', '.');
-                            
-                            const product = {
-                                id: row.barcode, // Używamy kodu kreskowego jako unikalnego ID
-                                name: row.name,
-                                product_code: row.product_code,
-                                barcode: row.barcode,
-                                price: parseFloat(priceString) || 0,
-                                quantity: parseInt(row.quantity) || 0,
-                                availability: String(row.availability).toLowerCase() === 'true'
-                            };
-                            productsToImport.push(product);
-                        })
-                        .on('end', resolve)
-                        .on('error', reject);
-                });
+        await newUser.save();
+        res.status(201).json({ message: 'Rejestracja pomyślna! Poczekaj na akceptację administratora.' });
+    } catch (error) {
+        res.status(500).json({ message: 'Błąd serwera podczas rejestracji.', error: error.message });
+    }
+});
+
+// Logowanie
+app.post('/api/login', async (req, res) => {
+    try {
+        const { username, password } = req.body;
+        const user = await User.findOne({ username: username.toLowerCase() });
+
+        if (!user) {
+            return res.status(401).json({ message: 'Nieprawidłowe dane logowania.' });
+        }
+
+        if (user.status !== 'zaakceptowany') {
+            return res.status(403).json({ message: 'Konto nie zostało jeszcze aktywowane.' });
+        }
+
+        const isMatch = await bcrypt.compare(password, user.password);
+        if (!isMatch) {
+            return res.status(401).json({ message: 'Nieprawidłowe dane logowania.' });
+        }
+
+        const token = jwt.sign({ userId: user._id, role: user.role }, jwtSecret, { expiresIn: '1d' });
+
+        res.json({
+            token,
+            user: {
+                id: user._id,
+                username: user.username,
+                role: user.role
             }
-        }
-
-        if (productsToImport.length > 0) {
-            console.log(`Importowanie ${productsToImport.length} produktów...`);
-            await Product.insertMany(productsToImport);
-            console.log('Import zakończony sukcesem!');
-            res.status(200).send('<h1>Import danych zakończony sukcesem!</h1><p>Produkty zostały poprawnie zapisane w bazie danych.</p>');
-        } else {
-            res.status(404).send('Nie znaleziono plików CSV do importu.');
-        }
+        });
 
     } catch (error) {
-        console.error('Wystąpił błąd podczas importu:', error);
-        res.status(500).send(`<h1>Wystąpił błąd podczas importu:</h1><pre>${error.message}</pre>`);
+        res.status(500).json({ message: 'Błąd serwera podczas logowania.', error: error.message });
     }
 });
 
 
-// --- Endpoint diagnostyczny (TYMCZASOWY) ---
-app.get('/api/diagnose-products', async (req, res) => {
+// --- API Endpoints - Admin ---
+
+// Pobieranie listy użytkowników
+app.get('/api/admin/users', async (req, res) => {
+    // TODO: Dodać middleware do weryfikacji tokenu JWT i roli admina
     try {
-        console.log('Uruchomiono diagnostykę produktów...');
-        const sampleProducts = await Product.find().limit(5);
-        
-        if (sampleProducts.length === 0) {
-            return res.status(404).send('<h1>Diagnostyka: Baza danych jest pusta.</h1>');
-        }
-
-        let htmlResponse = '<h1>Diagnostyka Produktów</h1>';
-        htmlResponse += `<p>Znaleziono ${sampleProducts.length} przykładowych produktów. Oto one:</p>`;
-        htmlResponse += '<pre style="background-color: #f0f0f0; padding: 15px; border-radius: 5px;">' + JSON.stringify(sampleProducts, null, 2) + '</pre>';
-        
-        res.status(200).send(htmlResponse);
+        const users = await User.find({}, '-password'); // Pobierz wszystkich użytkowników bez haseł
+        res.json(users);
     } catch (error) {
-        console.error('Błąd podczas diagnostyki:', error);
-        res.status(500).send(`<h1>Wystąpił błąd podczas diagnostyki:</h1><pre>${error.message}</pre>`);
+        res.status(500).json({ message: 'Błąd pobierania użytkowników.' });
+    }
+});
+
+// Akceptacja użytkownika
+app.post('/api/admin/users/:id/approve', async (req, res) => {
+    // TODO: Dodać middleware do weryfikacji tokenu JWT i roli admina
+    try {
+        const user = await User.findByIdAndUpdate(req.params.id, { status: 'zaakceptowany' }, { new: true });
+        if (!user) {
+            return res.status(404).json({ message: 'Nie znaleziono użytkownika.' });
+        }
+        res.json({ message: 'Użytkownik zaakceptowany.', user });
+    } catch (error) {
+        res.status(500).json({ message: 'Błąd podczas akceptacji użytkownika.' });
     }
 });
 
 
-// --- Główne API Endpoints ---
-app.post('/api/login', (req, res) => {
-    const { username, password } = req.body;
-    if (username === 'admin' && password === 'admin123') {
-        return res.status(200).json({ user: { username: 'admin', role: 'administrator' }, token: 'mock-jwt-token-for-admin' });
-    }
-    if (username === 'user' && password === 'user123') {
-        return res.status(200).json({ user: { username: 'user', role: 'user' }, token: 'mock-jwt-token-for-user' });
-    }
-    return res.status(401).json({ message: 'Nieprawidłowe dane logowania' });
-});
-
+// --- Pozostałe API Endpoints ---
 app.get('/api/products', async (req, res) => {
     try {
         const { search } = req.query;
         let query = {};
-
         if (search) {
-            query = {
-                $or: [
-                    { name: { $regex: search, $options: 'i' } },
-                    { product_code: { $regex: search, $options: 'i' } },
-                    { barcode: { $regex: search, $options: 'i' } }
-                ]
-            };
+            query = { $or: [ { name: { $regex: search, $options: 'i' } }, { product_code: { $regex: search, $options: 'i' } }, { barcode: { $regex: search, $options: 'i' } } ] };
         }
-        
         const products = await Product.find(query).limit(20);
         res.status(200).json(products);
     } catch (error) {
-        console.error('Błąd w /api/products:', error);
         res.status(500).json({ message: 'Błąd pobierania produktów', error: error.message });
     }
 });
 
 app.post('/api/orders', async (req, res) => {
-    const orderData = req.body;
-    const newOrder = new Order({
-        id: `ZAM-${Date.now()}`,
-        customerName: orderData.customerName,
-        items: orderData.items,
-        total: orderData.total,
-        status: 'Zapisane'
-    });
+    const newOrder = new Order({ id: `ZAM-${Date.now()}`, ...req.body, status: 'Zapisane' });
     try {
         const savedOrder = await newOrder.save();
         res.status(201).json({ message: 'Zamówienie zapisane!', order: savedOrder });
@@ -187,6 +186,21 @@ app.get('/api/orders', async (req, res) => {
         res.status(500).json({ message: 'Błąd pobierania zamówień', error: error.message });
     }
 });
+
+app.post('/api/orders/:mongoId/complete', async (req, res) => {
+    try {
+        const order = await Order.findById(req.params.mongoId);
+        if (!order) {
+            return res.status(404).json({ message: 'Nie znaleziono zamówienia.' });
+        }
+        order.status = 'Skompletowane';
+        await order.save();
+        res.status(200).json({ message: 'Zamówienie skompletowane pomyślnie!', order });
+    } catch (error) {
+        res.status(500).json({ message: 'Wystąpił błąd serwera.', error: error.message });
+    }
+});
+
 
 // --- Start serwera ---
 const PORT = process.env.PORT || 3001;
