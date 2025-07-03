@@ -143,7 +143,7 @@ const Modal = ({ isOpen, onClose, title, children }) => { if (!isOpen) return nu
 // --- Główne Widoki (Moduły) ---
 const SearchView = () => { const [query, setQuery] = useState(''); const [suggestions, setSuggestions] = useState([]); const [selectedProduct, setSelectedProduct] = useState(null); const [isLoading, setIsLoading] = useState(false); const { showNotification } = useNotification(); useEffect(() => { if (query.length < 2) { setSuggestions([]); return; } const handler = setTimeout(async () => { setIsLoading(true); try { const results = await api.searchProducts(query); setSuggestions(results); } catch (error) { showNotification(error.message, 'error'); } finally { setIsLoading(false); } }, 300); return () => clearTimeout(handler); }, [query, showNotification]); const handleSelect = (product) => { setSelectedProduct(product); setSuggestions([]); setQuery(''); }; return (<div className="p-4 md:p-8"><h1 className="text-3xl font-bold mb-6 text-gray-800 dark:text-white">Szybkie Wyszukiwanie</h1><div className="relative max-w-2xl mx-auto"><div className="flex items-center bg-white dark:bg-gray-700 rounded-full shadow-lg"><Search className="h-6 w-6 ml-4 text-gray-400"/><input type="text" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Wpisz kod kreskowy, kod produktu lub nazwę..." className="w-full p-4 bg-transparent focus:outline-none text-gray-900 dark:text-white"/></div>{isLoading && <div className="absolute w-full mt-2 text-center text-gray-500">Szukam...</div>}{suggestions.length > 0 && (<ul className="absolute z-10 w-full mt-2 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg shadow-xl">{suggestions.map(p => (<li key={p._id} onClick={() => handleSelect(p)} className="p-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 border-b dark:border-gray-600 last:border-b-0"><p className="font-semibold text-gray-800 dark:text-gray-100">{p.name}</p><p className="text-sm text-gray-500 dark:text-gray-400">{p.product_code}</p></li>))}</ul>)}</div>{selectedProduct && (<div className="mt-10 max-w-2xl mx-auto bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg animate-fade-in"><h2 className="text-2xl font-bold mb-4 text-indigo-600 dark:text-indigo-400">{selectedProduct.name}</h2><div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-gray-700 dark:text-gray-300"><div><strong>Kod produktu:</strong> {selectedProduct.product_code}</div><div><strong>Kod kreskowy:</strong> {selectedProduct.barcode}</div><div><strong>Cena:</strong> {selectedProduct.price.toFixed(2)} PLN</div><div><strong>Ilość na stanie:</strong> {selectedProduct.quantity}</div><div><strong>Dostępność:</strong><span className={`ml-2 px-2 py-1 text-xs font-semibold rounded-full ${selectedProduct.availability ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'}`}>{selectedProduct.availability ? 'Dostępny' : 'Niedostępny'}</span></div></div></div>)}</div>);};
 
-const OrderView = ({ currentOrder, setCurrentOrder, setActiveView }) => {
+const OrderView = ({ currentOrder, setCurrentOrder, user }) => {
     const [order, setOrder] = useState(currentOrder);
     const [inputValue, setInputValue] = useState('');
     const [suggestions, setSuggestions] = useState([]);
@@ -229,7 +229,8 @@ const OrderView = ({ currentOrder, setCurrentOrder, setActiveView }) => {
             return;
         }
         try {
-            const { message, order: savedOrder } = await api.saveOrder(order);
+            const orderToSave = { ...order, author: user.username };
+            const { message, order: savedOrder } = await api.saveOrder(orderToSave);
             showNotification(message, 'success');
             updateOrder(savedOrder);
         } catch (error) {
@@ -238,7 +239,7 @@ const OrderView = ({ currentOrder, setCurrentOrder, setActiveView }) => {
     };
 
     const handleNewOrder = async () => {
-        if (order.customerName || (order.items && order.items.length > 0)) {
+        if (order._id && (order.customerName || (order.items && order.items.length > 0))) {
             await handleSaveOrder();
         }
         setCurrentOrder({ customerName: '', items: [] });
@@ -349,7 +350,7 @@ const OrderView = ({ currentOrder, setCurrentOrder, setActiveView }) => {
 const OrdersListView = ({ onEdit }) => {
     const [orders, setOrders] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [view, setView] = useState('Zapisane'); // 'Zapisane' or 'Skompletowane'
+    const [view, setView] = useState('Zapisane');
     const { showNotification } = useNotification();
 
     useEffect(() => {
@@ -380,8 +381,8 @@ const OrdersListView = ({ onEdit }) => {
                 <table className="w-full text-left min-w-[600px]">
                     <thead className="bg-gray-50 dark:bg-gray-700">
                         <tr>
-                            <th className="p-4 font-semibold">ID Zamówienia</th>
                             <th className="p-4 font-semibold">Klient</th>
+                            <th className="p-4 font-semibold">Autor</th>
                             <th className="p-4 font-semibold">Data</th>
                             <th className="p-4 font-semibold text-right">Wartość</th>
                             <th className="p-4 font-semibold text-center">Akcje</th>
@@ -393,8 +394,8 @@ const OrdersListView = ({ onEdit }) => {
                         ) : orders.length > 0 ? (
                             orders.map(order => (
                                 <tr key={order._id}>
-                                    <td className="p-4 font-medium">{order.id}</td>
-                                    <td className="p-4">{order.customerName}</td>
+                                    <td className="p-4 font-medium">{order.customerName}</td>
+                                    <td className="p-4">{order.author}</td>
                                     <td className="p-4">{new Date(order.date).toLocaleDateString()}</td>
                                     <td className="p-4 text-right font-semibold">{(order.total || 0).toFixed(2)} PLN</td>
                                     <td className="p-4 text-center">
@@ -414,7 +415,127 @@ const OrdersListView = ({ onEdit }) => {
     );
 };
 
-const PickingView = ({ user }) => { const [orders, setOrders] = useState([]); const [isLoading, setIsLoading] = useState(true); const [selectedOrder, setSelectedOrder] = useState(null); const [toPickItems, setToPickItems] = useState([]); const [pickedItems, setPickedItems] = useState([]); const [isModalOpen, setIsModalOpen] = useState(false); const [currentItem, setCurrentItem] = useState(null); const [pickedQuantity, setPickedQuantity] = useState(''); const { showNotification } = useNotification(); const fetchOrders = useCallback(async () => { setIsLoading(true); try { const fetchedOrders = await api.getOrders('Zapisane'); setOrders(fetchedOrders); } catch (error) { showNotification(error.message, 'error'); } finally { setIsLoading(false); } }, [showNotification]); useEffect(() => { fetchOrders(); }, [fetchOrders]); const handleSelectOrder = (order) => { setSelectedOrder(order); setToPickItems(order.items.map(item => ({...item, originalQuantity: item.quantity}))); setPickedItems([]); }; const openModal = (item) => { setCurrentItem(item); setPickedQuantity(item.quantity); setIsModalOpen(true); }; const handleConfirmPick = () => { const quantity = parseInt(pickedQuantity, 10); if (isNaN(quantity) || quantity < 0) { showNotification("Proszę wpisać poprawną ilość.", 'error'); return; } const pickedItem = { ...currentItem, pickedQuantity: quantity }; setPickedItems([...pickedItems, pickedItem]); const remainingQuantity = currentItem.quantity - quantity; if (remainingQuantity > 0) { setToPickItems(toPickItems.map(item => item._id === currentItem._id ? { ...item, quantity: remainingQuantity } : item)); } else { setToPickItems(toPickItems.filter(item => item._id !== currentItem._id)); } setIsModalOpen(false); setCurrentItem(null); setPickedQuantity(''); }; const isCompleted = toPickItems.length === 0 && selectedOrder; const handleCompleteOrder = async () => { try { await api.completeOrder(selectedOrder._id, pickedItems); showNotification('Zamówienie zostało skompletowane!', 'success'); setSelectedOrder(null); fetchOrders(); } catch (error) { showNotification(error.message, 'error'); } }; const exportCompletion = () => { const csvData = pickedItems.map(item => `${item.barcode},${item.pickedQuantity}`).join('\n'); const blob = new Blob([csvData], { type: 'text/csv;charset=utf-8;' }); const link = document.createElement("a"); const url = URL.createObjectURL(blob); link.setAttribute("href", url); link.setAttribute("download", `kompletacja_${selectedOrder.id}.csv`); link.style.visibility = 'hidden'; document.body.appendChild(link); link.click(); document.body.removeChild(link); }; if (isLoading) { return <div className="p-8 text-center">Ładowanie zamówień...</div> } if (!selectedOrder) { return (<div className="p-4 md:p-8"><h1 className="text-3xl font-bold mb-6 text-gray-800 dark:text-white">Kompletacja Zamówień</h1><div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">{orders.map(order => (<div key={order._id} onClick={() => handleSelectOrder(order)} className="p-4 bg-white dark:bg-gray-800 rounded-lg shadow-md cursor-pointer hover:shadow-lg hover:scale-105 transition-all"><p className="font-bold text-lg text-indigo-600 dark:text-indigo-400">{order.id}</p><p className="text-gray-700 dark:text-gray-300">{order.customerName}</p><p className="text-sm text-gray-500 dark:text-gray-400">{new Date(order.date).toLocaleDateString()}</p></div>))}</div></div>); } return (<div className="p-4 md:p-8"><button onClick={() => setSelectedOrder(null)} className="mb-4 text-indigo-600 dark:text-indigo-400 hover:underline">&larr; Powrót do listy zamówień</button><h1 className="text-3xl font-bold mb-2 text-gray-800 dark:text-white">Kompletacja: {selectedOrder.id}</h1><p className="mb-6 text-gray-600 dark:text-gray-400">Klient: {selectedOrder.customerName}</p><div className="grid grid-cols-1 lg:grid-cols-2 gap-8"><div><h2 className="text-2xl font-semibold mb-4 text-gray-800 dark:text-white">Do skompletowania</h2><div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 space-y-3">{toPickItems.map(item => <div key={item._id} onClick={() => openModal(item)} className="flex justify-between items-center p-3 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer transition-colors"><div><p className="font-semibold">{item.name}</p><p className="text-sm text-gray-500 dark:text-gray-400">{item.product_code}</p></div><div className="text-lg font-bold px-3 py-1 bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 rounded-full">{item.quantity}</div></div>)} {toPickItems.length === 0 && <p className="text-gray-500 text-center p-4">Wszystko skompletowane.</p>}</div></div><div><h2 className="text-2xl font-semibold mb-4 text-gray-800 dark:text-white">Skompletowano</h2><div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 space-y-3">{pickedItems.map(item => { const isMismatch = item.pickedQuantity !== item.originalQuantity; return (<div key={item._id} className={`flex justify-between items-center p-3 rounded-lg ${isMismatch ? 'bg-red-50 dark:bg-red-900/50' : 'bg-green-50 dark:bg-green-900/50'}`}><div><p className="font-semibold">{item.name}</p><p className="text-sm text-gray-500 dark:text-gray-400">{item.product_code}</p></div><div className={`text-lg font-bold px-3 py-1 rounded-full flex items-center gap-2 ${isMismatch ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>{isMismatch && <AlertTriangle className="w-4 h-4" />} {item.pickedQuantity} / {item.originalQuantity}</div></div>);})} {pickedItems.length === 0 && <p className="text-gray-500 text-center p-4">Brak pozycji.</p>}</div></div></div>{isCompleted && <div className="mt-8 text-center p-6 bg-green-100 dark:bg-green-900/50 rounded-lg"><CheckCircle className="w-12 h-12 mx-auto text-green-500 mb-4" /><h3 className="text-2xl font-bold text-green-800 dark:text-green-200">Zamówienie skompletowane!</h3><div className="mt-4 flex justify-center gap-4"><button onClick={handleCompleteOrder} className="px-6 py-3 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition-colors">Zatwierdź</button><button onClick={exportCompletion} className="flex items-center justify-center px-5 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"><FileDown className="w-5 h-5 mr-2"/> Eksportuj</button></div></div>}<Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Wpisz ilość">{currentItem && (<div><p className="mb-4 text-lg font-semibold text-gray-800 dark:text-white">{currentItem.name}</p><input type="number" value={pickedQuantity} onChange={(e) => setPickedQuantity(e.target.value)} className="w-full p-3 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-center text-2xl" autoFocus onKeyPress={(e) => e.key === 'Enter' && handleConfirmPick()}/><button onClick={handleConfirmPick} className="w-full mt-4 px-6 py-3 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition-colors">Akceptuj</button></div>)}</Modal></div>);};
+const PickingView = ({ user }) => {
+    const [orders, setOrders] = useState([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [selectedOrder, setSelectedOrder] = useState(null);
+    const [toPickItems, setToPickItems] = useState([]);
+    const [pickedItems, setPickedItems] = useState([]);
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [currentItem, setCurrentItem] = useState(null);
+    const [pickedQuantity, setPickedQuantity] = useState('');
+    const { showNotification } = useNotification();
+
+    const fetchOrders = useCallback(async () => {
+        setIsLoading(true);
+        try {
+            const fetchedOrders = await api.getOrders('Zapisane');
+            setOrders(fetchedOrders);
+        } catch (error) {
+            showNotification(error.message, 'error');
+        } finally {
+            setIsLoading(false);
+        }
+    }, [showNotification]);
+
+    useEffect(() => {
+        fetchOrders();
+    }, [fetchOrders]);
+
+    const handleSelectOrder = (order) => {
+        setSelectedOrder(order);
+        setToPickItems(order.items.map(item => ({...item, originalQuantity: item.quantity})));
+        setPickedItems([]);
+    };
+
+    const openModal = (item) => {
+        setCurrentItem(item);
+        setPickedQuantity(item.quantity);
+        setIsModalOpen(true);
+    };
+
+    const handleConfirmPick = () => {
+        const quantity = parseInt(pickedQuantity, 10);
+        if (isNaN(quantity) || quantity < 0) {
+            showNotification("Proszę wpisać poprawną ilość.", 'error');
+            return;
+        }
+        const pickedItem = { ...currentItem, pickedQuantity: quantity };
+        setPickedItems([...pickedItems, pickedItem]);
+        const remainingQuantity = currentItem.quantity - quantity;
+        if (remainingQuantity > 0) {
+            setToPickItems(toPickItems.map(item => item._id === currentItem._id ? { ...item, quantity: remainingQuantity } : item));
+        } else {
+            setToPickItems(toPickItems.filter(item => item._id !== currentItem._id));
+        }
+        setIsModalOpen(false);
+        setCurrentItem(null);
+        setPickedQuantity('');
+    };
+    
+    const isCompleted = toPickItems.length === 0 && selectedOrder;
+    
+    const handleCompleteOrder = async () => {
+        try {
+            await api.completeOrder(selectedOrder._id, pickedItems);
+            showNotification('Zamówienie zostało skompletowane!', 'success');
+            setSelectedOrder(null);
+            fetchOrders();
+        } catch (error) {
+            showNotification(error.message, 'error');
+        }
+    };
+
+    const exportCompletion = () => {
+      const csvData = pickedItems.map(item => `${item.barcode},${item.pickedQuantity}`).join('\n');
+      const blob = new Blob([csvData], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement("a");
+      const url = URL.createObjectURL(blob);
+      link.setAttribute("href", url);
+      link.setAttribute("download", `kompletacja_${selectedOrder.id}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    };
+
+    if (isLoading) {
+        return <div className="p-8 text-center">Ładowanie zamówień...</div>
+    }
+
+    if (!selectedOrder) {
+        return (
+            <div className="p-4 md:p-8">
+                <h1 className="text-3xl font-bold mb-6 text-gray-800 dark:text-white">Kompletacja Zamówień</h1>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {orders.map(order => (
+                        <div key={order._id} onClick={() => handleSelectOrder(order)} className="p-4 bg-white dark:bg-gray-800 rounded-lg shadow-md cursor-pointer hover:shadow-lg hover:scale-105 transition-all">
+                            <p className="font-bold text-lg text-indigo-600 dark:text-indigo-400">{order.customerName}</p>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">Autor: {order.author}</p>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">{new Date(order.date).toLocaleDateString()}</p>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="p-4 md:p-8">
+            <button onClick={() => setSelectedOrder(null)} className="mb-4 text-indigo-600 dark:text-indigo-400 hover:underline">&larr; Powrót do listy zamówień</button>
+            <h1 className="text-3xl font-bold mb-2 text-gray-800 dark:text-white">Kompletacja: {selectedOrder.id}</h1>
+            <p className="mb-6 text-gray-600 dark:text-gray-400">Klient: {selectedOrder.customerName}</p>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div>
+                    <h2 className="text-2xl font-semibold mb-4 text-gray-800 dark:text-white">Do skompletowania</h2>
+                    <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 space-y-3">{toPickItems.map(item => <div key={item._id} onClick={() => openModal(item)} className="flex justify-between items-center p-3 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer transition-colors"><div><p className="font-semibold">{item.name}</p><p className="text-sm text-gray-500 dark:text-gray-400">{item.product_code}</p></div><div className="text-lg font-bold px-3 py-1 bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 rounded-full">{item.quantity}</div></div>)} {toPickItems.length === 0 && <p className="text-gray-500 text-center p-4">Wszystko skompletowane.</p>}</div>
+                </div>
+                <div>
+                    <h2 className="text-2xl font-semibold mb-4 text-gray-800 dark:text-white">Skompletowano</h2>
+                    <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 space-y-3">{pickedItems.map(item => { const isMismatch = item.pickedQuantity !== item.originalQuantity; return (<div key={item._id} className={`flex justify-between items-center p-3 rounded-lg ${isMismatch ? 'bg-red-50 dark:bg-red-900/50' : 'bg-green-50 dark:bg-green-900/50'}`}><div><p className="font-semibold">{item.name}</p><p className="text-sm text-gray-500 dark:text-gray-400">{item.product_code}</p></div><div className={`text-lg font-bold px-3 py-1 rounded-full flex items-center gap-2 ${isMismatch ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>{isMismatch && <AlertTriangle className="w-4 h-4" />} {item.pickedQuantity} / {item.originalQuantity}</div></div>);})} {pickedItems.length === 0 && <p className="text-gray-500 text-center p-4">Brak pozycji.</p>}</div>
+                </div>
+            </div>
+            {isCompleted && <div className="mt-8 text-center p-6 bg-green-100 dark:bg-green-900/50 rounded-lg"><CheckCircle className="w-12 h-12 mx-auto text-green-500 mb-4" /><h3 className="text-2xl font-bold text-green-800 dark:text-green-200">Zamówienie skompletowane!</h3><div className="mt-4 flex justify-center gap-4"><button onClick={handleCompleteOrder} className="px-6 py-3 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition-colors">Zatwierdź</button><button onClick={exportCompletion} className="flex items-center justify-center px-5 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"><FileDown className="w-5 h-5 mr-2"/> Eksportuj</button></div></div>}<Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Wpisz ilość">{currentItem && (<div><p className="mb-4 text-lg font-semibold text-gray-800 dark:text-white">{currentItem.name}</p><input type="number" value={pickedQuantity} onChange={(e) => setPickedQuantity(e.target.value)} className="w-full p-3 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-center text-2xl" autoFocus onKeyPress={(e) => e.key === 'Enter' && handleConfirmPick()}/><button onClick={handleConfirmPick} className="w-full mt-4 px-6 py-3 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition-colors">Akceptuj</button></div>)}</Modal></div>);};
 const InventoryView = () => { const [listName, setListName] = useState(''); const [inventoryItems, setInventoryItems] = useState([]); const [inputValue, setInputValue] = useState(''); const [suggestions, setSuggestions] = useState([]); const listEndRef = useRef(null); const scrollToBottom = () => listEndRef.current?.scrollIntoView({ behavior: "smooth" }); useEffect(scrollToBottom, [inventoryItems]); useEffect(() => { if (inputValue.length < 2) { setSuggestions([]); return; } const handler = setTimeout(async () => { try { const results = await api.searchProducts(inputValue); setSuggestions(results); } catch (error) { console.error('Błąd wyszukiwania w Inwentaryzacji', error); } }, 300); return () => clearTimeout(handler); }, [inputValue]); const addProductToInventory = (product) => { const existingItem = inventoryItems.find(item => item._id === product._id); if (existingItem) { setInventoryItems(inventoryItems.map(item => item._id === product._id ? { ...item, quantity: item.quantity + 1 } : item)); } else { setInventoryItems([...inventoryItems, { ...product, quantity: 1, isCustom: false }]); } setInputValue(''); setSuggestions([]); }; const handleKeyDown = (e) => { if (e.key === 'Enter' && inputValue.trim() !== '') { e.preventDefault(); if (suggestions.length > 0) { addProductToInventory(suggestions[0]); } else { const customItem = { _id: `custom-${Date.now()}`, name: inputValue, product_code: 'N/A', quantity: 1, isCustom: true }; setInventoryItems([...inventoryItems, customItem]); setInputValue(''); setSuggestions([]); } } }; const updateQuantity = (id, newQuantity) => { const quant = parseInt(newQuantity, 10); if (quant > 0) setInventoryItems(inventoryItems.map(item => item._id === id ? {...item, quantity: quant} : item)); }; const removeItem = (id) => setInventoryItems(inventoryItems.filter(item => item._id !== id)); return (<div className="h-full flex flex-col"><div className="p-4 md:p-8 pb-24"><div className="flex-shrink-0"><h1 className="text-3xl font-bold mb-4 text-gray-800 dark:text-white">Inwentaryzacja</h1><input type="text" value={listName} onChange={(e) => setListName(e.target.value)} placeholder="Wprowadź nazwę listy spisowej" className="w-full max-w-lg p-3 mb-6 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"/></div><div className="flex-grow overflow-y-auto bg-gray-50 dark:bg-gray-900 p-4 rounded-lg shadow-inner mb-4">{inventoryItems.length > 0 ? <table className="w-full text-left"><thead><tr className="border-b border-gray-200 dark:border-gray-700"><th className="p-3">Nazwa</th><th className="p-3">Kod produktu</th><th className="p-3 text-center">Ilość</th><th className="p-3 text-center">Akcje</th></tr></thead><tbody>{inventoryItems.map(item => <tr key={item._id} className={`border-b border-gray-200 dark:border-gray-700 last:border-0 ${item.isCustom ? 'text-red-500' : ''}`}><td className="p-2 font-medium">{item.name}</td><td className="p-2">{item.product_code}</td><td className="p-2 text-center"><input type="number" value={item.quantity} onChange={(e) => updateQuantity(item._id, e.target.value)} className="w-20 text-center bg-transparent border rounded-md p-1"/></td><td className="p-2 text-center"><button onClick={() => removeItem(item._id)} className="text-red-500 hover:text-red-700"><Trash2 className="w-5 h-5" /></button></td></tr>)}</tbody></table> : <p className="text-center text-gray-500">Brak pozycji na liście.</p>}<div ref={listEndRef} /></div></div><div className="fixed bottom-0 left-0 lg:left-64 right-0 p-4 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 shadow-top z-20"><div className="max-w-4xl mx-auto relative"><input type="text" value={inputValue} onChange={(e) => setInputValue(e.target.value)} onKeyDown={handleKeyDown} placeholder="Dodaj produkt (zatwierdź Enterem)" className="w-full p-4 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"/>{suggestions.length > 0 && <ul className="absolute bottom-full mb-2 w-full bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg shadow-xl max-h-60 overflow-y-auto z-30">{suggestions.map(p => <li key={p._id} onClick={() => addProductToInventory(p)} className="p-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 border-b dark:border-gray-600 last:border-b-0"><p className="font-semibold text-gray-800 dark:text-gray-100">{p.name}</p><p className="text-sm text-gray-500 dark:text-gray-400">{p.product_code}</p></li>)}</ul>}</div></div></div>);};
 
 const AdminView = ({ user }) => {
@@ -767,6 +888,7 @@ function App() {
 
     const navItems = [
         { id: 'home', label: 'Strona Główna', icon: Home, roles: ['user', 'administrator'] },
+        { id: 'search', label: 'Wyszukiwarka', icon: Search, roles: ['user', 'administrator'] },
         { id: 'order', label: 'Nowe Zamówienie', icon: PlusCircle, roles: ['user', 'administrator'], action: () => { setCurrentOrder({ customerName: '', items: [] }); setActiveView('order'); } },
         { id: 'orders', label: 'Zamówienia', icon: Archive, roles: ['user', 'administrator'] },
         { id: 'picking', label: 'Kompletacja', icon: List, roles: ['user', 'administrator'] },
@@ -779,7 +901,8 @@ function App() {
     const renderView = () => {
         switch (activeView) {
             case 'home': return <HomeView user={user} />;
-            case 'order': return <OrderView currentOrder={currentOrder} setCurrentOrder={setCurrentOrder} setActiveView={setActiveView} />;
+            case 'search': return <SearchView />;
+            case 'order': return <OrderView currentOrder={currentOrder} setCurrentOrder={setCurrentOrder} user={user} />;
             case 'orders': return <OrdersListView onEdit={loadOrderForEditing} />;
             case 'picking': return <PickingView user={user} />;
             case 'inventory': return <InventoryView />;
