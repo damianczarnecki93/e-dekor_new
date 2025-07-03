@@ -7,6 +7,7 @@ const jwt =require('jsonwebtoken');
 const multer = require('multer');
 const { Readable } = require('stream');
 const csv = require('csv-parser');
+const iconv = require('iconv-lite');
 
 const app = express();
 app.use(cors());
@@ -202,9 +203,8 @@ app.post('/api/admin/upload-products', authMiddleware, adminMiddleware, upload.s
         const productsToImport = [];
         const csvHeaders = ['barcode', 'name', 'price', 'product_code', 'quantity', 'availability'];
         
-        // POPRAWKA: Jawne dekodowanie bufora jako UTF-8
-        const fileContent = req.file.buffer.toString('utf-8');
-        const readableStream = Readable.from(fileContent);
+        const decodedBuffer = iconv.decode(req.file.buffer, 'win1250'); // Dekodowanie z kodowaniem dla Windows
+        const readableStream = Readable.from(decodedBuffer);
         
         await new Promise((resolve, reject) => {
             readableStream
