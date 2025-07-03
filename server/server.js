@@ -201,7 +201,10 @@ app.post('/api/admin/upload-products', authMiddleware, adminMiddleware, upload.s
     try {
         const productsToImport = [];
         const csvHeaders = ['barcode', 'name', 'price', 'product_code', 'quantity', 'availability'];
-        const readableStream = Readable.from(req.file.buffer);
+        
+        // POPRAWKA: Jawne dekodowanie bufora jako UTF-8
+        const fileContent = req.file.buffer.toString('utf-8');
+        const readableStream = Readable.from(fileContent);
         
         await new Promise((resolve, reject) => {
             readableStream
@@ -305,7 +308,6 @@ app.post('/api/orders/:id/complete', authMiddleware, async (req, res) => {
     }
 });
 
-// NOWY ENDPOINT: Usuwanie zamówienia
 app.delete('/api/orders/:id', authMiddleware, async (req, res) => {
     try {
         const order = await Order.findByIdAndDelete(req.params.id);
