@@ -79,6 +79,11 @@ const api = {
         if (!response.ok) throw new Error('Nie znaleziono zamówienia');
         return await response.json();
     },
+    deleteOrder: async (id) => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/api/orders/${id}`, { method: 'DELETE' });
+        if (!response.ok) throw new Error('Błąd usuwania zamówienia');
+        return await response.json();
+    },
     completeOrder: async (orderId, pickedItems) => {
         const response = await fetchWithAuth(`${API_BASE_URL}/api/orders/${orderId}/complete`, { method: 'POST', body: JSON.stringify({ pickedItems }) });
         if (!response.ok) { const errorData = await response.json(); throw new Error(errorData.message || 'Błąd podczas kompletacji zamówienia'); }
@@ -352,66 +357,91 @@ const OrdersListView = ({ onEdit }) => {
     const [isLoading, setIsLoading] = useState(true);
     const [view, setView] = useState('Zapisane');
     const { showNotification } = useNotification();
+    const [deleteModal, setDeleteModal] = useState({ isOpen: false, orderId: null });
 
-    useEffect(() => {
-        const fetchOrders = async () => {
-            setIsLoading(true);
-            try {
-                const fetchedOrders = await api.getOrders(view);
-                setOrders(fetchedOrders);
-            } catch (error) {
-                showNotification(error.message, 'error');
-            } finally {
-                setIsLoading(false);
-            }
-        };
-        fetchOrders();
+    const fetchOrders = useCallback(async () => {
+        setIsLoading(true);
+        try {
+            const fetchedOrders = await api.getOrders(view);
+            setOrders(fetchedOrders);
+        } catch (error) {
+            showNotification(error.message, 'error');
+        } finally {
+            setIsLoading(false);
+        }
     }, [view, showNotification]);
 
+    useEffect(() => {
+        fetchOrders();
+    }, [fetchOrders]);
+    
+    const handleDelete = async () => {
+        try {
+            await api.deleteOrder(deleteModal.orderId);
+            showNotification('Zamówienie usunięte!', 'success');
+            setDeleteModal({ isOpen: false, orderId: null });
+            fetchOrders();
+        } catch (error) {
+            showNotification(error.message, 'error');
+        }
+    };
+
     return (
-        <div className="p-4 md:p-8">
-            <div className="flex items-center justify-between mb-6">
-                <h1 className="text-3xl font-bold text-gray-800 dark:text-white">Zamówienia</h1>
-                <div className="flex items-center bg-gray-200 dark:bg-gray-700 rounded-lg p-1">
-                    <button onClick={() => setView('Zapisane')} className={`px-4 py-2 text-sm font-semibold rounded-md ${view === 'Zapisane' ? 'bg-white dark:bg-gray-900 text-indigo-600' : 'text-gray-500'}`}>Zapisane</button>
-                    <button onClick={() => setView('Skompletowane')} className={`px-4 py-2 text-sm font-semibold rounded-md ${view === 'Skompletowane' ? 'bg-white dark:bg-gray-900 text-indigo-600' : 'text-gray-500'}`}>Skompletowane</button>
+        <>
+            <div className="p-4 md:p-8">
+                <div className="flex items-center justify-between mb-6">
+                    <h1 className="text-3xl font-bold text-gray-800 dark:text-white">Zamówienia</h1>
+                    <div className="flex items-center bg-gray-200 dark:bg-gray-700 rounded-lg p-1">
+                        <button onClick={() => setView('Zapisane')} className={`px-4 py-2 text-sm font-semibold rounded-md ${view === 'Zapisane' ? 'bg-white dark:bg-gray-900 text-indigo-600' : 'text-gray-500'}`}>Zapisane</button>
+                        <button onClick={() => setView('Skompletowane')} className={`px-4 py-2 text-sm font-semibold rounded-md ${view === 'Skompletowane' ? 'bg-white dark:bg-gray-900 text-indigo-600' : 'text-gray-500'}`}>Skompletowane</button>
+                    </div>
+                </div>
+                <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-x-auto">
+                    <table className="w-full text-left min-w-[600px]">
+                        <thead className="bg-gray-50 dark:bg-gray-700">
+                            <tr>
+                                <th className="p-4 font-semibold">Klient</th>
+                                <th className="p-4 font-semibold">Autor</th>
+                                <th className="p-4 font-semibold">Data</th>
+                                <th className="p-4 font-semibold text-right">Wartość</th>
+                                <th className="p-4 font-semibold text-center">Akcje</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                            {isLoading ? (
+                                <tr><td colSpan="5" className="p-8 text-center text-gray-500">Ładowanie...</td></tr>
+                            ) : orders.length > 0 ? (
+                                orders.map(order => (
+                                    <tr key={order._id}>
+                                        <td className="p-4 font-medium">{order.customerName}</td>
+                                        <td className="p-4">{order.author}</td>
+                                        <td className="p-4">{new Date(order.date).toLocaleDateString()}</td>
+                                        <td className="p-4 text-right font-semibold">{(order.total || 0).toFixed(2)} PLN</td>
+                                        <td className="p-4 text-center whitespace-nowrap">
+                                            <button onClick={() => onEdit(order._id)} className="inline-flex items-center justify-center mx-auto px-3 py-1 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600 mr-2">
+                                                <Edit className="w-4 h-4 mr-1" /> {view === 'Skompletowane' ? 'Pokaż' : 'Edytuj'}
+                                            </button>
+                                            <button onClick={() => setDeleteModal({ isOpen: true, orderId: order._id })} className="inline-flex items-center justify-center mx-auto px-3 py-1 bg-red-500 text-white text-sm rounded-lg hover:bg-red-600">
+                                                <Trash2 className="w-4 h-4 mr-1" /> Usuń
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))
+                            ) : (
+                                <tr><td colSpan="5" className="p-8 text-center text-gray-500">Brak zamówień do wyświetlenia.</td></tr>
+                            )}
+                        </tbody>
+                    </table>
                 </div>
             </div>
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-x-auto">
-                <table className="w-full text-left min-w-[600px]">
-                    <thead className="bg-gray-50 dark:bg-gray-700">
-                        <tr>
-                            <th className="p-4 font-semibold">Klient</th>
-                            <th className="p-4 font-semibold">Autor</th>
-                            <th className="p-4 font-semibold">Data</th>
-                            <th className="p-4 font-semibold text-right">Wartość</th>
-                            <th className="p-4 font-semibold text-center">Akcje</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                        {isLoading ? (
-                            <tr><td colSpan="5" className="p-8 text-center text-gray-500">Ładowanie...</td></tr>
-                        ) : orders.length > 0 ? (
-                            orders.map(order => (
-                                <tr key={order._id}>
-                                    <td className="p-4 font-medium">{order.customerName}</td>
-                                    <td className="p-4">{order.author}</td>
-                                    <td className="p-4">{new Date(order.date).toLocaleDateString()}</td>
-                                    <td className="p-4 text-right font-semibold">{(order.total || 0).toFixed(2)} PLN</td>
-                                    <td className="p-4 text-center">
-                                        <button onClick={() => onEdit(order._id)} className="flex items-center justify-center mx-auto px-3 py-1 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600">
-                                            <Edit className="w-4 h-4 mr-1" /> {view === 'Skompletowane' ? 'Pokaż' : 'Edytuj'}
-                                        </button>
-                                    </td>
-                                </tr>
-                            ))
-                        ) : (
-                            <tr><td colSpan="5" className="p-8 text-center text-gray-500">Brak zamówień do wyświetlenia.</td></tr>
-                        )}
-                    </tbody>
-                </table>
-            </div>
-        </div>
+            <Modal isOpen={deleteModal.isOpen} onClose={() => setDeleteModal({ isOpen: false, orderId: null })} title="Potwierdź usunięcie">
+                <p>Czy na pewno chcesz usunąć to zamówienie? Tej operacji nie można cofnąć.</p>
+                <div className="flex justify-end gap-4 mt-6">
+                    <button onClick={() => setDeleteModal({ isOpen: false, orderId: null })} className="px-4 py-2 bg-gray-200 dark:bg-gray-600 rounded-lg">Anuluj</button>
+                    <button onClick={handleDelete} className="px-4 py-2 bg-red-600 text-white rounded-lg">Usuń</button>
+                </div>
+            </Modal>
+        </>
     );
 };
 
@@ -660,6 +690,49 @@ const RegisterView = ({ showLogin }) => {
                 <div><button type="submit" disabled={isLoading} className="w-full px-4 py-3 font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-indigo-400">{isLoading ? 'Rejestracja...' : 'Zarejestruj się'}</button></div>
             </form>
             <div className="text-center"><button onClick={showLogin} className="text-sm text-indigo-600 dark:text-indigo-400 hover:underline">Masz już konto? Zaloguj się</button></div>
+        </div>
+    );
+};
+
+const HomeView = ({ user, setActiveView }) => {
+    const [time, setTime] = useState(new Date());
+    const [ordersToPickCount, setOrdersToPickCount] = useState(0);
+
+    useEffect(() => {
+        const timer = setInterval(() => setTime(new Date()), 1000);
+        return () => clearInterval(timer);
+    }, []);
+
+    useEffect(() => {
+        const fetchOrdersCount = async () => {
+            try {
+                const orders = await api.getOrders('Zapisane');
+                setOrdersToPickCount(orders.length);
+            } catch (error) {
+                console.error("Błąd pobierania liczby zamówień:", error);
+            }
+        };
+        fetchOrdersCount();
+    }, []);
+
+    return (
+        <div className="p-4 md:p-8">
+            <h1 className="text-3xl md:text-4xl font-bold text-gray-800 dark:text-white">Witaj, {user.username}!</h1>
+            <p className="mt-2 text-lg text-gray-500 dark:text-gray-400">
+                {time.toLocaleDateString('pl-PL', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })} | {time.toLocaleTimeString('pl-PL')}
+            </p>
+
+            <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
+                <button onClick={() => setActiveView('picking')} className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md flex items-center text-left hover:ring-2 hover:ring-indigo-500 transition-all">
+                    <div className="p-4 bg-indigo-100 dark:bg-indigo-900 rounded-full">
+                        <List className="h-8 w-8 text-indigo-600 dark:text-indigo-300" />
+                    </div>
+                    <div className="ml-4">
+                        <p className="text-4xl font-bold text-gray-800 dark:text-white">{ordersToPickCount}</p>
+                        <p className="text-gray-500 dark:text-gray-400">Zamówień do skompletowania</p>
+                    </div>
+                </button>
+            </div>
         </div>
     );
 };
