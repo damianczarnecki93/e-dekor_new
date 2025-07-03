@@ -138,6 +138,17 @@ const api = {
         const data = await response.json();
         if (!response.ok) throw new Error(data.message || 'Błąd wgrywania pliku');
         return data;
+    },
+    // NOWE FUNKCJE API DLA INWENTARYZACJI
+    saveInventory: async (inventory) => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/api/inventory`, { method: 'POST', body: JSON.stringify(inventory) });
+        if (!response.ok) throw new Error('Błąd zapisywania inwentaryzacji');
+        return await response.json();
+    },
+    getInventories: async () => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/api/inventory`);
+        if (!response.ok) throw new Error('Błąd pobierania list inwentaryzacyjnych');
+        return await response.json();
     }
 };
 
