@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, createContext, useContext, useCallback } from 'react';
-import { Search, Package, List, Wrench, User, Sun, Moon, LogOut, FileDown, Printer, Save, CheckCircle, AlertTriangle, Upload, Trash2, XCircle, UserPlus, KeyRound, PlusCircle, MessageSquare, ChevronDown, Archive, History, Edit } from 'lucide-react';
+import { Search, Package, List, Wrench, User, Sun, Moon, LogOut, FileDown, Printer, Save, CheckCircle, AlertTriangle, Upload, Trash2, XCircle, UserPlus, KeyRound, PlusCircle, MessageSquare, ChevronDown, Archive, History, Edit, Home, Menu } from 'lucide-react';
 
 // --- Kontekst Powiadomień ---
 const NotificationContext = createContext();
@@ -374,7 +374,7 @@ const OrdersListView = ({ status, title, onEdit }) => {
         <div className="p-4 md:p-8">
             <h1 className="text-3xl font-bold mb-6 text-gray-800 dark:text-white">{title}</h1>
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-x-auto">
-                <table className="w-full text-left">
+                <table className="w-full text-left min-w-[600px]">
                     <thead className="bg-gray-50 dark:bg-gray-700">
                         <tr>
                             <th className="p-4 font-semibold">ID Zamówienia</th>
@@ -390,10 +390,10 @@ const OrdersListView = ({ status, title, onEdit }) => {
                                 <td className="p-4 font-medium">{order.id}</td>
                                 <td className="p-4">{order.customerName}</td>
                                 <td className="p-4">{new Date(order.date).toLocaleDateString()}</td>
-                                <td className="p-4 text-right font-semibold">{order.total.toFixed(2)} PLN</td>
+                                <td className="p-4 text-right font-semibold">{(order.total || 0).toFixed(2)} PLN</td>
                                 <td className="p-4 text-center">
                                     <button onClick={() => onEdit(order._id)} className="flex items-center justify-center mx-auto px-3 py-1 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600">
-                                        <Edit className="w-4 h-4 mr-1" /> Edytuj
+                                        <Edit className="w-4 h-4 mr-1" /> {status === 'Skompletowane' ? 'Pokaż' : 'Edytuj'}
                                     </button>
                                 </td>
                             </tr>
@@ -655,10 +655,53 @@ const RegisterView = ({ showLogin }) => {
     );
 };
 
+const HomeView = ({ user }) => {
+    const [time, setTime] = useState(new Date());
+    const [ordersToPickCount, setOrdersToPickCount] = useState(0);
+
+    useEffect(() => {
+        const timer = setInterval(() => setTime(new Date()), 1000);
+        return () => clearInterval(timer);
+    }, []);
+
+    useEffect(() => {
+        const fetchOrdersCount = async () => {
+            try {
+                const orders = await api.getOrders('Zapisane');
+                setOrdersToPickCount(orders.length);
+            } catch (error) {
+                console.error("Błąd pobierania liczby zamówień:", error);
+            }
+        };
+        fetchOrdersCount();
+    }, []);
+
+    return (
+        <div className="p-4 md:p-8">
+            <h1 className="text-3xl md:text-4xl font-bold text-gray-800 dark:text-white">Witaj, {user.username}!</h1>
+            <p className="mt-2 text-lg text-gray-500 dark:text-gray-400">
+                {time.toLocaleDateString('pl-PL', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })} | {time.toLocaleTimeString('pl-PL')}
+            </p>
+
+            <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md flex items-center">
+                    <div className="p-4 bg-indigo-100 dark:bg-indigo-900 rounded-full">
+                        <List className="h-8 w-8 text-indigo-600 dark:text-indigo-300" />
+                    </div>
+                    <div className="ml-4">
+                        <p className="text-4xl font-bold text-gray-800 dark:text-white">{ordersToPickCount}</p>
+                        <p className="text-gray-500 dark:text-gray-400">Zamówień do skompletowania</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 // --- Główny Komponent Aplikacji ---
 function App() {
     const [user, setUser] = useState(null);
-    const [activeView, setActiveView] = useState('order');
+    const [activeView, setActiveView] = useState('home');
     const [currentOrder, setCurrentOrder] = useState({ customerName: '', items: [] });
     const [isDarkMode, setIsDarkMode] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
@@ -675,14 +718,14 @@ function App() {
         localStorage.setItem('userData', JSON.stringify(data.user));
         setUser(data.user);
         setIsLoading(false);
-        setActiveView(data.user.role === 'administrator' ? 'admin' : 'order');
+        setActiveView('home');
     }, []);
 
     const handleLogout = () => {
         localStorage.removeItem('userToken');
         localStorage.removeItem('userData');
         setUser(null);
-        setActiveView('order');
+        setActiveView('home');
     };
     
     useEffect(() => {
@@ -715,10 +758,9 @@ function App() {
     }
 
     const navItems = [
-        { id: 'search', label: 'Wyszukiwarka', icon: Search, roles: ['user', 'administrator'] },
+        { id: 'home', label: 'Strona Główna', icon: Home, roles: ['user', 'administrator'] },
         { id: 'order', label: 'Nowe Zamówienie', icon: PlusCircle, roles: ['user', 'administrator'], action: () => { setCurrentOrder({ customerName: '', items: [] }); setActiveView('order'); } },
-        { id: 'savedOrders', label: 'Zapisane Zamówienia', icon: Archive, roles: ['user', 'administrator'], action: () => setActiveView('savedOrders') },
-        { id: 'completedOrders', label: 'Skompletowane', icon: History, roles: ['user', 'administrator'], action: () => setActiveView('completedOrders') },
+        { id: 'orders', label: 'Zamówienia', icon: Archive, roles: ['user', 'administrator'] },
         { id: 'picking', label: 'Kompletacja', icon: List, roles: ['user', 'administrator'] },
         { id: 'inventory', label: 'Inwentaryzacja', icon: Wrench, roles: ['user', 'administrator'] },
         { id: 'admin', label: 'Admin', icon: User, roles: ['administrator'] },
@@ -728,21 +770,20 @@ function App() {
 
     const renderView = () => {
         switch (activeView) {
-            case 'search': return <SearchView />;
+            case 'home': return <HomeView user={user} />;
             case 'order': return <OrderView currentOrder={currentOrder} setCurrentOrder={setCurrentOrder} setActiveView={setActiveView} />;
-            case 'savedOrders': return <OrdersListView status="Zapisane" title="Zapisane Zamówienia" onEdit={loadOrderForEditing} />;
-            case 'completedOrders': return <OrdersListView status="Skompletowane" title="Skompletowane Zamówienia" onEdit={loadOrderForEditing} />;
+            case 'orders': return <OrdersListView onEdit={loadOrderForEditing} />;
             case 'picking': return <PickingView user={user} />;
             case 'inventory': return <InventoryView />;
             case 'admin': return <AdminView user={user} />;
-            default: return <OrderView currentOrder={currentOrder} setCurrentOrder={setCurrentOrder} setActiveView={setActiveView} />;
+            default: return <HomeView user={user} />;
         }
     };
 
     return (
         <>
             <div className="flex h-screen bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-sans">
-                <nav className={`w-64 bg-white dark:bg-gray-800 shadow-lg flex flex-col flex-shrink-0 transition-transform duration-300 ease-in-out z-40 lg:translate-x-0 ${isNavOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+                <nav className={`w-64 bg-white dark:bg-gray-800 shadow-lg flex flex-col flex-shrink-0 transition-transform duration-300 ease-in-out z-40 fixed lg:static h-full ${isNavOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}>
                     <div className="flex items-center justify-center h-20 border-b border-gray-200 dark:border-gray-700">
                          <img src={isDarkMode ? "/logo-dark.png" : "/logo.png"} onError={(e) => { e.currentTarget.src = 'https://placehold.co/120x40/4f46e5/ffffff?text=Logo'; }} alt="Logo" className="h-10" />
                     </div>
@@ -770,7 +811,7 @@ function App() {
                 <main className="flex-1 flex flex-col overflow-hidden">
                     <div className="lg:hidden p-2 bg-white dark:bg-gray-800 border-b dark:border-gray-700">
                         <button onClick={() => setIsNavOpen(!isNavOpen)} className="p-2 rounded-md">
-                            <Search className="h-6 w-6" />
+                            <Menu className="h-6 w-6" />
                         </button>
                     </div>
                     <div className="flex-1 overflow-x-hidden overflow-y-auto">{renderView()}</div>
