@@ -45,15 +45,17 @@ const orderSchema = new mongoose.Schema({
 const Order = mongoose.models.Order || mongoose.model('Order', orderSchema);
 
 
-// --- Endpoint do importu danych (ULEPSZONY) ---
+// --- Endpoint do importu danych (WERSJA OSTATECZNA) ---
 app.get('/api/import-data-now', async (req, res) => {
     try {
-        console.log('Rozpoczęto proces importu danych (wersja 3)...');
+        console.log('Rozpoczęto proces importu danych (wersja 4 - z ręcznymi nagłówkami)...');
         await Product.deleteMany({});
         console.log('Kolekcja produktów wyczyszczona.');
 
         const productsToImport = [];
         const files = ['produkty.csv', 'produkty2.csv'];
+        // POPRAWKA: Ręczne zdefiniowanie nagłówków
+        const csvHeaders = ['id', 'name', 'product_code', 'barcode', 'price', 'quantity', 'availability'];
 
         for (const file of files) {
             const filePath = path.join(__dirname, file);
@@ -61,11 +63,11 @@ app.get('/api/import-data-now', async (req, res) => {
                 console.log(`Wczytywanie pliku: ${file}...`);
                 await new Promise((resolve, reject) => {
                     fs.createReadStream(filePath)
-                        // POPRAWKA: Dodanie opcji `bom: true` do obsługi specjalnych znaków na początku pliku
-                        .pipe(csv({ bom: true }))
+                        .pipe(csv({ 
+                            headers: csvHeaders, // Używamy ręcznie zdefiniowanych nagłówków
+                            skipLines: 1 // Pomijamy pierwszy wiersz (oryginalne nagłówki) w pliku
+                        }))
                         .on('data', (row) => {
-                            // Dodatkowe logowanie, aby zobaczyć, co odczytuje parser
-                            console.log('Odczytany wiersz z CSV:', row); 
                             const product = {
                                 id: row.id || row.barcode || `fallback-${Math.random()}`,
                                 name: row.name,
