@@ -45,17 +45,18 @@ const orderSchema = new mongoose.Schema({
 const Order = mongoose.models.Order || mongoose.model('Order', orderSchema);
 
 
-// --- Endpoint do importu danych (WERSJA OSTATECZNA) ---
+// --- Endpoint do importu danych (WERSJA OSTATECZNA Z POPRAWNYM MAPOWANIEM) ---
 app.get('/api/import-data-now', async (req, res) => {
     try {
-        console.log('Rozpoczęto proces importu danych (wersja 4 - z ręcznymi nagłówkami)...');
+        console.log('Rozpoczęto proces importu danych (wersja 5 - poprawne mapowanie)...');
         await Product.deleteMany({});
         console.log('Kolekcja produktów wyczyszczona.');
 
         const productsToImport = [];
         const files = ['produkty.csv', 'produkty2.csv'];
-        // POPRAWKA: Ręczne zdefiniowanie nagłówków
-        const csvHeaders = ['id', 'name', 'product_code', 'barcode', 'price', 'quantity', 'availability'];
+        
+        // POPRAWKA: Prawidłowa kolejność nagłówków zgodnie z przykładem
+        const csvHeaders = ['barcode', 'name', 'price', 'product_code', 'quantity', 'availability'];
 
         for (const file of files) {
             const filePath = path.join(__dirname, file);
@@ -64,16 +65,19 @@ app.get('/api/import-data-now', async (req, res) => {
                 await new Promise((resolve, reject) => {
                     fs.createReadStream(filePath)
                         .pipe(csv({ 
-                            headers: csvHeaders, // Używamy ręcznie zdefiniowanych nagłówków
-                            skipLines: 1 // Pomijamy pierwszy wiersz (oryginalne nagłówki) w pliku
+                            headers: csvHeaders,
+                            skipLines: 1 
                         }))
                         .on('data', (row) => {
+                            // POPRAWKA: Zamiana przecinka na kropkę w cenie
+                            const priceString = (row.price || '0').replace(',', '.');
+                            
                             const product = {
-                                id: row.id || row.barcode || `fallback-${Math.random()}`,
+                                id: row.barcode, // Używamy kodu kreskowego jako unikalnego ID
                                 name: row.name,
                                 product_code: row.product_code,
                                 barcode: row.barcode,
-                                price: parseFloat(row.price) || 0,
+                                price: parseFloat(priceString) || 0,
                                 quantity: parseInt(row.quantity) || 0,
                                 availability: String(row.availability).toLowerCase() === 'true'
                             };
