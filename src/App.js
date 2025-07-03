@@ -38,7 +38,7 @@ const API_BASE_URL = 'https://dekor.onrender.com';
 const api = {
     searchProducts: async (searchTerm) => {
         try {
-            const response = await fetch(`${API_BASE_URL}/api/products?search=${encodeURIComponent(searchTerm)}`);
+            const response = await fetch(`${API_BASE_URL}/api/products?search=${encodeURIComponent(searchTerm)}`, { headers: { 'Authorization': `Bearer ${localStorage.getItem('userToken')}` } });
             if (!response.ok) {
                  const errorData = await response.json();
                  throw new Error(errorData.message || 'Błąd wyszukiwania produktów');
@@ -205,6 +205,23 @@ const api = {
             console.error("API Error userChangeOwnPassword:", error);
             throw error;
         }
+    },
+    uploadProductsFile: async (file, token) => {
+        const formData = new FormData();
+        formData.append('productsFile', file);
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/admin/upload-products`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` },
+                body: formData,
+            });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.message || 'Błąd wgrywania pliku');
+            return data;
+        } catch (error) {
+            console.error("API Error uploadProductsFile:", error);
+            throw error;
+        }
     }
 };
 
@@ -223,6 +240,7 @@ const AdminView = ({ user }) => {
     const { showNotification } = useNotification();
     const [modalState, setModalState] = useState({ isOpen: false, user: null, type: '' });
     const [newPassword, setNewPassword] = useState('');
+    const [isUploading, setIsUploading] = useState(false);
 
     const fetchUsers = useCallback(async () => {
         try {
@@ -283,70 +301,81 @@ const AdminView = ({ user }) => {
         }
     };
 
+    const handleFileUpload = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        
+        setIsUploading(true);
+        try {
+            const result = await api.uploadProductsFile(file, user.token);
+            showNotification(result.message, 'success');
+        } catch (error) {
+            showNotification(error.message, 'error');
+        } finally {
+            setIsUploading(false);
+            e.target.value = null; // Reset inputu pliku
+        }
+    };
+
     return (
         <>
             <div className="p-4 md:p-8">
                 <h1 className="text-3xl font-bold mb-6 text-gray-800 dark:text-white">Panel Administratora</h1>
-                <div className="mb-8">
-                    <h2 className="text-2xl font-semibold mb-4 text-gray-800 dark:text-white">Zarządzanie Użytkownikami</h2>
-                    <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-x-auto">
-                        <table className="w-full text-left">
-                            <thead className="bg-gray-50 dark:bg-gray-700">
-                                <tr>
-                                    <th className="p-4 font-semibold">Użytkownik</th>
-                                    <th className="p-4 font-semibold">Status</th>
-                                    <th className="p-4 font-semibold">Rola</th>
-                                    <th className="p-4 font-semibold text-right">Akcje</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                                {users.map(u => (
-                                    <tr key={u._id}>
-                                        <td className="p-4 font-medium">{u.username}</td>
-                                        <td className="p-4">
-                                            <span className={`px-2 py-1 text-xs font-semibold rounded-full capitalize ${u.status === 'oczekujący' ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}`}>
-                                                {u.status}
-                                            </span>
-                                        </td>
-                                        <td className="p-4">
-                                            <select 
-                                                value={u.role} 
-                                                onChange={(e) => handleRoleChange(u._id, e.target.value)}
-                                                className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-600 dark:border-gray-500 dark:placeholder-gray-400 dark:text-white"
-                                                disabled={user.id === u._id} // Admin nie może zmienić własnej roli
-                                            >
-                                                <option value="user">User</option>
-                                                <option value="administrator">Administrator</option>
-                                            </select>
-                                        </td>
-                                        <td className="p-4 text-right">
-                                            {u.status === 'oczekujący' && (
-                                                <button onClick={() => handleApproveUser(u._id)} className="px-3 py-1 bg-green-500 text-white text-sm font-semibold rounded-lg hover:bg-green-600 mr-2">
-                                                    Akceptuj
-                                                </button>
-                                            )}
-                                            <Tooltip text="Zmień hasło">
-                                                <button onClick={() => setModalState({ isOpen: true, user: u, type: 'password' })} className="p-2 text-gray-500 hover:text-blue-500">
-                                                    <KeyRound className="w-5 h-5" />
-                                                </button>
-                                            </Tooltip>
-                                            {user.id !== u._id && ( // Admin nie może usunąć samego siebie
-                                                <Tooltip text="Usuń użytkownika">
-                                                    <button onClick={() => setModalState({ isOpen: true, user: u, type: 'delete' })} className="p-2 text-gray-500 hover:text-red-500">
-                                                        <Trash2 className="w-5 h-5" />
-                                                    </button>
-                                                </Tooltip>
-                                            )}
-                                        </td>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    <div>
+                        <h2 className="text-2xl font-semibold mb-4 text-gray-800 dark:text-white">Zarządzanie Użytkownikami</h2>
+                        <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-x-auto">
+                            <table className="w-full text-left">
+                                <thead className="bg-gray-50 dark:bg-gray-700">
+                                    <tr>
+                                        <th className="p-4 font-semibold">Użytkownik</th>
+                                        <th className="p-4 font-semibold">Status</th>
+                                        <th className="p-4 font-semibold">Rola</th>
+                                        <th className="p-4 font-semibold text-right">Akcje</th>
                                     </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                                </thead>
+                                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                                    {users.map(u => (
+                                        <tr key={u._id}>
+                                            <td className="p-4 font-medium">{u.username}</td>
+                                            <td className="p-4">
+                                                <span className={`px-2 py-1 text-xs font-semibold rounded-full capitalize ${u.status === 'oczekujący' ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}`}>
+                                                    {u.status}
+                                                </span>
+                                            </td>
+                                            <td className="p-4">
+                                                <select value={u.role} onChange={(e) => handleRoleChange(u._id, e.target.value)} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-600 dark:border-gray-500 dark:placeholder-gray-400 dark:text-white" disabled={user.id === u._id}>
+                                                    <option value="user">User</option>
+                                                    <option value="administrator">Administrator</option>
+                                                </select>
+                                            </td>
+                                            <td className="p-4 text-right whitespace-nowrap">
+                                                {u.status === 'oczekujący' && (<button onClick={() => handleApproveUser(u._id)} className="px-3 py-1 bg-green-500 text-white text-sm font-semibold rounded-lg hover:bg-green-600 mr-2">Akceptuj</button>)}
+                                                <Tooltip text="Zmień hasło"><button onClick={() => setModalState({ isOpen: true, user: u, type: 'password' })} className="p-2 text-gray-500 hover:text-blue-500"><KeyRound className="w-5 h-5" /></button></Tooltip>
+                                                {user.id !== u._id && (<Tooltip text="Usuń użytkownika"><button onClick={() => setModalState({ isOpen: true, user: u, type: 'delete' })} className="p-2 text-gray-500 hover:text-red-500"><Trash2 className="w-5 h-5" /></button></Tooltip>)}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div>
+                        <h2 className="text-2xl font-semibold mb-4 text-gray-800 dark:text-white">Zarządzanie Bazą Danych</h2>
+                        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+                            <div className="border border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-6 text-center">
+                                <h3 className="text-lg font-medium mb-2">Importuj produkty z pliku CSV</h3>
+                                <p className="text-sm text-gray-500 mb-4">Wgranie nowego pliku nadpisze wszystkie istniejące produkty w bazie.</p>
+                                <label className={`cursor-pointer px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 inline-flex items-center ${isUploading ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                                    <Upload className={`w-4 h-4 mr-2 ${isUploading ? 'animate-spin' : ''}`}/> {isUploading ? 'Przetwarzanie...' : 'Wybierz plik'}
+                                    <input type="file" className="hidden" accept=".csv" onChange={handleFileUpload} disabled={isUploading} />
+                                </label>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
             
-            {/* Modals */}
             <Modal isOpen={modalState.isOpen && modalState.type === 'delete'} onClose={() => setModalState({isOpen: false, user: null, type: ''})} title="Potwierdź usunięcie">
                 <p>Czy na pewno chcesz usunąć użytkownika <strong>{modalState.user?.username}</strong>? Tej operacji nie można cofnąć.</p>
                 <div className="flex justify-end gap-4 mt-6">
@@ -358,12 +387,7 @@ const AdminView = ({ user }) => {
             <Modal isOpen={modalState.isOpen && modalState.type === 'password'} onClose={() => setModalState({isOpen: false, user: null, type: ''})} title={`Zmień hasło dla ${modalState.user?.username}`}>
                 <div>
                     <label className="block mb-2 text-sm font-medium">Nowe hasło</label>
-                    <input 
-                        type="password"
-                        value={newPassword}
-                        onChange={(e) => setNewPassword(e.target.value)}
-                        className="w-full p-3 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg"
-                    />
+                    <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="w-full p-3 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg"/>
                 </div>
                 <div className="flex justify-end gap-4 mt-6">
                     <button onClick={() => setModalState({isOpen: false, user: null, type: ''})} className="px-4 py-2 bg-gray-200 dark:bg-gray-600 rounded-lg">Anuluj</button>
@@ -435,7 +459,7 @@ const RegisterView = ({ showLogin }) => {
         try {
             const data = await api.register(username, password);
             showNotification(data.message, 'success');
-            showLogin(); // Wróć do logowania po udanej rejestracji
+            showLogin();
         } catch (err) {
             setError(err.message);
         } finally {
