@@ -203,7 +203,7 @@ app.post('/api/admin/upload-products', authMiddleware, adminMiddleware, upload.s
         const productsToImport = [];
         const csvHeaders = ['barcode', 'name', 'price', 'product_code', 'quantity', 'availability'];
         
-        const decodedBuffer = iconv.decode(req.file.buffer, 'win1250'); // Dekodowanie z kodowaniem dla Windows
+        const decodedBuffer = iconv.decode(req.file.buffer, 'win1250');
         const readableStream = Readable.from(decodedBuffer);
         
         await new Promise((resolve, reject) => {
