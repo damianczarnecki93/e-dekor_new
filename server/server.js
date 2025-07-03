@@ -49,6 +49,7 @@ const Product = mongoose.models.Product || mongoose.model('Product', productSche
 const orderSchema = new mongoose.Schema({
     id: { type: String, required: true },
     customerName: String,
+    author: String,
     items: Array,
     total: Number,
     status: String,
@@ -112,7 +113,7 @@ app.post('/api/login', async (req, res) => {
         if (user.status !== 'zaakceptowany') return res.status(403).json({ message: 'Konto nie zostało jeszcze aktywowane.' });
         const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) return res.status(401).json({ message: 'Nieprawidłowe dane logowania.' });
-        const token = jwt.sign({ userId: user._id, role: user.role }, jwtSecret, { expiresIn: '1d' });
+        const token = jwt.sign({ userId: user._id, role: user.role, username: user.username }, jwtSecret, { expiresIn: '1d' });
         res.json({ token, user: { id: user._id, username: user.username, role: user.role } });
     } catch (error) {
         res.status(500).json({ message: 'Błąd serwera podczas logowania.', error: error.message });
@@ -192,21 +193,14 @@ app.delete('/api/admin/users/:id', authMiddleware, adminMiddleware, async (req, 
     }
 });
 
-// NOWY ENDPOINT: Wgrywanie i przetwarzanie plików CSV
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
 app.post('/api/admin/upload-products', authMiddleware, adminMiddleware, upload.single('productsFile'), async (req, res) => {
-    if (!req.file) {
-        return res.status(400).json({ message: 'Nie przesłano pliku.' });
-    }
-
+    if (!req.file) return res.status(400).json({ message: 'Nie przesłano pliku.' });
     try {
-        console.log(`Rozpoczynam przetwarzanie pliku: ${req.file.originalname}`);
         const productsToImport = [];
         const csvHeaders = ['barcode', 'name', 'price', 'product_code', 'quantity', 'availability'];
-
-        // Przetwarzanie bufora pliku
         const readableStream = Readable.from(req.file.buffer);
         
         await new Promise((resolve, reject) => {
@@ -214,15 +208,7 @@ app.post('/api/admin/upload-products', authMiddleware, adminMiddleware, upload.s
                 .pipe(csv({ headers: csvHeaders, skipLines: 1 }))
                 .on('data', (row) => {
                     const priceString = (row.price || '0').replace(',', '.');
-                    const product = {
-                        id: row.barcode,
-                        name: row.name,
-                        product_code: row.product_code,
-                        barcode: row.barcode,
-                        price: parseFloat(priceString) || 0,
-                        quantity: parseInt(row.quantity) || 0,
-                        availability: String(row.availability).toLowerCase() === 'true'
-                    };
+                    const product = { id: row.barcode, name: row.name, product_code: row.product_code, barcode: row.barcode, price: parseFloat(priceString) || 0, quantity: parseInt(row.quantity) || 0, availability: String(row.availability).toLowerCase() === 'true' };
                     productsToImport.push(product);
                 })
                 .on('end', resolve)
@@ -230,23 +216,19 @@ app.post('/api/admin/upload-products', authMiddleware, adminMiddleware, upload.s
         });
         
         if (productsToImport.length > 0) {
-            console.log('Czyszczenie istniejącej kolekcji produktów...');
             await Product.deleteMany({});
-            console.log(`Importowanie ${productsToImport.length} nowych produktów...`);
             await Product.insertMany(productsToImport);
             res.status(200).json({ message: `Import zakończony. Dodano ${productsToImport.length} produktów.` });
         } else {
             res.status(400).json({ message: 'Plik CSV jest pusty lub ma nieprawidłowy format.' });
         }
-
     } catch (error) {
-        console.error('Błąd podczas importu produktów:', error);
         res.status(500).json({ message: 'Wystąpił błąd serwera podczas importu.' });
     }
 });
 
 
-// --- Pozostałe API Endpoints ---
+// --- API Endpoints - Zamówienia ---
 app.get('/api/products', authMiddleware, async (req, res) => {
     try {
         const { search } = req.query;
@@ -262,7 +244,13 @@ app.get('/api/products', authMiddleware, async (req, res) => {
 });
 
 app.post('/api/orders', authMiddleware, async (req, res) => {
-    const newOrder = new Order({ id: `ZAM-${Date.now()}`, ...req.body, status: 'Zapisane' });
+    const orderData = req.body;
+    const newOrder = new Order({ 
+        id: `ZAM-${Date.now()}`, 
+        ...orderData, 
+        author: req.user.username,
+        status: 'Zapisane' 
+    });
     try {
         const savedOrder = await newOrder.save();
         res.status(201).json({ message: 'Zamówienie zapisane!', order: savedOrder });
@@ -271,26 +259,62 @@ app.post('/api/orders', authMiddleware, async (req, res) => {
     }
 });
 
+app.put('/api/orders/:id', authMiddleware, async (req, res) => {
+    try {
+        const updatedOrder = await Order.findByIdAndUpdate(req.params.id, req.body, { new: true });
+        if (!updatedOrder) return res.status(404).json({ message: 'Nie znaleziono zamówienia.' });
+        res.json({ message: 'Zamówienie zaktualizowane!', order: updatedOrder });
+    } catch (error) {
+        res.status(400).json({ message: 'Błąd aktualizacji zamówienia', error: error.message });
+    }
+});
+
 app.get('/api/orders', authMiddleware, async (req, res) => {
     try {
-        const orders = await Order.find().sort({ date: -1 });
+        const { status } = req.query;
+        let query = {};
+        if (status) {
+            query.status = status;
+        }
+        const orders = await Order.find(query).sort({ date: -1 });
         res.status(200).json(orders);
     } catch (error) {
         res.status(500).json({ message: 'Błąd pobierania zamówień', error: error.message });
     }
 });
 
-app.post('/api/orders/:mongoId/complete', authMiddleware, async (req, res) => {
+app.get('/api/orders/:id', authMiddleware, async (req, res) => {
     try {
-        const order = await Order.findById(req.params.mongoId);
-        if (!order) {
-            return res.status(404).json({ message: 'Nie znaleziono zamówienia.' });
-        }
+        const order = await Order.findById(req.params.id);
+        if (!order) return res.status(404).json({ message: 'Nie znaleziono zamówienia.' });
+        res.json(order);
+    } catch (error) {
+        res.status(500).json({ message: 'Błąd pobierania zamówienia.' });
+    }
+});
+
+app.post('/api/orders/:id/complete', authMiddleware, async (req, res) => {
+    try {
+        const order = await Order.findById(req.params.id);
+        if (!order) return res.status(404).json({ message: 'Nie znaleziono zamówienia.' });
         order.status = 'Skompletowane';
         await order.save();
         res.status(200).json({ message: 'Zamówienie skompletowane pomyślnie!', order });
     } catch (error) {
         res.status(500).json({ message: 'Wystąpił błąd serwera.', error: error.message });
+    }
+});
+
+// NOWY ENDPOINT: Usuwanie zamówienia
+app.delete('/api/orders/:id', authMiddleware, async (req, res) => {
+    try {
+        const order = await Order.findByIdAndDelete(req.params.id);
+        if (!order) {
+            return res.status(404).json({ message: 'Nie znaleziono zamówienia.' });
+        }
+        res.status(200).json({ message: 'Zamówienie usunięte pomyślnie.' });
+    } catch (error) {
+        res.status(500).json({ message: 'Błąd podczas usuwania zamówienia.' });
     }
 });
 
