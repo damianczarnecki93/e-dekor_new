@@ -57,9 +57,33 @@ const orderSchema = new mongoose.Schema({
 const Order = mongoose.models.Order || mongoose.model('Order', orderSchema);
 
 
+// --- Middleware do weryfikacji tokenu JWT ---
+const authMiddleware = (req, res, next) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ message: 'Brak tokenu, autoryzacja odrzucona.' });
+    }
+    try {
+        const token = authHeader.split(' ')[1];
+        const decoded = jwt.verify(token, jwtSecret);
+        req.user = decoded; // Dodaje zdekodowane dane użytkownika (userId, role) do obiektu req
+        next();
+    } catch (error) {
+        res.status(401).json({ message: 'Token jest nieprawidłowy.' });
+    }
+};
+
+const adminMiddleware = (req, res, next) => {
+    if (req.user && req.user.role === 'administrator') {
+        next();
+    } else {
+        res.status(403).json({ message: 'Brak uprawnień administratora.' });
+    }
+};
+
+
 // --- API Endpoints - Uwierzytelnianie ---
 
-// Rejestracja
 app.post('/api/register', async (req, res) => {
     try {
         const { username, password } = req.body;
@@ -75,7 +99,6 @@ app.post('/api/register', async (req, res) => {
         const hashedPassword = await bcrypt.hash(password, 10);
         const newUser = new User({ username, password: hashedPassword });
         
-        // Pierwszy zarejestrowany użytkownik staje się adminem
         const userCount = await User.countDocuments();
         if (userCount === 0) {
             newUser.role = 'administrator';
@@ -89,7 +112,6 @@ app.post('/api/register', async (req, res) => {
     }
 });
 
-// Logowanie
 app.post('/api/login', async (req, res) => {
     try {
         const { username, password } = req.body;
@@ -124,37 +146,98 @@ app.post('/api/login', async (req, res) => {
     }
 });
 
+// Zmiana własnego hasła przez użytkownika
+app.post('/api/user/password', authMiddleware, async (req, res) => {
+    try {
+        const { currentPassword, newPassword } = req.body;
+        const user = await User.findById(req.user.userId);
+
+        if (!user) {
+            return res.status(404).json({ message: 'Nie znaleziono użytkownika.' });
+        }
+
+        const isMatch = await bcrypt.compare(currentPassword, user.password);
+        if (!isMatch) {
+            return res.status(400).json({ message: 'Aktualne hasło jest nieprawidłowe.' });
+        }
+
+        user.password = await bcrypt.hash(newPassword, 10);
+        await user.save();
+
+        res.json({ message: 'Hasło zostało zmienione.' });
+    } catch (error) {
+        res.status(500).json({ message: 'Błąd serwera podczas zmiany hasła.' });
+    }
+});
+
 
 // --- API Endpoints - Admin ---
 
-// Pobieranie listy użytkowników
-app.get('/api/admin/users', async (req, res) => {
-    // TODO: Dodać middleware do weryfikacji tokenu JWT i roli admina
+app.get('/api/admin/users', authMiddleware, adminMiddleware, async (req, res) => {
     try {
-        const users = await User.find({}, '-password'); // Pobierz wszystkich użytkowników bez haseł
+        const users = await User.find({}, '-password');
         res.json(users);
     } catch (error) {
         res.status(500).json({ message: 'Błąd pobierania użytkowników.' });
     }
 });
 
-// Akceptacja użytkownika
-app.post('/api/admin/users/:id/approve', async (req, res) => {
-    // TODO: Dodać middleware do weryfikacji tokenu JWT i roli admina
+app.post('/api/admin/users/:id/approve', authMiddleware, adminMiddleware, async (req, res) => {
     try {
         const user = await User.findByIdAndUpdate(req.params.id, { status: 'zaakceptowany' }, { new: true });
-        if (!user) {
-            return res.status(404).json({ message: 'Nie znaleziono użytkownika.' });
-        }
+        if (!user) return res.status(404).json({ message: 'Nie znaleziono użytkownika.' });
         res.json({ message: 'Użytkownik zaakceptowany.', user });
     } catch (error) {
         res.status(500).json({ message: 'Błąd podczas akceptacji użytkownika.' });
     }
 });
 
+// POPRAWKA: Dodana pełna implementacja
+app.post('/api/admin/users/:id/role', authMiddleware, adminMiddleware, async (req, res) => {
+    try {
+        const { role } = req.body;
+        const user = await User.findByIdAndUpdate(req.params.id, { role }, { new: true });
+        if (!user) return res.status(404).json({ message: 'Nie znaleziono użytkownika.' });
+        res.json({ message: 'Rola zmieniona.', user });
+    } catch (error) {
+        res.status(500).json({ message: 'Błąd podczas zmiany roli.' });
+    }
+});
+
+app.post('/api/admin/users/:id/password', authMiddleware, adminMiddleware, async (req, res) => {
+    try {
+        const { password } = req.body;
+        if (!password || password.length < 6) {
+            return res.status(400).json({ message: 'Hasło musi mieć co najmniej 6 znaków.' });
+        }
+        const hashedPassword = await bcrypt.hash(password, 10);
+        const user = await User.findByIdAndUpdate(req.params.id, { password: hashedPassword }, { new: true });
+        if (!user) return res.status(404).json({ message: 'Nie znaleziono użytkownika.' });
+        res.json({ message: 'Hasło zmienione.' });
+    } catch (error) {
+        res.status(500).json({ message: 'Błąd podczas zmiany hasła.' });
+    }
+});
+
+app.delete('/api/admin/users/:id', authMiddleware, adminMiddleware, async (req, res) => {
+    try {
+        const userToDelete = await User.findById(req.params.id);
+        if (!userToDelete) return res.status(404).json({ message: 'Nie znaleziono użytkownika.' });
+        
+        if (userToDelete.id === req.user.userId) {
+            return res.status(400).json({ message: 'Nie można usunąć własnego konta.' });
+        }
+        
+        await User.findByIdAndDelete(req.params.id);
+        res.json({ message: 'Użytkownik usunięty.' });
+    } catch (error) {
+        res.status(500).json({ message: 'Błąd podczas usuwania użytkownika.' });
+    }
+});
+
 
 // --- Pozostałe API Endpoints ---
-app.get('/api/products', async (req, res) => {
+app.get('/api/products', authMiddleware, async (req, res) => {
     try {
         const { search } = req.query;
         let query = {};
@@ -168,7 +251,7 @@ app.get('/api/products', async (req, res) => {
     }
 });
 
-app.post('/api/orders', async (req, res) => {
+app.post('/api/orders', authMiddleware, async (req, res) => {
     const newOrder = new Order({ id: `ZAM-${Date.now()}`, ...req.body, status: 'Zapisane' });
     try {
         const savedOrder = await newOrder.save();
@@ -178,7 +261,7 @@ app.post('/api/orders', async (req, res) => {
     }
 });
 
-app.get('/api/orders', async (req, res) => {
+app.get('/api/orders', authMiddleware, async (req, res) => {
     try {
         const orders = await Order.find().sort({ date: -1 });
         res.status(200).json(orders);
@@ -187,7 +270,7 @@ app.get('/api/orders', async (req, res) => {
     }
 });
 
-app.post('/api/orders/:mongoId/complete', async (req, res) => {
+app.post('/api/orders/:mongoId/complete', authMiddleware, async (req, res) => {
     try {
         const order = await Order.findById(req.params.mongoId);
         if (!order) {
