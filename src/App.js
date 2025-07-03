@@ -153,6 +153,7 @@ const OrderView = ({ currentOrder, setCurrentOrder, user }) => {
     const [inputValue, setInputValue] = useState('');
     const [suggestions, setSuggestions] = useState([]);
     const [noteModal, setNoteModal] = useState({ isOpen: false, itemIndex: null, text: '' });
+    const [isLoading, setIsLoading] = useState(false);
     const listEndRef = useRef(null);
     const printRef = useRef();
     const { showNotification } = useNotification();
@@ -170,11 +171,14 @@ const OrderView = ({ currentOrder, setCurrentOrder, user }) => {
             return;
         }
         const handler = setTimeout(async () => {
+            setIsLoading(true);
             try {
                 const results = await api.searchProducts(inputValue);
                 setSuggestions(results);
             } catch (error) {
                 showNotification(error.message, 'error');
+            } finally {
+                setIsLoading(false);
             }
         }, 300);
         return () => clearTimeout(handler);
@@ -331,6 +335,7 @@ const OrderView = ({ currentOrder, setCurrentOrder, user }) => {
                         </div>
                         <div className="relative">
                             <input type="text" value={inputValue} onChange={(e) => setInputValue(e.target.value)} onKeyDown={handleKeyDown} placeholder="Dodaj produkt (zatwierdź Enterem)" className="w-full p-4 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"/>
+                            {isLoading && <div className="absolute bottom-full mb-2 w-full text-center text-gray-500">Szukam...</div>}
                             {suggestions.length > 0 && <ul className="absolute bottom-full mb-2 w-full bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg shadow-xl max-h-60 overflow-y-auto z-30">{suggestions.map(p => <li key={p._id} onClick={() => addProductToOrder(p)} className="p-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 border-b dark:border-gray-600 last:border-b-0"><p className="font-semibold text-gray-800 dark:text-gray-100">{p.name}</p><p className="text-sm text-gray-500 dark:text-gray-400">{p.product_code}</p></li>)}</ul>}
                         </div>
                         <div className="flex flex-wrap justify-end space-x-3 mt-4">
