@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, createContext, useContext, useCallback } from 'react';
-import { Search, Package, List, Wrench, User, Sun, Moon, LogOut, FileDown, Printer, Save, CheckCircle, AlertTriangle, Upload, Trash2, XCircle, UserPlus } from 'lucide-react';
+import { Search, Package, List, Wrench, User, Sun, Moon, LogOut, FileDown, Printer, Save, CheckCircle, AlertTriangle, Upload, Trash2, XCircle, UserPlus, KeyRound } from 'lucide-react';
 
 // --- Kontekst Powiadomień ---
 const NotificationContext = createContext();
@@ -147,6 +147,64 @@ const api = {
             console.error("API Error approveUser:", error);
             throw error;
         }
+    },
+    changeUserRole: async (userId, role, token) => {
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/admin/users/${userId}/role`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify({ role })
+            });
+            if (!response.ok) throw new Error('Błąd zmiany roli użytkownika');
+            return await response.json();
+        } catch (error) {
+            console.error("API Error changeUserRole:", error);
+            throw error;
+        }
+    },
+    deleteUser: async (userId, token) => {
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/admin/users/${userId}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (!response.ok) throw new Error('Błąd usuwania użytkownika');
+            return await response.json();
+        } catch (error) {
+            console.error("API Error deleteUser:", error);
+            throw error;
+        }
+    },
+    changePassword: async (userId, password, token) => {
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/admin/users/${userId}/password`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify({ password })
+            });
+            if (!response.ok) throw new Error('Błąd zmiany hasła');
+            return await response.json();
+        } catch (error) {
+            console.error("API Error changePassword:", error);
+            throw error;
+        }
+    },
+    userChangeOwnPassword: async (currentPassword, newPassword, token) => {
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/user/password`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify({ currentPassword, newPassword })
+            });
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || 'Błąd zmiany hasła');
+            }
+            return await response.json();
+        } catch (error) {
+            console.error("API Error userChangeOwnPassword:", error);
+            throw error;
+        }
     }
 };
 
@@ -163,6 +221,8 @@ const InventoryView = () => { const [listName, setListName] = useState(''); cons
 const AdminView = ({ user }) => {
     const [users, setUsers] = useState([]);
     const { showNotification } = useNotification();
+    const [modalState, setModalState] = useState({ isOpen: false, user: null, type: '' });
+    const [newPassword, setNewPassword] = useState('');
 
     const fetchUsers = useCallback(async () => {
         try {
@@ -181,36 +241,136 @@ const AdminView = ({ user }) => {
         try {
             await api.approveUser(userId, user.token);
             showNotification('Użytkownik został zaakceptowany!', 'success');
-            fetchUsers(); // Odśwież listę
+            fetchUsers();
+        } catch (error) {
+            showNotification(error.message, 'error');
+        }
+    };
+    
+    const handleRoleChange = async (userId, newRole) => {
+        try {
+            await api.changeUserRole(userId, newRole, user.token);
+            showNotification('Rola użytkownika została zmieniona!', 'success');
+            fetchUsers();
+        } catch (error) {
+            showNotification(error.message, 'error');
+        }
+    };
+
+    const handleDeleteUser = async (userId) => {
+        try {
+            await api.deleteUser(userId, user.token);
+            showNotification('Użytkownik został usunięty!', 'success');
+            setModalState({ isOpen: false, user: null, type: '' });
+            fetchUsers();
+        } catch (error) {
+            showNotification(error.message, 'error');
+        }
+    };
+
+    const handleChangePassword = async () => {
+        if (newPassword.length < 6) {
+            showNotification('Nowe hasło musi mieć co najmniej 6 znaków.', 'error');
+            return;
+        }
+        try {
+            await api.changePassword(modalState.user._id, newPassword, user.token);
+            showNotification('Hasło zostało zmienione!', 'success');
+            setModalState({ isOpen: false, user: null, type: '' });
+            setNewPassword('');
         } catch (error) {
             showNotification(error.message, 'error');
         }
     };
 
     return (
-        <div className="p-4 md:p-8">
-            <h1 className="text-3xl font-bold mb-6 text-gray-800 dark:text-white">Panel Administratora</h1>
-            <div className="mb-8">
-                <h2 className="text-2xl font-semibold mb-4 text-gray-800 dark:text-white">Zarządzanie Użytkownikami</h2>
-                <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
-                    <ul className="divide-y divide-gray-200 dark:divide-gray-700">
-                        {users.map(u => (
-                            <li key={u._id} className="p-4 flex justify-between items-center">
-                                <div>
-                                    <p className="font-medium text-gray-900 dark:text-white">{u.username}</p>
-                                    <p className={`text-sm font-semibold capitalize ${u.status === 'oczekujący' ? 'text-yellow-500' : 'text-green-500'}`}>{u.status}</p>
-                                </div>
-                                {u.status === 'oczekujący' && (
-                                    <button onClick={() => handleApproveUser(u._id)} className="px-4 py-2 bg-green-500 text-white text-sm font-semibold rounded-lg hover:bg-green-600">
-                                        Akceptuj
-                                    </button>
-                                )}
-                            </li>
-                        ))}
-                    </ul>
+        <>
+            <div className="p-4 md:p-8">
+                <h1 className="text-3xl font-bold mb-6 text-gray-800 dark:text-white">Panel Administratora</h1>
+                <div className="mb-8">
+                    <h2 className="text-2xl font-semibold mb-4 text-gray-800 dark:text-white">Zarządzanie Użytkownikami</h2>
+                    <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-x-auto">
+                        <table className="w-full text-left">
+                            <thead className="bg-gray-50 dark:bg-gray-700">
+                                <tr>
+                                    <th className="p-4 font-semibold">Użytkownik</th>
+                                    <th className="p-4 font-semibold">Status</th>
+                                    <th className="p-4 font-semibold">Rola</th>
+                                    <th className="p-4 font-semibold text-right">Akcje</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                                {users.map(u => (
+                                    <tr key={u._id}>
+                                        <td className="p-4 font-medium">{u.username}</td>
+                                        <td className="p-4">
+                                            <span className={`px-2 py-1 text-xs font-semibold rounded-full capitalize ${u.status === 'oczekujący' ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}`}>
+                                                {u.status}
+                                            </span>
+                                        </td>
+                                        <td className="p-4">
+                                            <select 
+                                                value={u.role} 
+                                                onChange={(e) => handleRoleChange(u._id, e.target.value)}
+                                                className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-600 dark:border-gray-500 dark:placeholder-gray-400 dark:text-white"
+                                                disabled={user.id === u._id} // Admin nie może zmienić własnej roli
+                                            >
+                                                <option value="user">User</option>
+                                                <option value="administrator">Administrator</option>
+                                            </select>
+                                        </td>
+                                        <td className="p-4 text-right">
+                                            {u.status === 'oczekujący' && (
+                                                <button onClick={() => handleApproveUser(u._id)} className="px-3 py-1 bg-green-500 text-white text-sm font-semibold rounded-lg hover:bg-green-600 mr-2">
+                                                    Akceptuj
+                                                </button>
+                                            )}
+                                            <Tooltip text="Zmień hasło">
+                                                <button onClick={() => setModalState({ isOpen: true, user: u, type: 'password' })} className="p-2 text-gray-500 hover:text-blue-500">
+                                                    <KeyRound className="w-5 h-5" />
+                                                </button>
+                                            </Tooltip>
+                                            {user.id !== u._id && ( // Admin nie może usunąć samego siebie
+                                                <Tooltip text="Usuń użytkownika">
+                                                    <button onClick={() => setModalState({ isOpen: true, user: u, type: 'delete' })} className="p-2 text-gray-500 hover:text-red-500">
+                                                        <Trash2 className="w-5 h-5" />
+                                                    </button>
+                                                </Tooltip>
+                                            )}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
-        </div>
+            
+            {/* Modals */}
+            <Modal isOpen={modalState.isOpen && modalState.type === 'delete'} onClose={() => setModalState({isOpen: false, user: null, type: ''})} title="Potwierdź usunięcie">
+                <p>Czy na pewno chcesz usunąć użytkownika <strong>{modalState.user?.username}</strong>? Tej operacji nie można cofnąć.</p>
+                <div className="flex justify-end gap-4 mt-6">
+                    <button onClick={() => setModalState({isOpen: false, user: null, type: ''})} className="px-4 py-2 bg-gray-200 dark:bg-gray-600 rounded-lg">Anuluj</button>
+                    <button onClick={() => handleDeleteUser(modalState.user._id)} className="px-4 py-2 bg-red-600 text-white rounded-lg">Usuń</button>
+                </div>
+            </Modal>
+
+            <Modal isOpen={modalState.isOpen && modalState.type === 'password'} onClose={() => setModalState({isOpen: false, user: null, type: ''})} title={`Zmień hasło dla ${modalState.user?.username}`}>
+                <div>
+                    <label className="block mb-2 text-sm font-medium">Nowe hasło</label>
+                    <input 
+                        type="password"
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        className="w-full p-3 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg"
+                    />
+                </div>
+                <div className="flex justify-end gap-4 mt-6">
+                    <button onClick={() => setModalState({isOpen: false, user: null, type: ''})} className="px-4 py-2 bg-gray-200 dark:bg-gray-600 rounded-lg">Anuluj</button>
+                    <button onClick={handleChangePassword} className="px-4 py-2 bg-blue-600 text-white rounded-lg">Zmień hasło</button>
+                </div>
+            </Modal>
+        </>
     );
 };
 
@@ -303,6 +463,7 @@ function App() {
     const [activeView, setActiveView] = useState('search');
     const [isDarkMode, setIsDarkMode] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
+    const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
 
     useEffect(() => {
         if (isDarkMode) document.documentElement.classList.add('dark');
@@ -365,39 +526,113 @@ function App() {
     };
 
     return (
-        <div className="flex h-screen bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-sans">
-            <nav className="w-20 lg:w-64 bg-white dark:bg-gray-800 shadow-lg flex flex-col flex-shrink-0">
-                <div className="flex items-center justify-center h-20 border-b border-gray-200 dark:border-gray-700">
-                     <img src={isDarkMode ? "/logo-dark.png" : "/logo.png"} onError={(e) => { e.currentTarget.src = 'https://placehold.co/120x40/4f46e5/ffffff?text=Logo'; }} alt="Logo" className="h-10 hidden lg:block" />
-                     <Package className="h-8 w-8 text-indigo-500 lg:hidden" />
-                </div>
-                <ul className="flex-grow">
-                    {availableNavItems.map(item => (
-                        <li key={item.id}>
-                            <button
-                                onClick={() => setActiveView(item.id)}
-                                className={`w-full flex items-center justify-center lg:justify-start h-16 px-6 text-lg transition-colors duration-200 text-left ${activeView === item.id ? 'bg-indigo-50 dark:bg-gray-700 text-indigo-600 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
-                            >
-                                <item.icon className="h-6 w-6" />
-                                <span className="ml-4 hidden lg:block">{item.label}</span>
-                            </button>
-                        </li>
-                    ))}
-                </ul>
-                <div className="p-4 border-t border-gray-200 dark:border-gray-700">
-                    <div className="flex items-center justify-center lg:justify-between mb-4">
-                        <div className="hidden lg:block"><p className="font-semibold">{user.username}</p><p className="text-sm text-gray-500">{user.role}</p></div>
-                         <Tooltip text="Wyloguj"><button onClick={handleLogout} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600"><LogOut className="h-6 w-6 text-gray-500" /></button></Tooltip>
+        <>
+            <div className="flex h-screen bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-sans">
+                <nav className="w-20 lg:w-64 bg-white dark:bg-gray-800 shadow-lg flex flex-col flex-shrink-0">
+                    <div className="flex items-center justify-center h-20 border-b border-gray-200 dark:border-gray-700">
+                         <img src={isDarkMode ? "/logo-dark.png" : "/logo.png"} onError={(e) => { e.currentTarget.src = 'https://placehold.co/120x40/4f46e5/ffffff?text=Logo'; }} alt="Logo" className="h-10 hidden lg:block" />
+                         <Package className="h-8 w-8 text-indigo-500 lg:hidden" />
                     </div>
-                    <Tooltip text="Zmień motyw"><button onClick={() => setIsDarkMode(!isDarkMode)} className="w-full flex justify-center p-2 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600">{isDarkMode ? <Sun className="h-6 w-6 text-yellow-400" /> : <Moon className="h-6 w-6 text-indigo-500" />}</button></Tooltip>
-                </div>
-            </nav>
-            <main className="flex-1 flex flex-col overflow-hidden">
-                <div className="flex-1 overflow-x-hidden overflow-y-auto">{renderView()}</div>
-            </main>
-        </div>
+                    <ul className="flex-grow">
+                        {availableNavItems.map(item => (
+                            <li key={item.id}>
+                                <button
+                                    onClick={() => setActiveView(item.id)}
+                                    className={`w-full flex items-center justify-center lg:justify-start h-16 px-6 text-lg transition-colors duration-200 text-left ${activeView === item.id ? 'bg-indigo-50 dark:bg-gray-700 text-indigo-600 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
+                                >
+                                    <item.icon className="h-6 w-6" />
+                                    <span className="ml-4 hidden lg:block">{item.label}</span>
+                                </button>
+                            </li>
+                        ))}
+                    </ul>
+                    <div className="p-4 border-t border-gray-200 dark:border-gray-700">
+                        <div className="flex items-center justify-center lg:justify-between mb-4">
+                            <div className="hidden lg:block"><p className="font-semibold">{user.username}</p><p className="text-sm text-gray-500">{user.role}</p></div>
+                             <div className="flex items-center">
+                                <Tooltip text="Zmień hasło">
+                                    <button onClick={() => setIsPasswordModalOpen(true)} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600">
+                                        <KeyRound className="h-6 w-6 text-gray-500" />
+                                    </button>
+                                </Tooltip>
+                                <Tooltip text="Wyloguj">
+                                    <button onClick={handleLogout} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600">
+                                        <LogOut className="h-6 w-6 text-gray-500" />
+                                    </button>
+                                </Tooltip>
+                             </div>
+                        </div>
+                        <Tooltip text="Zmień motyw"><button onClick={() => setIsDarkMode(!isDarkMode)} className="w-full flex justify-center p-2 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600">{isDarkMode ? <Sun className="h-6 w-6 text-yellow-400" /> : <Moon className="h-6 w-6 text-indigo-500" />}</button></Tooltip>
+                    </div>
+                </nav>
+                <main className="flex-1 flex flex-col overflow-hidden">
+                    <div className="flex-1 overflow-x-hidden overflow-y-auto">{renderView()}</div>
+                </main>
+            </div>
+            <UserChangePasswordModal 
+                isOpen={isPasswordModalOpen}
+                onClose={() => setIsPasswordModalOpen(false)}
+            />
+        </>
     );
 }
+
+const UserChangePasswordModal = ({ isOpen, onClose }) => {
+    const [currentPassword, setCurrentPassword] = useState('');
+    const [newPassword, setNewPassword] = useState('');
+    const [error, setError] = useState('');
+    const { showNotification } = useNotification();
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setError('');
+        if (newPassword.length < 6) {
+            setError('Nowe hasło musi mieć co najmniej 6 znaków.');
+            return;
+        }
+        try {
+            const token = localStorage.getItem('userToken');
+            await api.userChangeOwnPassword(currentPassword, newPassword, token);
+            showNotification('Hasło zostało zmienione pomyślnie!', 'success');
+            onClose();
+        } catch (err) {
+            setError(err.message);
+        }
+    };
+
+    return (
+        <Modal isOpen={isOpen} onClose={onClose} title="Zmień swoje hasło">
+            <form onSubmit={handleSubmit} className="space-y-4">
+                <div>
+                    <label className="block mb-2 text-sm font-medium">Aktualne hasło</label>
+                    <input 
+                        type="password"
+                        value={currentPassword}
+                        onChange={(e) => setCurrentPassword(e.target.value)}
+                        className="w-full p-3 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg"
+                        required
+                    />
+                </div>
+                <div>
+                    <label className="block mb-2 text-sm font-medium">Nowe hasło</label>
+                    <input 
+                        type="password"
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        className="w-full p-3 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg"
+                        required
+                    />
+                </div>
+                {error && <p className="text-sm text-red-500">{error}</p>}
+                <div className="flex justify-end gap-4 pt-4">
+                    <button type="button" onClick={onClose} className="px-4 py-2 bg-gray-200 dark:bg-gray-600 rounded-lg">Anuluj</button>
+                    <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg">Zmień hasło</button>
+                </div>
+            </form>
+        </Modal>
+    );
+};
+
 
 // Główny punkt wejścia aplikacji z dostawcą powiadomień
 export default function AppWrapper() {
