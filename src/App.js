@@ -100,20 +100,11 @@ const api = {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username, password }),
             });
-
-            const responseText = await response.text();
+            const data = await response.json();
             if (!response.ok) {
-                try {
-                    const errorJson = JSON.parse(responseText);
-                    throw new Error(errorJson.message || `Błąd serwera: ${response.status}`);
-                } catch (e) {
-                    // Jeśli odpowiedź błędu nie jest w formacie JSON
-                    throw new Error(`Błąd serwera: ${response.status}. Otrzymano nieprawidłową odpowiedź.`);
-                }
+                throw new Error(data.message || `Błąd serwera: ${response.status}`);
             }
-            
-            return JSON.parse(responseText);
-
+            return data;
         } catch (error) {
             console.error("API Error login:", error);
             throw new Error(error.message || 'Nie udało się zalogować. Sprawdź połączenie z internetem.');
