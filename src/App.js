@@ -558,7 +558,7 @@ const AdminView = ({ user }) => {
                                             </td>
                                             <td className="p-4">
                                                 <select value={u.role} onChange={(e) => handleRoleChange(u._id, e.target.value)} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-600 dark:border-gray-500 dark:placeholder-gray-400 dark:text-white" disabled={user.id === u._id}>
-                                                    <option value="user">User</option>
+                                                    <option value="user">Użytkownik</option>
                                                     <option value="administrator">Administrator</option>
                                                 </select>
                                             </td>
@@ -804,7 +804,7 @@ function App() {
         { id: 'orders', label: 'Zamówienia', icon: Archive, roles: ['user', 'administrator'] },
         { id: 'picking', label: 'Kompletacja', icon: List, roles: ['user', 'administrator'] },
         { id: 'inventory', label: 'Inwentaryzacja', icon: Wrench, roles: ['user', 'administrator'] },
-        { id: 'admin', label: 'Admin', icon: User, roles: ['administrator'] },
+        { id: 'admin', label: 'Panel Administratora', icon: User, roles: ['administrator'] },
     ];
     
     const availableNavItems = navItems.filter(item => item.roles.includes(user.role));
