@@ -505,14 +505,18 @@ const OrdersListView = ({ onEdit }) => {
     const [showFilters, setShowFilters] = useState(false);
 
     const fetchOrders = useCallback(async () => {
+        console.log(`OrdersListView: Rozpoczynam pobieranie zamówień (status: ${view})...`);
         setIsLoading(true);
         try {
             const queryParams = { status: view, ...filters };
             const fetchedOrders = await api.getOrders(queryParams);
             setOrders(fetchedOrders);
+            console.log(`OrdersListView: Pomyślnie pobrano ${fetchedOrders.length} zamówień.`);
         } catch (error) {
+            console.error("OrdersListView: Błąd podczas pobierania zamówień:", error);
             showNotification(error.message, 'error');
         } finally {
+            console.log("OrdersListView: Zakończono próbę pobierania zamówień.");
             setIsLoading(false);
         }
     }, [view, filters, showNotification]);
@@ -601,11 +605,19 @@ const PickingView = () => {
     const searchInputRef = useRef(null);
 
     const fetchOrders = useCallback(async () => {
+        console.log("PickingView: Rozpoczynam pobieranie zamówień do kompletacji...");
         setIsLoading(true);
         try {
             const fetchedOrders = await api.getOrders({ status: 'Zapisane' });
             setOrders(fetchedOrders);
-        } catch (error) { showNotification(error.message, 'error'); } finally { setIsLoading(false); }
+            console.log(`PickingView: Pomyślnie pobrano ${fetchedOrders.length} zamówień.`);
+        } catch (error) { 
+            console.error("PickingView: Błąd podczas pobierania zamówień:", error);
+            showNotification(error.message, 'error'); 
+        } finally { 
+            console.log("PickingView: Zakończono próbę pobierania zamówień.");
+            setIsLoading(false); 
+        }
     }, [showNotification]);
     useEffect(() => { fetchOrders(); }, [fetchOrders]);
     useEffect(() => {
