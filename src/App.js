@@ -127,14 +127,48 @@ const api = {
         if (!response.ok) throw new Error('Nie znaleziono inwentaryzacji');
         return await response.json();
     },
-    login: async (username, password) => { /* ... */ },
-    register: async (username, password) => { /* ... */ },
-    getUsers: async () => { /* ... */ },
-    approveUser: async (userId) => { /* ... */ },
-    changeUserRole: async (userId, role) => { /* ... */ },
-    deleteUser: async (userId) => { /* ... */ },
-    changePassword: async (userId, password) => { /* ... */ },
-    userChangeOwnPassword: async (currentPassword, newPassword) => { /* ... */ },
+    login: async (username, password) => {
+        const response = await fetch(`${API_BASE_URL}/api/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.message || `Błąd serwera: ${response.status}`);
+        return data;
+    },
+    register: async (username, password) => {
+        const response = await fetch(`${API_BASE_URL}/api/register`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.message);
+        return data;
+    },
+    getUsers: async () => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/api/admin/users`);
+        if (!response.ok) throw new Error('Błąd pobierania użytkowników');
+        return await response.json();
+    },
+    approveUser: async (userId) => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/api/admin/users/${userId}/approve`, { method: 'POST' });
+        if (!response.ok) throw new Error('Błąd akceptacji użytkownika');
+        return await response.json();
+    },
+    changeUserRole: async (userId, role) => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/api/admin/users/${userId}/role`, { method: 'POST', body: JSON.stringify({ role }) });
+        if (!response.ok) throw new Error('Błąd zmiany roli użytkownika');
+        return await response.json();
+    },
+    deleteUser: async (userId) => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/api/admin/users/${userId}`, { method: 'DELETE' });
+        if (!response.ok) throw new Error('Błąd usuwania użytkownika');
+        return await response.json();
+    },
+    changePassword: async (userId, password) => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/api/admin/users/${userId}/password`, { method: 'POST', body: JSON.stringify({ password }) });
+        if (!response.ok) throw new Error('Błąd zmiany hasła');
+        return await response.json();
+    },
+    userChangeOwnPassword: async (currentPassword, newPassword) => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/api/user/password`, { method: 'POST', body: JSON.stringify({ currentPassword, newPassword }) });
+        if (!response.ok) { const errorData = await response.json(); throw new Error(errorData.message || 'Błąd zmiany hasła'); }
+        return await response.json();
+    },
 };
 
 // --- Komponenty UI ---
@@ -149,7 +183,7 @@ const ProductDetailsCard = ({ product }) => (
         <h2 className="text-2xl font-bold mb-4 text-indigo-600 dark:text-indigo-400">{product.name}</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-gray-700 dark:text-gray-300">
             <div><strong>Kod produktu:</strong> {product.product_code}</div>
-            <div><strong>Kody EAN:</strong> {product.barcodes.join(', ')}</div>
+            <div><strong>Kody EAN:</strong> {(product.barcodes || []).join(', ')}</div>
             <div><strong>Cena:</strong> {product.price.toFixed(2)} PLN</div>
             <div><strong>Ilość na stanie:</strong> {product.quantity}</div>
         </div>
@@ -414,7 +448,96 @@ const OrderView = ({ currentOrder, setCurrentOrder, user }) => {
     );
 };
 
-const OrdersListView = ({ onEdit }) => { /* ... bez zmian ... */ };
+const OrdersListView = ({ onEdit }) => {
+    const [orders, setOrders] = useState([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [view, setView] = useState('Zapisane');
+    const [deleteModal, setDeleteModal] = useState({ isOpen: false, orderId: null });
+    const { showNotification } = useNotification();
+    const [filters, setFilters] = useState({ customer: '', author: '', dateFrom: '', dateTo: '' });
+    const [showFilters, setShowFilters] = useState(false);
+
+    const fetchOrders = useCallback(async () => {
+        setIsLoading(true);
+        try {
+            const queryParams = { status: view, ...filters };
+            const fetchedOrders = await api.getOrders(queryParams);
+            setOrders(fetchedOrders);
+        } catch (error) {
+            showNotification(error.message, 'error');
+        } finally {
+            setIsLoading(false);
+        }
+    }, [view, filters, showNotification]);
+
+    useEffect(() => { fetchOrders(); }, [fetchOrders]);
+    
+    const handleDelete = async () => {
+        try {
+            await api.deleteOrder(deleteModal.orderId);
+            showNotification('Zamówienie usunięte!', 'success');
+            setDeleteModal({ isOpen: false, orderId: null });
+            fetchOrders();
+        } catch (error) { showNotification(error.message, 'error'); }
+    };
+    
+    const handleFilterChange = (e) => {
+        const { name, value } = e.target;
+        setFilters(prev => ({...prev, [name]: value}));
+    };
+    
+    const resetFilters = () => {
+        setFilters({ customer: '', author: '', dateFrom: '', dateTo: '' });
+    };
+
+    return (
+        <>
+            <div className="p-4 md:p-8">
+                <div className="flex flex-wrap gap-4 items-center justify-between mb-4">
+                    <h1 className="text-3xl font-bold text-gray-800 dark:text-white">Zamówienia</h1>
+                    <div className="flex items-center gap-2">
+                        <button onClick={() => setShowFilters(!showFilters)} className="flex items-center px-4 py-2 bg-gray-200 dark:bg-gray-700 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600"><Filter className="w-5 h-5 mr-2"/> Filtry</button>
+                        <div className="flex items-center bg-gray-200 dark:bg-gray-700 rounded-lg p-1">
+                            <button onClick={() => setView('Zapisane')} className={`px-4 py-2 text-sm font-semibold rounded-md ${view === 'Zapisane' ? 'bg-white dark:bg-gray-900 text-indigo-600' : 'text-gray-500'}`}>Zapisane</button>
+                            <button onClick={() => setView('Skompletowane')} className={`px-4 py-2 text-sm font-semibold rounded-md ${view === 'Skompletowane' ? 'bg-white dark:bg-gray-900 text-indigo-600' : 'text-gray-500'}`}>Skompletowane</button>
+                        </div>
+                    </div>
+                </div>
+                {showFilters && (
+                    <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg mb-6 shadow-sm animate-fade-in">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                            <input type="text" name="customer" value={filters.customer} onChange={handleFilterChange} placeholder="Klient" className="p-2 border rounded-md bg-white dark:bg-gray-700"/>
+                            <input type="text" name="author" value={filters.author} onChange={handleFilterChange} placeholder="Autor" className="p-2 border rounded-md bg-white dark:bg-gray-700"/>
+                            <input type="date" name="dateFrom" value={filters.dateFrom} onChange={handleFilterChange} className="p-2 border rounded-md bg-white dark:bg-gray-700"/>
+                            <input type="date" name="dateTo" value={filters.dateTo} onChange={handleFilterChange} className="p-2 border rounded-md bg-white dark:bg-gray-700"/>
+                        </div>
+                        <div className="flex justify-end gap-2 mt-4"><button onClick={resetFilters} className="px-4 py-2 bg-gray-300 dark:bg-gray-600 rounded-lg text-sm">Wyczyść filtry</button></div>
+                    </div>
+                )}
+                <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-x-auto">
+                    <table className="w-full text-left min-w-[600px]">
+                        <thead className="bg-gray-50 dark:bg-gray-700"><tr><th className="p-4 font-semibold">Klient</th><th className="p-4 font-semibold">Autor</th><th className="p-4 font-semibold">Data</th><th className="p-4 font-semibold text-right">Wartość</th><th className="p-4 font-semibold text-center">Akcje</th></tr></thead>
+                        <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                            {isLoading ? (<tr><td colSpan="5" className="p-8 text-center text-gray-500">Ładowanie...</td></tr>) : orders.length > 0 ? (orders.map(order => (
+                                <tr key={order._id}>
+                                    <td className="p-4 font-medium">{order.customerName}</td><td className="p-4">{order.author}</td><td className="p-4">{new Date(order.date).toLocaleDateString()}</td><td className="p-4 text-right font-semibold">{(order.total || 0).toFixed(2)} PLN</td>
+                                    <td className="p-4 text-center whitespace-nowrap">
+                                        <button onClick={() => onEdit(order._id)} className="inline-flex items-center justify-center mx-auto px-3 py-1 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600 mr-2"><Edit className="w-4 h-4 mr-1" /> {view === 'Skompletowane' ? 'Pokaż' : 'Edytuj'}</button>
+                                        <button onClick={() => setDeleteModal({ isOpen: true, orderId: order._id })} className="inline-flex items-center justify-center mx-auto px-3 py-1 bg-red-500 text-white text-sm rounded-lg hover:bg-red-600"><Trash2 className="w-4 h-4 mr-1" /> Usuń</button>
+                                    </td>
+                                </tr>
+                            ))) : (<tr><td colSpan="5" className="p-8 text-center text-gray-500">Brak zamówień pasujących do kryteriów.</td></tr>)}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <Modal isOpen={deleteModal.isOpen} onClose={() => setDeleteModal({ isOpen: false, orderId: null })} title="Potwierdź usunięcie">
+                <p>Czy na pewno chcesz usunąć to zamówienie? Tej operacji nie można cofnąć.</p>
+                <div className="flex justify-end gap-4 mt-6"><button onClick={() => setDeleteModal({ isOpen: false, orderId: null })} className="px-4 py-2 bg-gray-200 dark:bg-gray-600 rounded-lg">Anuluj</button><button onClick={handleDelete} className="px-4 py-2 bg-red-600 text-white rounded-lg">Usuń</button></div>
+            </Modal>
+        </>
+    );
+};
 
 const PickingView = () => {
     const [orders, setOrders] = useState([]);
@@ -430,7 +553,13 @@ const PickingView = () => {
     const [suggestions, setSuggestions] = useState([]);
     const searchInputRef = useRef(null);
 
-    const fetchOrders = useCallback(async () => { /* ... */ }, [showNotification]);
+    const fetchOrders = useCallback(async () => {
+        setIsLoading(true);
+        try {
+            const fetchedOrders = await api.getOrders({ status: 'Zapisane' });
+            setOrders(fetchedOrders);
+        } catch (error) { showNotification(error.message, 'error'); } finally { setIsLoading(false); }
+    }, [showNotification]);
     useEffect(() => { fetchOrders(); }, [fetchOrders]);
     useEffect(() => {
         if (!selectedOrder || inputValue.length < 2) { setSuggestions([]); return; }
@@ -481,8 +610,28 @@ const PickingView = () => {
         }
     };
 
-    const handleCompleteOrder = async () => { /* ... */ };
-    const exportCompletion = () => { /* ... */ };
+    const handleCompleteOrder = async () => {
+        try {
+            await api.completeOrder(selectedOrder._id, pickedItems);
+            showNotification('Zamówienie zostało skompletowane!', 'success');
+            setSelectedOrder(null);
+            setToPickItems([]);
+            setPickedItems([]);
+            fetchOrders();
+        } catch (error) { showNotification(error.message, 'error'); }
+    };
+    const exportCompletion = () => {
+        const csvData = pickedItems.map(item => `${(item.barcodes && item.barcodes[0]) || ''},${item.pickedQuantity}`).join('\n');
+        const blob = new Blob([`\uFEFF${csvData}`], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a");
+        const url = URL.createObjectURL(blob);
+        link.setAttribute("href", url);
+        link.setAttribute("download", `kompletacja_${selectedOrder.id}.csv`);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
     
     const handleUndoPick = (itemToUndo) => {
         setPickedItems(prev => prev.filter(item => item._id !== itemToUndo._id));
@@ -491,7 +640,22 @@ const PickingView = () => {
 
     const isCompleted = toPickItems.length === 0 && selectedOrder;
     if (isLoading) { return <div className="p-8 text-center">Ładowanie zamówień...</div> }
-    if (!selectedOrder) { return (/* ... */); }
+    if (!selectedOrder) {
+        return (
+            <div className="p-4 md:p-8">
+                <h1 className="text-3xl font-bold mb-6 text-gray-800 dark:text-white">Kompletacja Zamówień</h1>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {orders.map(order => (
+                        <div key={order._id} onClick={() => handleSelectOrder(order)} className="p-4 bg-white dark:bg-gray-800 rounded-lg shadow-md cursor-pointer hover:shadow-lg hover:scale-105 transition-all">
+                            <p className="font-bold text-lg text-indigo-600 dark:text-indigo-400">{order.customerName}</p>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">Autor: {order.author}</p>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">{new Date(order.date).toLocaleDateString()}</p>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        );
+    }
     
     return (
         <div className="p-4 md:p-8">
@@ -518,9 +682,8 @@ const PickingView = () => {
     );
 };
 
-// ZMODYFIKOWANY MODUŁ INWENTARYZACJI
 const InventoryView = ({ user }) => {
-    const [view, setView] = useState('list'); // 'list', 'new', 'details'
+    const [view, setView] = useState('list');
     const [inventories, setInventories] = useState([]);
     const [currentInventory, setCurrentInventory] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -582,7 +745,7 @@ const InventoryView = ({ user }) => {
                             <tr key={inv._id}>
                                 <td className="p-4 font-medium">{inv.name}</td>
                                 <td className="p-4">{inv.author}</td>
-                                <td className="p-4">{format(new Date(inv.date), 'd MMM yyyy, HH:mm')}</td>
+                                <td className="p-4">{format(new Date(inv.date), 'd MMM yy, HH:mm', { locale: pl })}</td>
                                 <td className="p-4">{inv.totalItems}</td>
                                 <td className="p-4">{inv.totalQuantity}</td>
                                 <td className="p-4"><button onClick={() => handleViewDetails(inv._id)} className="p-2 text-blue-500 hover:text-blue-700"><Eye className="w-5 h-5"/></button></td>
@@ -668,7 +831,18 @@ const NewInventorySheet = ({ user, onSave }) => {
         }
     };
 
-    const handleExport = () => { /* ... */ };
+    const handleExport = () => {
+        const csvData = inventoryItems.map(item => `${(item.barcodes && item.barcodes[0]) || ''},${item.quantity}`).join('\n');
+        const blob = new Blob([`\uFEFF${csvData}`], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a");
+        const url = URL.createObjectURL(blob);
+        link.setAttribute("href", url);
+        link.setAttribute("download", `inwentaryzacja_${listName.replace(/\s/g, '_') || 'lista'}.csv`);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
 
     return (<div className="h-full flex flex-col"><div className="p-4 md:p-8 pb-36"><div className="flex-shrink-0"><h1 className="text-3xl font-bold mb-4">Nowa Inwentaryzacja</h1><input type="text" value={listName} onChange={(e) => setListName(e.target.value)} placeholder="Wprowadź nazwę listy spisowej" className="w-full max-w-lg p-3 mb-6 bg-white dark:bg-gray-700 border rounded-lg"/></div><div className="flex-grow overflow-y-auto bg-gray-50 dark:bg-gray-900 p-4 rounded-lg shadow-inner mb-4">{inventoryItems.length > 0 ? <table className="w-full text-left"><thead><tr className="border-b"><th className="p-3">Nazwa</th><th className="p-3">Kod produktu</th><th className="p-3 text-center">Ilość</th><th className="p-3 text-center">Akcje</th></tr></thead><tbody>{inventoryItems.map(item => <tr key={item._id} className={`border-b last:border-0 ${item.isCustom ? 'text-red-500' : ''}`}><td className="p-2 font-medium">{item.name}</td><td className="p-2">{item.product_code}</td><td className="p-2 text-center"><input type="number" value={item.quantity} onChange={(e) => updateQuantity(item._id, e.target.value)} className="w-20 text-center bg-transparent border rounded-md p-1"/></td><td className="p-2 text-center"><button onClick={() => removeItem(item._id)} className="text-red-500 hover:text-red-700"><Trash2 className="w-5 h-5" /></button></td></tr>)}</tbody></table> : <p className="text-center text-gray-500">Brak pozycji na liście.</p>}<div ref={listEndRef} /></div><div className="flex gap-4"><button onClick={handleSave} className="flex items-center justify-center px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700"><Save className="w-5 h-5 mr-2"/> Zapisz inwentaryzację</button><button onClick={handleExport} className="flex items-center justify-center px-5 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700"><FileDown className="w-5 h-5 mr-2"/> Eksportuj (EAN, Ilość)</button></div></div><div className="fixed bottom-0 left-0 lg:left-64 right-0 p-4 bg-white dark:bg-gray-800 border-t z-20"><div className="max-w-4xl mx-auto relative"><input type="text" value={inputValue} onChange={(e) => setInputValue(e.target.value)} onKeyDown={handleKeyDown} placeholder="Dodaj produkt (zatwierdź Enterem)" className="w-full p-4 bg-gray-100 dark:bg-gray-700 border rounded-lg"/>{suggestions.length > 0 && <ul className="absolute bottom-full mb-2 w-full bg-white dark:bg-gray-700 border rounded-lg shadow-xl max-h-60 overflow-y-auto z-30">{suggestions.map(p => <li key={p._id} onClick={() => addProductToInventory(p)} className="p-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 border-b"><p className="font-semibold">{p.name}</p><p className="text-sm text-gray-500">{p.product_code}</p></li>)}</ul>}</div></div></div>);
 };
@@ -678,7 +852,7 @@ const InventoryDetails = ({ inventory, onBack }) => {
         <div className="p-4 md:p-8">
             <button onClick={onBack} className="mb-4 text-indigo-600 hover:underline">&larr; Powrót do listy</button>
             <h1 className="text-3xl font-bold">{inventory.name}</h1>
-            <p className="text-gray-500">Autor: {inventory.author} | Data: {format(new Date(inventory.date), 'd MMM yyyy, HH:mm')}</p>
+            <p className="text-gray-500">Autor: {inventory.author} | Data: {format(new Date(inventory.date), 'd MMM yyyy, HH:mm', { locale: pl })}</p>
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-x-auto mt-6">
                 <table className="w-full text-left">
                     <thead className="bg-gray-50 dark:bg-gray-700"><tr><th className="p-4">Nazwa</th><th className="p-4">Kod produktu</th><th className="p-4">Kody EAN</th><th className="p-4 text-center">Ilość</th></tr></thead>
@@ -707,14 +881,51 @@ const AdminView = ({ user }) => {
     const [isMerging, setIsMerging] = useState(false);
     const [importMode, setImportMode] = useState('append');
 
-    const fetchUsers = useCallback(async () => { /* ... */ }, [showNotification]);
+    const fetchUsers = useCallback(async () => {
+        try {
+            const userList = await api.getUsers();
+            setUsers(userList);
+        } catch (error) {
+            showNotification(error.message, 'error');
+        }
+    }, [showNotification]);
     useEffect(() => { fetchUsers(); }, [fetchUsers]);
 
-    const handleApproveUser = async (userId) => { /* ... */ };
-    const handleRoleChange = async (userId, newRole) => { /* ... */ };
-    const handleDeleteUser = async (userId) => { /* ... */ };
-    const handleChangePassword = async () => { /* ... */ };
-    const handleFileUpload = async (e) => { /* ... */ };
+    const handleApproveUser = async (userId) => {
+        try { await api.approveUser(userId); showNotification('Użytkownik został zaakceptowany!', 'success'); fetchUsers(); }
+        catch (error) { showNotification(error.message, 'error'); }
+    };
+    
+    const handleRoleChange = async (userId, newRole) => {
+        try { await api.changeUserRole(userId, newRole); showNotification('Rola użytkownika została zmieniona!', 'success'); fetchUsers(); }
+        catch (error) { showNotification(error.message, 'error'); }
+    };
+
+    const handleDeleteUser = async (userId) => {
+        try { await api.deleteUser(userId); showNotification('Użytkownik został usunięty!', 'success'); setModalState({ isOpen: false, user: null, type: '' }); fetchUsers(); }
+        catch (error) { showNotification(error.message, 'error'); }
+    };
+
+    const handleChangePassword = async () => {
+        if (newPassword.length < 6) { showNotification('Nowe hasło musi mieć co najmniej 6 znaków.', 'error'); return; }
+        try { await api.changePassword(modalState.user._id, newPassword); showNotification('Hasło zostało zmienione!', 'success'); setModalState({ isOpen: false, user: null, type: '' }); setNewPassword(''); }
+        catch (error) { showNotification(error.message, 'error'); }
+    };
+
+    const handleFileUpload = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        setIsUploading(true);
+        try {
+            const result = await api.uploadProductsFile(file, importMode);
+            showNotification(result.message, 'success');
+        } catch (error) {
+            showNotification(error.message, 'error');
+        } finally {
+            setIsUploading(false);
+            e.target.value = null;
+        }
+    };
 
     const handleMergeProducts = async () => {
         if (window.confirm("Czy na pewno chcesz połączyć produkty? Ta operacja jest nieodwracalna i może znacząco zmienić bazę danych produktów.")) {
@@ -737,14 +948,42 @@ const AdminView = ({ user }) => {
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                     <div>
                         <h2 className="text-2xl font-semibold mb-4">Zarządzanie Użytkownikami</h2>
-                        {/* ... tabela użytkowników bez zmian ... */}
+                        <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-x-auto">
+                            <table className="w-full text-left">
+                                <thead className="bg-gray-50 dark:bg-gray-700"><tr><th className="p-4 font-semibold">Użytkownik</th><th className="p-4 font-semibold">Status</th><th className="p-4 font-semibold">Rola</th><th className="p-4 font-semibold text-right">Akcje</th></tr></thead>
+                                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                                    {users.map(u => (
+                                        <tr key={u._id}>
+                                            <td className="p-4 font-medium">{u.username}</td>
+                                            <td className="p-4"><span className={`px-2 py-1 text-xs font-semibold rounded-full capitalize ${u.status === 'oczekujący' ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}`}>{u.status}</span></td>
+                                            <td className="p-4">
+                                                <select value={u.role} onChange={(e) => handleRoleChange(u._id, e.target.value)} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-600 dark:border-gray-500 dark:placeholder-gray-400 dark:text-white" disabled={user.id === u._id}><option value="user">Użytkownik</option><option value="administrator">Administrator</option></select>
+                                            </td>
+                                            <td className="p-4 text-right whitespace-nowrap">
+                                                {u.status === 'oczekujący' && (<button onClick={() => handleApproveUser(u._id)} className="px-3 py-1 bg-green-500 text-white text-sm font-semibold rounded-lg hover:bg-green-600 mr-2">Akceptuj</button>)}
+                                                <Tooltip text="Zmień hasło"><button onClick={() => setModalState({ isOpen: true, user: u, type: 'password' })} className="p-2 text-gray-500 hover:text-blue-500"><KeyRound className="w-5 h-5" /></button></Tooltip>
+                                                {user.id !== u._id && (<Tooltip text="Usuń użytkownika"><button onClick={() => setModalState({ isOpen: true, user: u, type: 'delete' })} className="p-2 text-gray-500 hover:text-red-500"><Trash2 className="w-5 h-5" /></button></Tooltip>)}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                     <div>
                         <h2 className="text-2xl font-semibold mb-4">Zarządzanie Bazą Danych</h2>
                         <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 space-y-6">
                             <div className="border border-dashed p-6 rounded-lg text-center">
                                 <h3 className="text-lg font-medium mb-2">Import produktów z CSV</h3>
-                                {/* ... reszta importu bez zmian ... */}
+                                <p className="text-sm text-gray-500 mb-4">Kolumny: barcode, name, price, product_code, quantity, availability</p>
+                                <div className="flex justify-center gap-4 mb-4">
+                                    <label className="flex items-center"><input type="radio" name="importMode" value="append" checked={importMode === 'append'} onChange={() => setImportMode('append')} className="mr-2"/>Dopisz / Zaktualizuj</label>
+                                    <label className="flex items-center"><input type="radio" name="importMode" value="overwrite" checked={importMode === 'overwrite'} onChange={() => setImportMode('overwrite')} className="mr-2"/>Nadpisz wszystko</label>
+                                </div>
+                                <label className={`cursor-pointer px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 inline-flex items-center ${isUploading ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                                    <Upload className={`w-4 h-4 mr-2 ${isUploading ? 'animate-spin' : ''}`}/> {isUploading ? 'Przetwarzanie...' : 'Wybierz plik'}
+                                    <input type="file" className="hidden" accept=".csv" onChange={handleFileUpload} disabled={isUploading} />
+                                </label>
                             </div>
                             <div className="border border-dashed p-6 rounded-lg text-center">
                                 <h3 className="text-lg font-medium mb-2">Operacje na danych</h3>
@@ -758,14 +997,94 @@ const AdminView = ({ user }) => {
                     </div>
                 </div>
             </div>
-            {/* ... modale bez zmian ... */}
+            <Modal isOpen={modalState.isOpen && modalState.type === 'delete'} onClose={() => setModalState({isOpen: false, user: null, type: ''})} title="Potwierdź usunięcie"><p>Czy na pewno chcesz usunąć użytkownika <strong>{modalState.user?.username}</strong>? Tej operacji nie można cofnąć.</p><div className="flex justify-end gap-4 mt-6"><button onClick={() => setModalState({isOpen: false, user: null, type: ''})} className="px-4 py-2 bg-gray-200 dark:bg-gray-600 rounded-lg">Anuluj</button><button onClick={() => handleDeleteUser(modalState.user._id)} className="px-4 py-2 bg-red-600 text-white rounded-lg">Usuń</button></div></Modal>
+            <Modal isOpen={modalState.isOpen && modalState.type === 'password'} onClose={() => setModalState({isOpen: false, user: null, type: ''})} title={`Zmień hasło dla ${modalState.user?.username}`}><div><label className="block mb-2 text-sm font-medium">Nowe hasło</label><input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="w-full p-3 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg"/></div><div className="flex justify-end gap-4 mt-6"><button onClick={() => setModalState({isOpen: false, user: null, type: ''})} className="px-4 py-2 bg-gray-200 dark:bg-gray-600 rounded-lg">Anuluj</button><button onClick={handleChangePassword} className="px-4 py-2 bg-blue-600 text-white rounded-lg">Zmień hasło</button></div></Modal>
         </>
     );
 };
 
-const AuthPage = ({ onLogin }) => { /* ... */ };
-const LoginView = ({ onLogin, showRegister }) => { /* ... */ };
-const RegisterView = ({ showLogin }) => { /* ... */ };
+const AuthPage = ({ onLogin }) => {
+    const [isLoginView, setIsLoginView] = useState(true);
+    return (
+        <div className="flex items-center justify-center h-screen bg-gray-100 dark:bg-gray-900">
+            {isLoginView ? <LoginView onLogin={onLogin} showRegister={() => setIsLoginView(false)} /> : <RegisterView showLogin={() => setIsLoginView(true)} />}
+        </div>
+    );
+};
+
+const LoginView = ({ onLogin, showRegister }) => {
+    const [username, setUsername] = useState('');
+    const [password, setPassword] = useState('');
+    const [error, setError] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setIsLoading(true);
+        setError('');
+        try {
+            const data = await api.login(username, password);
+            onLogin(data);
+        } catch (err) {
+            setError(err.message);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    return (
+        <div className="w-full max-w-md p-8 space-y-8 bg-white dark:bg-gray-800 rounded-xl shadow-lg">
+            <div className="text-center"><img src="/logo.png" onError={(e) => { e.currentTarget.src = 'https://placehold.co/150x50/4f46e5/ffffff?text=Logo'; }} alt="Logo" className="mx-auto mb-4 h-12" /><h2 className="text-2xl font-bold text-gray-900 dark:text-white">Zaloguj się do systemu</h2></div>
+            <form className="space-y-6" onSubmit={handleSubmit}>
+                <div><label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">Nazwa użytkownika</label><input type="text" value={username} onChange={(e) => setUsername(e.target.value)} className="w-full p-3 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" required/></div>
+                <div><label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">Hasło</label><input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full p-3 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" required/></div>
+                {error && <p className="text-sm text-red-500 text-center">{error}</p>}
+                <div><button type="submit" disabled={isLoading} className="w-full px-4 py-3 font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-indigo-400">{isLoading ? 'Logowanie...' : 'Zaloguj się'}</button></div>
+            </form>
+            <div className="text-center"><button onClick={showRegister} className="text-sm text-indigo-600 dark:text-indigo-400 hover:underline">Nie masz konta? Zarejestruj się</button></div>
+        </div>
+    );
+};
+
+const RegisterView = ({ showLogin }) => {
+    const [username, setUsername] = useState('');
+    const [password, setPassword] = useState('');
+    const [error, setError] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
+    const { showNotification } = useNotification();
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        if (password.length < 6) {
+            setError('Hasło musi mieć co najmniej 6 znaków.');
+            return;
+        }
+        setIsLoading(true);
+        setError('');
+        try {
+            const data = await api.register(username, password);
+            showNotification(data.message, 'success');
+            showLogin();
+        } catch (err) {
+            setError(err.message);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    return (
+        <div className="w-full max-w-md p-8 space-y-8 bg-white dark:bg-gray-800 rounded-xl shadow-lg">
+            <div className="text-center"><UserPlus className="mx-auto h-12 w-12 text-indigo-500" /><h2 className="mt-4 text-2xl font-bold text-gray-900 dark:text-white">Stwórz nowe konto</h2></div>
+            <form className="space-y-6" onSubmit={handleSubmit}>
+                <div><label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">Nazwa użytkownika</label><input type="text" value={username} onChange={(e) => setUsername(e.target.value)} className="w-full p-3 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" required/></div>
+                <div><label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">Hasło</label><input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full p-3 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" required/></div>
+                {error && <p className="text-sm text-red-500 text-center">{error}</p>}
+                <div><button type="submit" disabled={isLoading} className="w-full px-4 py-3 font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-indigo-400">{isLoading ? 'Rejestracja...' : 'Zarejestruj się'}</button></div>
+            </form>
+            <div className="text-center"><button onClick={showLogin} className="text-sm text-indigo-600 dark:text-indigo-400 hover:underline">Masz już konto? Zaloguj się</button></div>
+        </div>
+    );
+};
 
 const HomeView = ({ user, setActiveView }) => {
     const [stats, setStats] = useState(null);
