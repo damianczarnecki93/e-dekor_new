@@ -305,7 +305,7 @@ const OrderView = ({ currentOrder, setCurrentOrder, user }) => {
     const [suggestions, setSuggestions] = useState([]);
     const [noteModal, setNoteModal] = useState({ isOpen: false, itemIndex: null, text: '' });
     const listEndRef = useRef(null);
-    const printRef = useRef();
+    const printRef = useRef(null);
     const importFileRef = useRef(null);
     const { showNotification } = useNotification();
 
@@ -1146,12 +1146,17 @@ const HomeView = ({ user, setActiveView }) => {
 
     useEffect(() => {
         const fetchStats = async () => {
+            console.log("HomeView: Rozpoczynam pobieranie statystyk...");
+            setIsLoading(true);
             try {
                 const data = await api.getDashboardStats();
                 setStats(data);
+                console.log("HomeView: Statystyki pobrane pomyślnie.", data);
             } catch (error) {
+                console.error("HomeView: Błąd podczas pobierania statystyk:", error);
                 showNotification(error.message, 'error');
             } finally {
+                console.log("HomeView: Zakończono próbę pobierania statystyk.");
                 setIsLoading(false);
             }
         };
