@@ -826,6 +826,7 @@ const InventoryDetails = ({ inventory, onBack }) => {
         <div className="p-4 md:p-8">
             <button onClick={onBack} className="mb-4 text-indigo-600 hover:underline">&larr; Powrót do listy</button>
             <h1 className="text-3xl font-bold">{inventory.name}</h1>
+            {/* POPRAWKA: Poprawiony format daty */}
             <p className="text-gray-500">Autor: {inventory.author} | Data: {format(new Date(inventory.date), 'd MMM yyyy, HH:mm', { locale: pl })}</p>
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-x-auto mt-6">
                 <table className="w-full text-left">
