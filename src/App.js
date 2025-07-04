@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, createContext, useContext, useCallback } from 'react';
 import { Search, Package, List, Wrench, User, Sun, Moon, LogOut, FileDown, Printer, Save, CheckCircle, AlertTriangle, Upload, Trash2, XCircle, UserPlus, KeyRound, PlusCircle, MessageSquare, ChevronDown, Archive, History, Edit, Home, Menu, BarChart2, Filter, Calendar } from 'lucide-react';
 import { format } from 'date-fns';
+import { pl } from 'date-fns/locale'; // POPRAWKA: Prawidłowy import lokalizacji
 
 // --- Kontekst Powiadomień (bez zmian) ---
 const NotificationContext = createContext();
@@ -26,7 +27,7 @@ const NotificationProvider = ({ children }) => {
 };
 const useNotification = () => useContext(NotificationContext);
 
-// --- API Client (zaktualizowany) ---
+// --- API Client (bez zmian) ---
 const API_BASE_URL = 'https://dekor.onrender.com';
 
 const fetchWithAuth = async (url, options = {}) => {
@@ -59,7 +60,6 @@ const api = {
     },
     getOrders: async (filters = {}) => {
         const params = new URLSearchParams(filters);
-        // Usuń puste filtry
         for (const [key, value] of params.entries()) {
             if (!value) {
                 params.delete(key);
@@ -615,7 +615,7 @@ const PickingView = () => {
     );
 };
 
-const InventoryView = () => { /* ... bez zmian ... */ };
+const InventoryView = ({ user }) => { const [listName, setListName] = useState(''); const [inventoryItems, setInventoryItems] = useState([]); const [inputValue, setInputValue] = useState(''); const [suggestions, setSuggestions] = useState([]); const listEndRef = useRef(null); const scrollToBottom = () => listEndRef.current?.scrollIntoView({ behavior: "smooth" }); useEffect(scrollToBottom, [inventoryItems]); useEffect(() => { if (inputValue.length < 2) { setSuggestions([]); return; } const handler = setTimeout(async () => { try { const results = await api.searchProducts(inputValue); setSuggestions(results); } catch (error) { console.error('Błąd wyszukiwania w Inwentaryzacji', error); } }, 300); return () => clearTimeout(handler); }, [inputValue]); const addProductToInventory = (product) => { const existingItem = inventoryItems.find(item => item._id === product._id); if (existingItem) { setInventoryItems(inventoryItems.map(item => item._id === product._id ? { ...item, quantity: item.quantity + 1 } : item)); } else { setInventoryItems([...inventoryItems, { ...product, quantity: 1, isCustom: false }]); } setInputValue(''); setSuggestions([]); }; const handleKeyDown = (e) => { if (e.key === 'Enter' && inputValue.trim() !== '') { e.preventDefault(); if (suggestions.length > 0) { addProductToInventory(suggestions[0]); } else { const customItem = { _id: `custom-${Date.now()}`, name: inputValue, product_code: 'N/A', quantity: 1, isCustom: true }; setInventoryItems([...inventoryItems, customItem]); setInputValue(''); setSuggestions([]); } } }; const updateQuantity = (id, newQuantity) => { const quant = parseInt(newQuantity, 10); if (quant > 0) setInventoryItems(inventoryItems.map(item => item._id === id ? {...item, quantity: quant} : item)); }; const removeItem = (id) => setInventoryItems(inventoryItems.filter(item => item._id !== id)); const handleExport = () => { const csvData = inventoryItems.map(item => `${item.barcode || ''},${item.quantity}`).join('\n'); const blob = new Blob([`\uFEFF${csvData}`], { type: 'text/csv;charset=utf-8;' }); const link = document.createElement("a"); const url = URL.createObjectURL(blob); link.setAttribute("href", url); link.setAttribute("download", `inwentaryzacja_${listName.replace(/\s/g, '_') || 'lista'}.csv`); link.style.visibility = 'hidden'; document.body.appendChild(link); link.click(); document.body.removeChild(link); }; return (<div className="h-full flex flex-col"><div className="p-4 md:p-8 pb-36"><div className="flex-shrink-0"><h1 className="text-3xl font-bold mb-4 text-gray-800 dark:text-white">Inwentaryzacja</h1><input type="text" value={listName} onChange={(e) => setListName(e.target.value)} placeholder="Wprowadź nazwę listy spisowej" className="w-full max-w-lg p-3 mb-6 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"/></div><div className="flex-grow overflow-y-auto bg-gray-50 dark:bg-gray-900 p-4 rounded-lg shadow-inner mb-4">{inventoryItems.length > 0 ? <table className="w-full text-left"><thead><tr className="border-b border-gray-200 dark:border-gray-700"><th className="p-3">Nazwa</th><th className="p-3">Kod produktu</th><th className="p-3 text-center">Ilość</th><th className="p-3 text-center">Akcje</th></tr></thead><tbody>{inventoryItems.map(item => <tr key={item._id} className={`border-b border-gray-200 dark:border-gray-700 last:border-0 ${item.isCustom ? 'text-red-500' : ''}`}><td className="p-2 font-medium">{item.name}</td><td className="p-2">{item.product_code}</td><td className="p-2 text-center"><input type="number" value={item.quantity} onChange={(e) => updateQuantity(item._id, e.target.value)} className="w-20 text-center bg-transparent border rounded-md p-1"/></td><td className="p-2 text-center"><button onClick={() => removeItem(item._id)} className="text-red-500 hover:text-red-700"><Trash2 className="w-5 h-5" /></button></td></tr>)}</tbody></table> : <p className="text-center text-gray-500">Brak pozycji na liście.</p>}<div ref={listEndRef} /></div><button onClick={handleExport} className="flex items-center justify-center px-5 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors w-full md:w-auto mt-4"><FileDown className="w-5 h-5 mr-2"/> Eksportuj (EAN, Ilość)</button></div><div className="fixed bottom-0 left-0 lg:left-64 right-0 p-4 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 shadow-top z-20"><div className="max-w-4xl mx-auto relative"><input type="text" value={inputValue} onChange={(e) => setInputValue(e.target.value)} onKeyDown={handleKeyDown} placeholder="Dodaj produkt (zatwierdź Enterem)" className="w-full p-4 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"/>{suggestions.length > 0 && <ul className="absolute bottom-full mb-2 w-full bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg shadow-xl max-h-60 overflow-y-auto z-30">{suggestions.map(p => <li key={p._id} onClick={() => addProductToInventory(p)} className="p-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 border-b dark:border-gray-600 last:border-b-0"><p className="font-semibold text-gray-800 dark:text-gray-100">{p.name}</p><p className="text-sm text-gray-500 dark:text-gray-400">{p.product_code}</p></li>)}</ul>}</div></div></div>);};
 
 const AdminView = ({ user }) => {
     const [users, setUsers] = useState([]);
@@ -632,10 +632,26 @@ const AdminView = ({ user }) => {
 
     useEffect(() => { fetchUsers(); }, [fetchUsers]);
 
-    const handleApproveUser = async (userId) => { /* ... bez zmian ... */ };
-    const handleRoleChange = async (userId, newRole) => { /* ... bez zmian ... */ };
-    const handleDeleteUser = async (userId) => { /* ... bez zmian ... */ };
-    const handleChangePassword = async () => { /* ... bez zmian ... */ };
+    const handleApproveUser = async (userId) => {
+        try { await api.approveUser(userId); showNotification('Użytkownik został zaakceptowany!', 'success'); fetchUsers(); }
+        catch (error) { showNotification(error.message, 'error'); }
+    };
+    
+    const handleRoleChange = async (userId, newRole) => {
+        try { await api.changeUserRole(userId, newRole); showNotification('Rola użytkownika została zmieniona!', 'success'); fetchUsers(); }
+        catch (error) { showNotification(error.message, 'error'); }
+    };
+
+    const handleDeleteUser = async (userId) => {
+        try { await api.deleteUser(userId); showNotification('Użytkownik został usunięty!', 'success'); setModalState({ isOpen: false, user: null, type: '' }); fetchUsers(); }
+        catch (error) { showNotification(error.message, 'error'); }
+    };
+
+    const handleChangePassword = async () => {
+        if (newPassword.length < 6) { showNotification('Nowe hasło musi mieć co najmniej 6 znaków.', 'error'); return; }
+        try { await api.changePassword(modalState.user._id, newPassword); showNotification('Hasło zostało zmienione!', 'success'); setModalState({ isOpen: false, user: null, type: '' }); setNewPassword(''); }
+        catch (error) { showNotification(error.message, 'error'); }
+    };
 
     const handleFileUpload = async (e) => {
         const file = e.target.files[0];
@@ -687,7 +703,7 @@ const AdminView = ({ user }) => {
                         <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
                             <div className="border border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-6 text-center">
                                 <h3 className="text-lg font-medium mb-2">Importuj produkty z pliku CSV</h3>
-                                <p className="text-sm text-gray-500 mb-4">Plik musi zawierać kolumny: barcode, name, price, product_code, quantity, availability</p>
+                                <p className="text-sm text-gray-500 mb-4">Kolumny: barcode, name, price, product_code, quantity, availability</p>
                                 <div className="flex justify-center gap-4 mb-4">
                                     <label className="flex items-center"><input type="radio" name="importMode" value="append" checked={importMode === 'append'} onChange={() => setImportMode('append')} className="mr-2"/>Dopisz / Zaktualizuj</label>
                                     <label className="flex items-center"><input type="radio" name="importMode" value="overwrite" checked={importMode === 'overwrite'} onChange={() => setImportMode('overwrite')} className="mr-2"/>Nadpisz wszystko</label>
@@ -701,15 +717,94 @@ const AdminView = ({ user }) => {
                     </div>
                 </div>
             </div>
-            <Modal isOpen={modalState.isOpen && modalState.type === 'delete'} onClose={() => setModalState({isOpen: false, user: null, type: ''})} title="Potwierdź usunięcie">{/* ... bez zmian ... */}</Modal>
-            <Modal isOpen={modalState.isOpen && modalState.type === 'password'} onClose={() => setModalState({isOpen: false, user: null, type: ''})} title={`Zmień hasło dla ${modalState.user?.username}`}>{/* ... bez zmian ... */}</Modal>
+            <Modal isOpen={modalState.isOpen && modalState.type === 'delete'} onClose={() => setModalState({isOpen: false, user: null, type: ''})} title="Potwierdź usunięcie"><p>Czy na pewno chcesz usunąć użytkownika <strong>{modalState.user?.username}</strong>? Tej operacji nie można cofnąć.</p><div className="flex justify-end gap-4 mt-6"><button onClick={() => setModalState({isOpen: false, user: null, type: ''})} className="px-4 py-2 bg-gray-200 dark:bg-gray-600 rounded-lg">Anuluj</button><button onClick={() => handleDeleteUser(modalState.user._id)} className="px-4 py-2 bg-red-600 text-white rounded-lg">Usuń</button></div></Modal>
+            <Modal isOpen={modalState.isOpen && modalState.type === 'password'} onClose={() => setModalState({isOpen: false, user: null, type: ''})} title={`Zmień hasło dla ${modalState.user?.username}`}><div><label className="block mb-2 text-sm font-medium">Nowe hasło</label><input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="w-full p-3 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg"/></div><div className="flex justify-end gap-4 mt-6"><button onClick={() => setModalState({isOpen: false, user: null, type: ''})} className="px-4 py-2 bg-gray-200 dark:bg-gray-600 rounded-lg">Anuluj</button><button onClick={handleChangePassword} className="px-4 py-2 bg-blue-600 text-white rounded-lg">Zmień hasło</button></div></Modal>
         </>
     );
 };
 
-const AuthPage = ({ onLogin }) => { /* ... bez zmian ... */ };
-const LoginView = ({ onLogin, showRegister }) => { /* ... bez zmian ... */ };
-const RegisterView = ({ showLogin }) => { /* ... bez zmian ... */ };
+const AuthPage = ({ onLogin }) => {
+    const [isLoginView, setIsLoginView] = useState(true);
+    return (
+        <div className="flex items-center justify-center h-screen bg-gray-100 dark:bg-gray-900">
+            {isLoginView ? <LoginView onLogin={onLogin} showRegister={() => setIsLoginView(false)} /> : <RegisterView showLogin={() => setIsLoginView(true)} />}
+        </div>
+    );
+};
+
+const LoginView = ({ onLogin, showRegister }) => {
+    const [username, setUsername] = useState('');
+    const [password, setPassword] = useState('');
+    const [error, setError] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setIsLoading(true);
+        setError('');
+        try {
+            const data = await api.login(username, password);
+            onLogin(data);
+        } catch (err) {
+            setError(err.message);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    return (
+        <div className="w-full max-w-md p-8 space-y-8 bg-white dark:bg-gray-800 rounded-xl shadow-lg">
+            <div className="text-center"><img src="/logo.png" onError={(e) => { e.currentTarget.src = 'https://placehold.co/150x50/4f46e5/ffffff?text=Logo'; }} alt="Logo" className="mx-auto mb-4 h-12" /><h2 className="text-2xl font-bold text-gray-900 dark:text-white">Zaloguj się do systemu</h2></div>
+            <form className="space-y-6" onSubmit={handleSubmit}>
+                <div><label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">Nazwa użytkownika</label><input type="text" value={username} onChange={(e) => setUsername(e.target.value)} className="w-full p-3 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" required/></div>
+                <div><label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">Hasło</label><input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full p-3 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" required/></div>
+                {error && <p className="text-sm text-red-500 text-center">{error}</p>}
+                <div><button type="submit" disabled={isLoading} className="w-full px-4 py-3 font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-indigo-400">{isLoading ? 'Logowanie...' : 'Zaloguj się'}</button></div>
+            </form>
+            <div className="text-center"><button onClick={showRegister} className="text-sm text-indigo-600 dark:text-indigo-400 hover:underline">Nie masz konta? Zarejestruj się</button></div>
+        </div>
+    );
+};
+
+const RegisterView = ({ showLogin }) => {
+    const [username, setUsername] = useState('');
+    const [password, setPassword] = useState('');
+    const [error, setError] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
+    const { showNotification } = useNotification();
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        if (password.length < 6) {
+            setError('Hasło musi mieć co najmniej 6 znaków.');
+            return;
+        }
+        setIsLoading(true);
+        setError('');
+        try {
+            const data = await api.register(username, password);
+            showNotification(data.message, 'success');
+            showLogin();
+        } catch (err) {
+            setError(err.message);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    return (
+        <div className="w-full max-w-md p-8 space-y-8 bg-white dark:bg-gray-800 rounded-xl shadow-lg">
+            <div className="text-center"><UserPlus className="mx-auto h-12 w-12 text-indigo-500" /><h2 className="mt-4 text-2xl font-bold text-gray-900 dark:text-white">Stwórz nowe konto</h2></div>
+            <form className="space-y-6" onSubmit={handleSubmit}>
+                <div><label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">Nazwa użytkownika</label><input type="text" value={username} onChange={(e) => setUsername(e.target.value)} className="w-full p-3 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" required/></div>
+                <div><label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">Hasło</label><input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full p-3 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" required/></div>
+                {error && <p className="text-sm text-red-500 text-center">{error}</p>}
+                <div><button type="submit" disabled={isLoading} className="w-full px-4 py-3 font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-indigo-400">{isLoading ? 'Rejestracja...' : 'Zarejestruj się'}</button></div>
+            </form>
+            <div className="text-center"><button onClick={showLogin} className="text-sm text-indigo-600 dark:text-indigo-400 hover:underline">Masz już konto? Zaloguj się</button></div>
+        </div>
+    );
+};
 
 const HomeView = ({ user, setActiveView }) => {
     const [stats, setStats] = useState(null);
@@ -749,7 +844,10 @@ const HomeView = ({ user, setActiveView }) => {
     return (
         <div className="p-4 md:p-8">
             <h1 className="text-3xl md:text-4xl font-bold text-gray-800 dark:text-white">Witaj, {user.username}!</h1>
-            <p className="mt-2 text-lg text-gray-500 dark:text-gray-400">{format(time, 'eeee, d MMMM yyyy | HH:mm:ss', { locale: require('date-fns/locale/pl') })}</p>
+            <p className="mt-2 text-lg text-gray-500 dark:text-gray-400">
+                {/* POPRAWKA: Użycie zaimportowanego obiektu `pl` */}
+                {format(time, 'eeee, d MMMM yyyy | HH:mm:ss', { locale: pl })}
+            </p>
             <div className="mt-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <StatCard title="Zamówień do skompletowania" value={stats?.pendingOrders} icon={<List className="h-8 w-8 text-orange-600 dark:text-orange-300" />} color="bg-orange-100 dark:bg-orange-900" onClick={() => setActiveView('picking')} />
                 <StatCard title="Skompletowane zamówienia" value={stats?.completedOrders} icon={<CheckCircle className="h-8 w-8 text-green-600 dark:text-green-300" />} color="bg-green-100 dark:bg-green-900" onClick={() => setActiveView('orders')} />
