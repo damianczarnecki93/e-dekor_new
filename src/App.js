@@ -578,7 +578,8 @@ const AdminView = ({ user }) => {
                         <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
                             <div className="border border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-6 text-center">
                                 <h3 className="text-lg font-medium mb-2">Importuj produkty z pliku CSV</h3>
-                                <p className="text-sm text-gray-500 mb-4">Wgranie nowego pliku nadpisze wszystkie istniejące produkty w bazie.</p>
+                                <p className="text-sm text-gray-500 mb-4">Pliki zostaną nadpisane. Plik musi zawierać kolumny: kod_kreskowy,nazwa_produktu,cena,kod_produktu,ilość,dostępność
+</p>
                                 <label className={`cursor-pointer px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 inline-flex items-center ${isUploading ? 'opacity-50 cursor-not-allowed' : ''}`}>
                                     <Upload className={`w-4 h-4 mr-2 ${isUploading ? 'animate-spin' : ''}`}/> {isUploading ? 'Przetwarzanie...' : 'Wybierz plik'}
                                     <input type="file" className="hidden" accept=".csv" onChange={handleFileUpload} disabled={isUploading} />
