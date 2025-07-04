@@ -192,10 +192,9 @@ const ProductDetailsCard = ({ product }) => (
 
 // --- Główne Widoki (Moduły) ---
 
-const SearchView = () => {
+const SearchView = ({ onProductSelect }) => {
     const [query, setQuery] = useState('');
     const [suggestions, setSuggestions] = useState([]);
-    const [selectedProduct, setSelectedProduct] = useState(null);
     const [isLoading, setIsLoading] = useState(false);
     const [filterByQuantity, setFilterByQuantity] = useState(true);
     const { showNotification } = useNotification();
@@ -214,43 +213,37 @@ const SearchView = () => {
     }, [query, filterByQuantity, showNotification]);
 
     const handleSelect = (product) => {
-        setSelectedProduct(product);
+        onProductSelect(product);
         setSuggestions([]);
         setQuery('');
     };
 
     return (
-        <div className="p-4 md:p-8">
-            <h1 className="text-3xl font-bold mb-6 text-gray-800 dark:text-white">Szybkie Wyszukiwanie</h1>
-            <div className="relative max-w-2xl mx-auto">
-                <div className="flex items-center bg-white dark:bg-gray-700 rounded-full shadow-lg">
-                    <Search className="h-6 w-6 ml-4 text-gray-400" />
-                    <input type="text" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Wpisz kod EAN, kod produktu lub nazwę..." className="w-full p-4 bg-transparent focus:outline-none text-gray-900 dark:text-white" />
-                </div>
-                <div className="flex items-center justify-center mt-4">
-                    <label className="flex items-center cursor-pointer">
-                        <div className="relative">
-                            <input type="checkbox" checked={filterByQuantity} onChange={() => setFilterByQuantity(!filterByQuantity)} className="sr-only" />
-                            <div className="block bg-gray-200 dark:bg-gray-600 w-14 h-8 rounded-full"></div>
-                            <div className={`absolute left-1 top-1 bg-white dark:bg-gray-400 w-6 h-6 rounded-full transition-transform duration-300 ease-in-out ${filterByQuantity ? 'transform translate-x-full bg-green-500' : ''}`}></div>
-                        </div>
-                        <div className="ml-3 text-gray-700 dark:text-gray-300 font-medium">Pokazuj z ilością > 0</div>
-                    </label>
-                </div>
-                {isLoading && <div className="absolute w-full mt-2 text-center text-gray-500">Szukam...</div>}
-                {suggestions.length > 0 && (
-                    <ul className="absolute z-10 w-full mt-2 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg shadow-xl">{suggestions.map(p => (<li key={p._id} onClick={() => handleSelect(p)} className="p-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 border-b dark:border-gray-600 last:border-b-0"><p className="font-semibold text-gray-800 dark:text-gray-100">{p.name}</p><p className="text-sm text-gray-500 dark:text-gray-400">{p.product_code}</p></li>))}</ul>
-                )}
+        <div className="relative max-w-2xl mx-auto">
+            <div className="flex items-center bg-white dark:bg-gray-700 rounded-full shadow-lg">
+                <Search className="h-6 w-6 ml-4 text-gray-400" />
+                <input type="text" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Wpisz kod EAN, kod produktu lub nazwę..." className="w-full p-4 bg-transparent focus:outline-none text-gray-900 dark:text-white" />
             </div>
-            {selectedProduct && <ProductDetailsCard product={selectedProduct} />}
+            <div className="flex items-center justify-center mt-4">
+                <label className="flex items-center cursor-pointer">
+                    <div className="relative">
+                        <input type="checkbox" checked={filterByQuantity} onChange={() => setFilterByQuantity(!filterByQuantity)} className="sr-only" />
+                        <div className="block bg-gray-200 dark:bg-gray-600 w-14 h-8 rounded-full"></div>
+                        <div className={`absolute left-1 top-1 bg-white dark:bg-gray-400 w-6 h-6 rounded-full transition-transform duration-300 ease-in-out ${filterByQuantity ? 'transform translate-x-full bg-green-500' : ''}`}></div>
+                    </div>
+                    <div className="ml-3 text-gray-700 dark:text-gray-300 font-medium">Pokazuj z ilością > 0</div>
+                </label>
+            </div>
+            {isLoading && <div className="absolute w-full mt-2 text-center text-gray-500">Szukam...</div>}
+            {suggestions.length > 0 && (
+                <ul className="absolute z-10 w-full mt-2 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg shadow-xl">{suggestions.map(p => (<li key={p._id} onClick={() => handleSelect(p)} className="p-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 border-b dark:border-gray-600 last:border-b-0"><p className="font-semibold text-gray-800 dark:text-gray-100">{p.name}</p><p className="text-sm text-gray-500 dark:text-gray-400">{p.product_code}</p></li>))}</ul>
+            )}
         </div>
     );
 };
 
 const OrderView = ({ currentOrder, setCurrentOrder, user }) => {
     const [order, setOrder] = useState(currentOrder);
-    const [inputValue, setInputValue] = useState('');
-    const [suggestions, setSuggestions] = useState([]);
     const [noteModal, setNoteModal] = useState({ isOpen: false, itemIndex: null, text: '' });
     const [selectedProduct, setSelectedProduct] = useState(null);
     const listEndRef = useRef(null);
@@ -261,17 +254,6 @@ const OrderView = ({ currentOrder, setCurrentOrder, user }) => {
     useEffect(() => { setOrder(currentOrder); }, [currentOrder]);
     const scrollToBottom = () => listEndRef.current?.scrollIntoView({ behavior: "smooth" });
     useEffect(scrollToBottom, [order.items]);
-
-    useEffect(() => {
-        if (inputValue.length < 2) { setSuggestions([]); return; }
-        const handler = setTimeout(async () => {
-            try {
-                const results = await api.searchProducts(inputValue, true);
-                setSuggestions(results);
-            } catch (error) { showNotification(error.message, 'error'); }
-        }, 300);
-        return () => clearTimeout(handler);
-    }, [inputValue, showNotification]);
 
     const updateOrder = (updatedOrder) => {
         setOrder(updatedOrder);
@@ -284,8 +266,6 @@ const OrderView = ({ currentOrder, setCurrentOrder, user }) => {
         if (existingItemIndex > -1) { newItems[existingItemIndex].quantity += 1; }
         else { newItems.push({ ...product, quantity: 1, note: '' }); }
         updateOrder({ ...order, items: newItems });
-        setInputValue('');
-        setSuggestions([]);
         setSelectedProduct(product);
     };
 
@@ -300,20 +280,6 @@ const OrderView = ({ currentOrder, setCurrentOrder, user }) => {
         newItems[noteModal.itemIndex].note = noteModal.text;
         updateOrder({ ...order, items: newItems });
         setNoteModal({ isOpen: false, itemIndex: null, text: '' });
-    };
-
-    const handleKeyDown = (e) => {
-        if (e.key === 'Enter' && inputValue.trim() !== '') {
-            e.preventDefault();
-            if (suggestions.length > 0) { addProductToOrder(suggestions[0]); }
-            else {
-                const newItems = [...(order.items || [])];
-                newItems.push({ _id: `custom-${Date.now()}`, name: inputValue, product_code: 'N/A', barcodes: [], price: 0.00, quantity: 1, isCustom: true, note: '' });
-                updateOrder({ ...order, items: newItems });
-                setInputValue('');
-                setSuggestions([]);
-            }
-        }
     };
 
     const totalValue = useMemo(() => (order.items || []).reduce((sum, item) => sum + item.price * item.quantity, 0), [order.items]);
@@ -397,6 +363,8 @@ const OrderView = ({ currentOrder, setCurrentOrder, user }) => {
                     </div>
                     <input type="text" value={order.customerName || ''} onChange={(e) => updateOrder({ ...order, customerName: e.target.value })} placeholder="Wprowadź nazwę klienta" className="w-full max-w-lg p-3 mb-6 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
                     
+                    <SearchView onProductSelect={addProductToOrder} />
+
                     {selectedProduct && <ProductDetailsCard product={selectedProduct} />}
 
                     <div ref={printRef} className="flex-grow bg-gray-50 dark:bg-gray-900 p-4 rounded-lg shadow-inner mb-4 mt-6">
@@ -428,10 +396,6 @@ const OrderView = ({ currentOrder, setCurrentOrder, user }) => {
                 <div className="fixed bottom-0 left-0 lg:left-64 right-0 p-4 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 shadow-top z-20">
                     <div className="max-w-5xl mx-auto">
                         <div className="flex flex-wrap justify-end items-center mb-4 gap-4"><span className="text-lg font-bold text-gray-700 dark:text-gray-300">Suma:</span><span className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">{totalValue.toFixed(2)} PLN</span></div>
-                        <div className="relative">
-                            <input type="text" value={inputValue} onChange={(e) => setInputValue(e.target.value)} onKeyDown={handleKeyDown} placeholder="Dodaj produkt (zatwierdź Enterem)" className="w-full p-4 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"/>
-                            {suggestions.length > 0 && <ul className="absolute bottom-full mb-2 w-full bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg shadow-xl max-h-60 overflow-y-auto z-30">{suggestions.map(p => <li key={p._id} onClick={() => addProductToOrder(p)} className="p-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 border-b dark:border-gray-600 last:border-b-0"><p className="font-semibold text-gray-800 dark:text-gray-100">{p.name}</p><p className="text-sm text-gray-500 dark:text-gray-400">{p.product_code}</p></li>)}</ul>}
-                        </div>
                         <div className="flex flex-wrap justify-end space-x-3 mt-4">
                             <button onClick={handleSaveOrder} className="flex items-center justify-center px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"><Save className="w-5 h-5 mr-2"/> Zapisz</button>
                             <button onClick={handleExportCsv} className="flex items-center justify-center px-5 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"><FileDown className="w-5 h-5 mr-2"/> CSV</button>
@@ -1124,7 +1088,7 @@ const HomeView = ({ user, setActiveView }) => {
     return (
         <div className="p-4 md:p-8">
             <h1 className="text-3xl md:text-4xl font-bold">Witaj, {user.username}!</h1>
-            <p className="mt-2 text-lg text-gray-500">{format(time, 'eeee, d MMMM yyyy | HH:mm:ss', { locale: pl })}</p>
+            <p className="mt-2 text-lg text-gray-500">{format(time, 'eeee, d MMMM yyyy, HH:mm:ss', { locale: pl })}</p>
             <div className="mt-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 <StatCard title="Zamówień do skompletowania" value={stats?.pendingOrders} icon={<List className="h-8 w-8 text-orange-600" />} color="bg-orange-100" onClick={() => setActiveView('picking')} />
                 <StatCard title="Skompletowane zamówienia" value={stats?.completedOrders} icon={<CheckCircle className="h-8 w-8 text-green-600" />} color="bg-green-100" onClick={() => setActiveView('orders')} />
@@ -1171,6 +1135,14 @@ function App() {
         }
     }, [isDarkMode]);
 
+    const handleLogout = useCallback(() => {
+        localStorage.removeItem('userToken');
+        localStorage.removeItem('userData');
+        setUser(null);
+        setIsLoading(false);
+        setActiveView('home');
+    }, []);
+
     const handleLogin = useCallback((data) => {
         localStorage.setItem('userToken', data.token);
         localStorage.setItem('userData', JSON.stringify(data.user));
@@ -1179,27 +1151,25 @@ function App() {
         setActiveView('home');
     }, []);
 
-    const handleLogout = () => {
-        localStorage.removeItem('userToken');
-        localStorage.removeItem('userData');
-        setUser(null);
-        setActiveView('home');
-    };
-    
     useEffect(() => {
         const token = localStorage.getItem('userToken');
         const userData = localStorage.getItem('userData');
         if (token && userData) {
             try {
                 const user = JSON.parse(userData);
-                handleLogin({ token, user });
+                if (user && user.id) {
+                    handleLogin({ token, user });
+                } else {
+                    throw new Error("Nieprawidłowe dane użytkownika w localStorage");
+                }
             } catch (e) {
+                console.error("Błąd weryfikacji danych użytkownika z localStorage:", e);
                 handleLogout();
             }
         } else {
             setIsLoading(false);
         }
-    }, [handleLogin]);
+    }, [handleLogin, handleLogout]);
     
     const loadOrderForEditing = async (orderId) => {
         try {
@@ -1229,7 +1199,12 @@ function App() {
     const renderView = () => {
         switch (activeView) {
             case 'home': return <HomeView user={user} setActiveView={setActiveView} />;
-            case 'search': return <SearchView />;
+            case 'search': return (
+                <div className="p-4 md:p-8">
+                    <h1 className="text-3xl font-bold mb-6 text-gray-800 dark:text-white">Szybkie Wyszukiwanie</h1>
+                    <SearchView onProductSelect={(product) => { /* Można tu coś dodać, jeśli potrzeba */ }} />
+                </div>
+            );
             case 'order': return <OrderView currentOrder={currentOrder} setCurrentOrder={setCurrentOrder} user={user} />;
             case 'orders': return <OrdersListView onEdit={loadOrderForEditing} />;
             case 'picking': return <PickingView />;
