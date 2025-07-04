@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef, useMemo, createContext, useContext, useCallback } from 'react';
-import { Search, Package, List, Wrench, User, Sun, Moon, LogOut, FileDown, Printer, Save, CheckCircle, AlertTriangle, Upload, Trash2, XCircle, UserPlus, KeyRound, PlusCircle, MessageSquare, ChevronDown, Archive, History, Edit, Home, Menu, BarChart2, Filter, Calendar } from 'lucide-react';
+import { Search, Package, List, Wrench, User, Sun, Moon, LogOut, FileDown, Printer, Save, CheckCircle, AlertTriangle, Upload, Trash2, XCircle, UserPlus, KeyRound, PlusCircle, MessageSquare, ChevronDown, Archive, History, Edit, Home, Menu, BarChart2, Filter, RotateCcw, FileUp } from 'lucide-react';
 import { format } from 'date-fns';
-import { pl } from 'date-fns/locale'; // POPRAWKA: Prawidłowy import lokalizacji
+import { pl } from 'date-fns/locale';
 
-// --- Kontekst Powiadomień (bez zmian) ---
+// --- Kontekst Powiadomień ---
 const NotificationContext = createContext();
 const NotificationProvider = ({ children }) => {
     const [notification, setNotification] = useState(null);
@@ -27,7 +27,7 @@ const NotificationProvider = ({ children }) => {
 };
 const useNotification = () => useContext(NotificationContext);
 
-// --- API Client (bez zmian) ---
+// --- API Client ---
 const API_BASE_URL = 'https://dekor.onrender.com';
 
 const fetchWithAuth = async (url, options = {}) => {
@@ -46,10 +46,18 @@ const fetchWithAuth = async (url, options = {}) => {
 };
 
 const api = {
-    searchProducts: async (searchTerm, filterAvailable = false) => {
-        const response = await fetchWithAuth(`${API_BASE_URL}/api/products?search=${encodeURIComponent(searchTerm)}&filterAvailable=${filterAvailable}`);
+    searchProducts: async (searchTerm, filterByQuantity = false) => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/api/products?search=${encodeURIComponent(searchTerm)}&filterByQuantity=${filterByQuantity}`);
         if (!response.ok) { const errorData = await response.json(); throw new Error(errorData.message || 'Błąd wyszukiwania produktów'); }
         return await response.json();
+    },
+    importOrderFromCsv: async (file) => {
+        const formData = new FormData();
+        formData.append('orderFile', file);
+        const response = await fetchWithAuth(`${API_BASE_URL}/api/orders/import-csv`, { method: 'POST', body: formData });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.message || 'Błąd importu pliku');
+        return data;
     },
     saveOrder: async (order) => {
         const url = order._id ? `${API_BASE_URL}/api/orders/${order._id}` : `${API_BASE_URL}/api/orders`;
@@ -145,6 +153,17 @@ const api = {
 // --- Komponenty UI ---
 const Tooltip = ({ children, text }) => ( <div className="relative flex items-center group">{children}<div className="absolute bottom-full mb-2 w-max px-2 py-1 bg-gray-800 text-white text-xs rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none">{text}</div></div>);
 const Modal = ({ isOpen, onClose, title, children }) => { if (!isOpen) return null; return (<div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex justify-center items-center p-4"><div className="bg-white dark:bg-gray-800 rounded-lg shadow-2xl w-full max-w-md m-4"><div className="flex justify-between items-center p-4 border-b border-gray-200 dark:border-gray-700"><h3 className="text-xl font-semibold text-gray-900 dark:text-white">{title}</h3><button onClick={onClose} className="text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg text-sm p-1.5"><svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd"></path></svg></button></div><div className="p-6">{children}</div></div></div>);};
+const ProductDetailsCard = ({ product }) => (
+    <div className="mt-6 max-w-4xl mx-auto bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg animate-fade-in">
+        <h2 className="text-2xl font-bold mb-4 text-indigo-600 dark:text-indigo-400">{product.name}</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-gray-700 dark:text-gray-300">
+            <div><strong>Kod produktu:</strong> {product.product_code}</div>
+            <div><strong>Kod kreskowy:</strong> {product.barcode}</div>
+            <div><strong>Cena:</strong> {product.price.toFixed(2)} PLN</div>
+            <div><strong>Ilość na stanie:</strong> {product.quantity}</div>
+        </div>
+    </div>
+);
 
 // --- Główne Widoki (Moduły) ---
 
@@ -153,27 +172,21 @@ const SearchView = () => {
     const [suggestions, setSuggestions] = useState([]);
     const [selectedProduct, setSelectedProduct] = useState(null);
     const [isLoading, setIsLoading] = useState(false);
-    const [filterAvailable, setFilterAvailable] = useState(true);
+    const [filterByQuantity, setFilterByQuantity] = useState(true);
     const { showNotification } = useNotification();
 
     useEffect(() => {
-        if (query.length < 2) {
-            setSuggestions([]);
-            return;
-        }
+        if (query.length < 2) { setSuggestions([]); return; }
         const handler = setTimeout(async () => {
             setIsLoading(true);
             try {
-                const results = await api.searchProducts(query, filterAvailable);
+                const results = await api.searchProducts(query, filterByQuantity);
                 setSuggestions(results);
-            } catch (error) {
-                showNotification(error.message, 'error');
-            } finally {
-                setIsLoading(false);
-            }
+            } catch (error) { showNotification(error.message, 'error'); }
+            finally { setIsLoading(false); }
         }, 300);
         return () => clearTimeout(handler);
-    }, [query, filterAvailable, showNotification]);
+    }, [query, filterByQuantity, showNotification]);
 
     const handleSelect = (product) => {
         setSelectedProduct(product);
@@ -192,11 +205,11 @@ const SearchView = () => {
                 <div className="flex items-center justify-center mt-4">
                     <label className="flex items-center cursor-pointer">
                         <div className="relative">
-                            <input type="checkbox" checked={filterAvailable} onChange={() => setFilterAvailable(!filterAvailable)} className="sr-only" />
+                            <input type="checkbox" checked={filterByQuantity} onChange={() => setFilterByQuantity(!filterByQuantity)} className="sr-only" />
                             <div className="block bg-gray-200 dark:bg-gray-600 w-14 h-8 rounded-full"></div>
-                            <div className={`absolute left-1 top-1 bg-white dark:bg-gray-400 w-6 h-6 rounded-full transition-transform duration-300 ease-in-out ${filterAvailable ? 'transform translate-x-full bg-green-500' : ''}`}></div>
+                            <div className={`absolute left-1 top-1 bg-white dark:bg-gray-400 w-6 h-6 rounded-full transition-transform duration-300 ease-in-out ${filterByQuantity ? 'transform translate-x-full bg-green-500' : ''}`}></div>
                         </div>
-                        <div className="ml-3 text-gray-700 dark:text-gray-300 font-medium">Pokazuj tylko dostępne</div>
+                        <div className="ml-3 text-gray-700 dark:text-gray-300 font-medium">Pokazuj z ilością > 0</div>
                     </label>
                 </div>
                 {isLoading && <div className="absolute w-full mt-2 text-center text-gray-500">Szukam...</div>}
@@ -204,18 +217,7 @@ const SearchView = () => {
                     <ul className="absolute z-10 w-full mt-2 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg shadow-xl">{suggestions.map(p => (<li key={p._id} onClick={() => handleSelect(p)} className="p-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 border-b dark:border-gray-600 last:border-b-0"><p className="font-semibold text-gray-800 dark:text-gray-100">{p.name}</p><p className="text-sm text-gray-500 dark:text-gray-400">{p.product_code}</p></li>))}</ul>
                 )}
             </div>
-            {selectedProduct && (
-                <div className="mt-10 max-w-2xl mx-auto bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg animate-fade-in">
-                    <h2 className="text-2xl font-bold mb-4 text-indigo-600 dark:text-indigo-400">{selectedProduct.name}</h2>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-gray-700 dark:text-gray-300">
-                        <div><strong>Kod produktu:</strong> {selectedProduct.product_code}</div>
-                        <div><strong>Kod kreskowy:</strong> {selectedProduct.barcode}</div>
-                        <div><strong>Cena:</strong> {selectedProduct.price.toFixed(2)} PLN</div>
-                        <div><strong>Ilość na stanie:</strong> {selectedProduct.quantity}</div>
-                        <div><strong>Dostępność:</strong><span className={`ml-2 px-2 py-1 text-xs font-semibold rounded-full ${selectedProduct.availability ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'}`}>{selectedProduct.availability ? 'Dostępny' : 'Niedostępny'}</span></div>
-                    </div>
-                </div>
-            )}
+            {selectedProduct && <ProductDetailsCard product={selectedProduct} />}
         </div>
     );
 };
@@ -225,8 +227,10 @@ const OrderView = ({ currentOrder, setCurrentOrder, user }) => {
     const [inputValue, setInputValue] = useState('');
     const [suggestions, setSuggestions] = useState([]);
     const [noteModal, setNoteModal] = useState({ isOpen: false, itemIndex: null, text: '' });
+    const [selectedProduct, setSelectedProduct] = useState(null);
     const listEndRef = useRef(null);
     const printRef = useRef();
+    const importFileRef = useRef(null);
     const { showNotification } = useNotification();
 
     useEffect(() => { setOrder(currentOrder); }, [currentOrder]);
@@ -237,7 +241,7 @@ const OrderView = ({ currentOrder, setCurrentOrder, user }) => {
         if (inputValue.length < 2) { setSuggestions([]); return; }
         const handler = setTimeout(async () => {
             try {
-                const results = await api.searchProducts(inputValue, true); // Szukaj tylko dostępnych
+                const results = await api.searchProducts(inputValue, true);
                 setSuggestions(results);
             } catch (error) { showNotification(error.message, 'error'); }
         }, 300);
@@ -257,6 +261,7 @@ const OrderView = ({ currentOrder, setCurrentOrder, user }) => {
         updateOrder({ ...order, items: newItems });
         setInputValue('');
         setSuggestions([]);
+        setSelectedProduct(product);
     };
 
     const removeItemFromOrder = (itemIndex) => {
@@ -301,6 +306,7 @@ const OrderView = ({ currentOrder, setCurrentOrder, user }) => {
     const handleNewOrder = async () => {
         if (order._id && (order.customerName || (order.items && order.items.length > 0))) { await handleSaveOrder(); }
         setCurrentOrder({ customerName: '', items: [] });
+        setSelectedProduct(null);
     };
 
     const handlePrint = () => {
@@ -320,7 +326,7 @@ const OrderView = ({ currentOrder, setCurrentOrder, user }) => {
         const headers = ["Nazwa", "Kod produktu", "Cena", "Ilość", "Wartość", "Notatka"];
         const data = (order.items || []).map(item => [`"${item.name.replace(/"/g, '""')}"`, item.product_code, item.price.toFixed(2), item.quantity, (item.price * item.quantity).toFixed(2), `"${(item.note || '').replace(/"/g, '""')}"`]);
         const csvContent = [headers.join(','), ...data.map(row => row.join(','))].join('\n');
-        const blob = new Blob([`\uFEFF${csvContent}`], { type: 'text/csv;charset=utf-8;' }); // Add BOM for Excel
+        const blob = new Blob([`\uFEFF${csvContent}`], { type: 'text/csv;charset=utf-8;' });
         const link = document.createElement("a");
         const url = URL.createObjectURL(blob);
         link.setAttribute("href", url);
@@ -332,16 +338,43 @@ const OrderView = ({ currentOrder, setCurrentOrder, user }) => {
         document.body.removeChild(link);
     };
 
+    const handleFileImport = async (event) => {
+        const file = event.target.files[0];
+        if (!file) return;
+        try {
+            const { items, notFound } = await api.importOrderFromCsv(file);
+            updateOrder({ ...order, items: items });
+            showNotification(`Zaimportowano ${items.length} pozycji.`, 'success');
+            if (notFound.length > 0) {
+                showNotification(`Nie znaleziono produktów dla kodów: ${notFound.join(', ')}`, 'error');
+            }
+        } catch (error) {
+            showNotification(error.message, 'error');
+        }
+        event.target.value = null;
+    };
+
     return (
         <>
             <div className="h-full flex flex-col">
                 <div className="p-4 md:p-8 pb-48">
                     <div className="flex flex-wrap gap-4 justify-between items-center mb-4">
                         <h1 className="text-3xl font-bold text-gray-800 dark:text-white">{order._id ? `Edycja Zamówienia` : 'Nowe Zamówienie'}</h1>
-                        <button onClick={handleNewOrder} className="flex items-center justify-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"><PlusCircle className="w-5 h-5 mr-2"/> Nowa Lista</button>
+                        <div className="flex gap-2">
+                            <input type="file" ref={importFileRef} onChange={handleFileImport} className="hidden" accept=".csv" />
+                            <button onClick={() => importFileRef.current.click()} className="flex items-center justify-center px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors">
+                                <FileUp className="w-5 h-5 mr-2"/> Importuj
+                            </button>
+                            <button onClick={handleNewOrder} className="flex items-center justify-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
+                                <PlusCircle className="w-5 h-5 mr-2"/> Nowa Lista
+                            </button>
+                        </div>
                     </div>
                     <input type="text" value={order.customerName || ''} onChange={(e) => updateOrder({ ...order, customerName: e.target.value })} placeholder="Wprowadź nazwę klienta" className="w-full max-w-lg p-3 mb-6 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-                    <div ref={printRef} className="flex-grow bg-gray-50 dark:bg-gray-900 p-4 rounded-lg shadow-inner mb-4">
+                    
+                    {selectedProduct && <ProductDetailsCard product={selectedProduct} />}
+
+                    <div ref={printRef} className="flex-grow bg-gray-50 dark:bg-gray-900 p-4 rounded-lg shadow-inner mb-4 mt-6">
                         <div className="print-header hidden p-4"><h2 className="text-2xl font-bold">Zamówienie dla: {order.customerName}</h2><p>Data: {new Date().toLocaleDateString()}</p></div>
                         <div className="overflow-x-auto">
                             <table className="w-full text-left min-w-[600px]">
@@ -579,6 +612,11 @@ const PickingView = () => {
         link.click();
         document.body.removeChild(link);
     };
+    
+    const handleUndoPick = (itemToUndo) => {
+        setPickedItems(prev => prev.filter(item => item._id !== itemToUndo._id));
+        setToPickItems(prev => [...prev, itemToUndo]);
+    };
 
     const isCompleted = toPickItems.length === 0 && selectedOrder;
     
@@ -606,7 +644,7 @@ const PickingView = () => {
                 </div>
                 <div>
                     <h2 className="text-2xl font-semibold mb-4 text-gray-800 dark:text-white">Skompletowano ({pickedItems.length})</h2>
-                    <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 space-y-3 max-h-96 overflow-y-auto">{pickedItems.map(item => { const isMismatch = item.pickedQuantity !== item.originalQuantity; return (<div key={item._id} className={`flex justify-between items-center p-3 rounded-lg ${isMismatch ? 'bg-red-50 dark:bg-red-900/50' : 'bg-green-50 dark:bg-green-900/50'}`}><div><p className="font-semibold">{item.name}</p><p className="text-sm text-gray-500 dark:text-gray-400">{item.product_code}</p></div><div className={`text-lg font-bold px-3 py-1 rounded-full flex items-center gap-2 ${isMismatch ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>{isMismatch && <AlertTriangle className="w-4 h-4" />} {item.pickedQuantity} / {item.originalQuantity}</div></div>);})} {pickedItems.length === 0 && <p className="text-gray-500 text-center p-4">Brak pozycji.</p>}</div>
+                    <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 space-y-3 max-h-96 overflow-y-auto">{pickedItems.map(item => { const isMismatch = item.pickedQuantity !== item.originalQuantity; return (<div key={item._id} className={`flex justify-between items-center p-3 rounded-lg ${isMismatch ? 'bg-red-50 dark:bg-red-900/50' : 'bg-green-50 dark:bg-green-900/50'}`}><div><p className="font-semibold">{item.name}</p><p className="text-sm text-gray-500 dark:text-gray-400">{item.product_code}</p></div><div className="flex items-center gap-2"><Tooltip text="Cofnij"><button onClick={() => handleUndoPick(item)} className="p-1 text-gray-500 hover:text-blue-600"><RotateCcw className="w-4 h-4" /></button></Tooltip><div className={`text-lg font-bold px-3 py-1 rounded-full flex items-center gap-2 ${isMismatch ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>{isMismatch && <AlertTriangle className="w-4 h-4" />} {item.pickedQuantity} / {item.originalQuantity}</div></div></div>);})} {pickedItems.length === 0 && <p className="text-gray-500 text-center p-4">Brak pozycji.</p>}</div>
                 </div>
             </div>
             {isCompleted && <div className="mt-8 text-center p-6 bg-green-100 dark:bg-green-900/50 rounded-lg"><CheckCircle className="w-12 h-12 mx-auto text-green-500 mb-4" /><h3 className="text-2xl font-bold text-green-800 dark:text-green-200">Zamówienie skompletowane!</h3><div className="mt-4 flex justify-center gap-4"><button onClick={handleCompleteOrder} className="px-6 py-3 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition-colors">Zatwierdź</button><button onClick={exportCompletion} className="flex items-center justify-center px-5 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"><FileDown className="w-5 h-5 mr-2"/> Eksportuj</button></div></div>}
@@ -623,7 +661,7 @@ const AdminView = ({ user }) => {
     const [modalState, setModalState] = useState({ isOpen: false, user: null, type: '' });
     const [newPassword, setNewPassword] = useState('');
     const [isUploading, setIsUploading] = useState(false);
-    const [importMode, setImportMode] = useState('append'); // 'append' or 'overwrite'
+    const [importMode, setImportMode] = useState('append');
 
     const fetchUsers = useCallback(async () => {
         try { const userList = await api.getUsers(); setUsers(userList); }
@@ -845,7 +883,6 @@ const HomeView = ({ user, setActiveView }) => {
         <div className="p-4 md:p-8">
             <h1 className="text-3xl md:text-4xl font-bold text-gray-800 dark:text-white">Witaj, {user.username}!</h1>
             <p className="mt-2 text-lg text-gray-500 dark:text-gray-400">
-                {/* POPRAWKA: Użycie zaimportowanego obiektu `pl` */}
                 {format(time, 'eeee, d MMMM yyyy | HH:mm:ss', { locale: pl })}
             </p>
             <div className="mt-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
