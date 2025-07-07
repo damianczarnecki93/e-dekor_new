@@ -160,7 +160,9 @@ const api = {
         return data;
     },
     saveInventory: async (inventory) => {
-        const response = await fetchWithAuth(`${API_BASE_URL}/api/inventories`, { method: 'POST', body: JSON.stringify(inventory) });
+        const url = inventory._id ? `${API_BASE_URL}/api/inventories/${inventory._id}` : `${API_BASE_URL}/api/inventories`;
+        const method = inventory._id ? 'PUT' : 'POST';
+        const response = await fetchWithAuth(url, { method, body: JSON.stringify(inventory) });
         if (!response.ok) { const errorData = await response.json(); throw new Error(errorData.message || 'Błąd zapisywania inwentaryzacji'); }
         return await response.json();
     },
@@ -173,6 +175,19 @@ const api = {
         const response = await fetchWithAuth(`${API_BASE_URL}/api/inventories/${id}`);
         if (!response.ok) throw new Error('Nie znaleziono inwentaryzacji');
         return await response.json();
+    },
+    deleteInventory: async (id) => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/api/inventories/${id}`, { method: 'DELETE' });
+        if (!response.ok) throw new Error('Błąd usuwania inwentaryzacji');
+        return await response.json();
+    },
+    importInventorySheet: async (file) => {
+        const formData = new FormData();
+        formData.append('sheetFile', file);
+        const response = await fetchWithAuth(`${API_BASE_URL}/api/inventories/import-sheet`, { method: 'POST', body: formData });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.message || 'Błąd importu arkusza');
+        return data;
     },
     login: async (username, password) => {
         const response = await fetch(`${API_BASE_URL}/api/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) });
@@ -254,7 +269,7 @@ const SearchView = ({ onProductSelect }) => {
     const [query, setQuery] = useState('');
     const [suggestions, setSuggestions] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
-    const [filterByQuantity, setFilterByQuantity] = useState(true);
+    const [filterByQuantity, setFilterByQuantity] = useState(false);
     const { showNotification } = useNotification();
 
     useEffect(() => {
@@ -302,8 +317,6 @@ const SearchView = ({ onProductSelect }) => {
 
 const OrderView = ({ currentOrder, setCurrentOrder, user }) => {
     const [order, setOrder] = useState(currentOrder);
-    const [inputValue, setInputValue] = useState('');
-    const [suggestions, setSuggestions] = useState([]);
     const [noteModal, setNoteModal] = useState({ isOpen: false, itemIndex: null, text: '' });
     const listEndRef = useRef(null);
     const printRef = useRef(null);
@@ -313,17 +326,6 @@ const OrderView = ({ currentOrder, setCurrentOrder, user }) => {
     useEffect(() => { setOrder(currentOrder); }, [currentOrder]);
     const scrollToBottom = () => listEndRef.current?.scrollIntoView({ behavior: "smooth" });
     useEffect(scrollToBottom, [order.items]);
-
-    useEffect(() => {
-        if (inputValue.length < 2) { setSuggestions([]); return; }
-        const handler = setTimeout(async () => {
-            try {
-                const results = await api.searchProducts(inputValue, true);
-                setSuggestions(results);
-            } catch (error) { showNotification(error.message, 'error'); }
-        }, 300);
-        return () => clearTimeout(handler);
-    }, [inputValue, showNotification]);
 
     const updateOrder = (updatedOrder) => {
         setOrder(updatedOrder);
@@ -336,8 +338,6 @@ const OrderView = ({ currentOrder, setCurrentOrder, user }) => {
         if (existingItemIndex > -1) { newItems[existingItemIndex].quantity += 1; }
         else { newItems.push({ ...product, quantity: 1, note: '' }); }
         updateOrder({ ...order, items: newItems });
-        setInputValue('');
-        setSuggestions([]);
     };
 
     const removeItemFromOrder = (itemIndex) => {
@@ -351,20 +351,6 @@ const OrderView = ({ currentOrder, setCurrentOrder, user }) => {
         newItems[noteModal.itemIndex].note = noteModal.text;
         updateOrder({ ...order, items: newItems });
         setNoteModal({ isOpen: false, itemIndex: null, text: '' });
-    };
-
-    const handleKeyDown = (e) => {
-        if (e.key === 'Enter' && inputValue.trim() !== '') {
-            e.preventDefault();
-            if (suggestions.length > 0) { addProductToOrder(suggestions[0]); }
-            else {
-                const newItems = [...(order.items || [])];
-                newItems.push({ _id: `custom-${Date.now()}`, name: inputValue, product_code: 'N/A', barcodes: [], price: 0.00, quantity: 1, isCustom: true, note: '' });
-                updateOrder({ ...order, items: newItems });
-                setInputValue('');
-                setSuggestions([]);
-            }
-        }
     };
 
     const totalValue = useMemo(() => (order.items || []).reduce((sum, item) => sum + item.price * item.quantity, 0), [order.items]);
@@ -431,61 +417,58 @@ const OrderView = ({ currentOrder, setCurrentOrder, user }) => {
 
     return (
         <>
-            <div className="h-full flex flex-col">
-                <div className="p-4 md:p-8 pb-48">
-                    <div className="flex flex-wrap gap-4 justify-between items-center mb-4">
-                        <h1 className="text-3xl font-bold text-gray-800 dark:text-white">{order._id ? `Edycja Zamówienia` : 'Nowe Zamówienie'}</h1>
-                        <div className="flex gap-2">
-                            <input type="file" ref={importFileRef} onChange={handleFileImport} className="hidden" accept=".csv" />
-                            <button onClick={() => importFileRef.current.click()} className="flex items-center justify-center px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors">
-                                <FileUp className="w-5 h-5 mr-2"/> Importuj
-                            </button>
-                            <button onClick={handleNewOrder} className="flex items-center justify-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
-                                <PlusCircle className="w-5 h-5 mr-2"/> Nowa Lista
-                            </button>
-                        </div>
-                    </div>
-                    <input type="text" value={order.customerName || ''} onChange={(e) => updateOrder({ ...order, customerName: e.target.value })} placeholder="Wprowadź nazwę klienta" className="w-full max-w-lg p-3 mb-6 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-                    
-                    <div ref={printRef} className="flex-grow bg-gray-50 dark:bg-gray-900 p-4 rounded-lg shadow-inner mb-4 mt-6">
-                        <div className="print-header hidden p-4"><h2 className="text-2xl font-bold">Zamówienie dla: {order.customerName}</h2><p>Data: {new Date().toLocaleDateString()}</p></div>
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-left min-w-[600px]">
-                                <thead><tr className="border-b border-gray-200 dark:border-gray-700"><th className="p-3">Nazwa</th><th className="p-3">Kod produktu</th><th className="p-3 text-right">Cena</th><th className="p-3 text-center">Ilość</th><th className="p-3 text-right">Wartość</th><th className="p-3 text-center">Akcje</th></tr></thead>
-                                <tbody>
-                                    {(order.items || []).map((item, index) => (
-                                        <tr key={item._id || index} className={`border-b border-gray-200 dark:border-gray-700 last:border-0 ${item.isCustom ? 'text-red-500' : ''}`}>
-                                            <td className="p-3 font-medium">{item.name}{item.note && <p className="text-xs text-gray-400 mt-1">Notatka: {item.note}</p>}</td>
-                                            <td className="p-3">{item.product_code}</td>
-                                            <td className="p-3 text-right">{item.price.toFixed(2)} PLN</td>
-                                            <td className="p-3 text-center">{item.quantity}</td>
-                                            <td className="p-3 text-right font-semibold">{(item.price * item.quantity).toFixed(2)} PLN</td>
-                                            <td className="p-3 text-center whitespace-nowrap">
-                                                <Tooltip text="Dodaj notatkę"><button onClick={() => setNoteModal({ isOpen: true, itemIndex: index, text: item.note || '' })} className="p-2 text-gray-500 hover:text-blue-500"><MessageSquare className="w-5 h-5"/></button></Tooltip>
-                                                <Tooltip text="Usuń pozycję"><button onClick={() => removeItemFromOrder(index)} className="p-2 text-gray-500 hover:text-red-500"><Trash2 className="w-5 h-5"/></button></Tooltip>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                        {(!order.items || order.items.length === 0) && <p className="text-center text-gray-500 py-8">Brak pozycji na zamówieniu.</p>}
-                        <div ref={listEndRef} />
+            <div className="p-4 md:p-8">
+                <div className="flex flex-wrap gap-4 justify-between items-center mb-4">
+                    <h1 className="text-3xl font-bold text-gray-800 dark:text-white">{order._id ? `Edycja Zamówienia` : 'Nowe Zamówienie'}</h1>
+                    <div className="flex gap-2">
+                        <input type="file" ref={importFileRef} onChange={handleFileImport} className="hidden" accept=".csv" />
+                        <button onClick={() => importFileRef.current.click()} className="flex items-center justify-center px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors">
+                            <FileUp className="w-5 h-5 mr-2"/> Importuj
+                        </button>
+                        <button onClick={handleNewOrder} className="flex items-center justify-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
+                            <PlusCircle className="w-5 h-5 mr-2"/> Nowa Lista
+                        </button>
                     </div>
                 </div>
-                <div className="fixed bottom-0 left-0 lg:left-64 right-0 p-4 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 shadow-top z-20">
-                    <div className="max-w-5xl mx-auto">
-                        <div className="flex flex-wrap justify-end items-center mb-4 gap-4"><span className="text-lg font-bold text-gray-700 dark:text-gray-300">Suma:</span><span className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">{totalValue.toFixed(2)} PLN</span></div>
-                        <div className="relative">
-                            <input type="text" value={inputValue} onChange={(e) => setInputValue(e.target.value)} onKeyDown={handleKeyDown} placeholder="Dodaj produkt (zatwierdź Enterem)" className="w-full p-4 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"/>
-                            {suggestions.length > 0 && <ul className="absolute bottom-full mb-2 w-full bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg shadow-xl max-h-60 overflow-y-auto z-30">{suggestions.map(p => <li key={p._id} onClick={() => addProductToOrder(p)} className="p-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 border-b dark:border-gray-600 last:border-b-0"><p className="font-semibold text-gray-800 dark:text-gray-100">{p.name}</p><p className="text-sm text-gray-500 dark:text-gray-400">{p.product_code}</p></li>)}</ul>}
-                        </div>
-                        <div className="flex flex-wrap justify-end space-x-3 mt-4">
-                            <button onClick={handleSaveOrder} className="flex items-center justify-center px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"><Save className="w-5 h-5 mr-2"/> Zapisz</button>
-                            <button onClick={handleExportCsv} className="flex items-center justify-center px-5 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"><FileDown className="w-5 h-5 mr-2"/> CSV</button>
-                            <button onClick={handlePrint} className="flex items-center justify-center px-5 py-2.5 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"><Printer className="w-5 h-5 mr-2"/> Drukuj</button>
-                        </div>
+                <input type="text" value={order.customerName || ''} onChange={(e) => updateOrder({ ...order, customerName: e.target.value })} placeholder="Wprowadź nazwę klienta" className="w-full max-w-lg p-3 mb-6 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                
+                <div className="mb-6">
+                    <SearchView onProductSelect={addProductToOrder} />
+                </div>
+
+                <div ref={printRef} className="flex-grow bg-gray-50 dark:bg-gray-900 p-4 rounded-lg shadow-inner mb-4 mt-6">
+                    <div className="print-header hidden p-4"><h2 className="text-2xl font-bold">Zamówienie dla: {order.customerName}</h2><p>Data: {new Date().toLocaleDateString()}</p></div>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left min-w-[600px]">
+                            <thead><tr className="border-b border-gray-200 dark:border-gray-700"><th className="p-3">Nazwa</th><th className="p-3">Kod produktu</th><th className="p-3 text-right">Cena</th><th className="p-3 text-center">Ilość</th><th className="p-3 text-right">Wartość</th><th className="p-3 text-center">Akcje</th></tr></thead>
+                            <tbody>
+                                {(order.items || []).map((item, index) => (
+                                    <tr key={item._id || index} className={`border-b border-gray-200 dark:border-gray-700 last:border-0 ${item.isCustom ? 'text-red-500' : ''}`}>
+                                        <td className="p-3 font-medium">{item.name}{item.note && <p className="text-xs text-gray-400 mt-1">Notatka: {item.note}</p>}</td>
+                                        <td className="p-3">{item.product_code}</td>
+                                        <td className="p-3 text-right">{item.price.toFixed(2)} PLN</td>
+                                        <td className="p-3 text-center">{item.quantity}</td>
+                                        <td className="p-3 text-right font-semibold">{(item.price * item.quantity).toFixed(2)} PLN</td>
+                                        <td className="p-3 text-center whitespace-nowrap">
+                                            <Tooltip text="Dodaj notatkę"><button onClick={() => setNoteModal({ isOpen: true, itemIndex: index, text: item.note || '' })} className="p-2 text-gray-500 hover:text-blue-500"><MessageSquare className="w-5 h-5"/></button></Tooltip>
+                                            <Tooltip text="Usuń pozycję"><button onClick={() => removeItemFromOrder(index)} className="p-2 text-gray-500 hover:text-red-500"><Trash2 className="w-5 h-5"/></button></Tooltip>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
                     </div>
+                    {(!order.items || order.items.length === 0) && <p className="text-center text-gray-500 py-8">Brak pozycji na zamówieniu.</p>}
+                    <div ref={listEndRef} />
+                </div>
+                <div className="flex flex-wrap justify-end items-center gap-4 mt-4">
+                    <span className="text-lg font-bold text-gray-700 dark:text-gray-300">Suma:</span>
+                    <span className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">{totalValue.toFixed(2)} PLN</span>
+                </div>
+                 <div className="flex flex-wrap justify-end space-x-3 mt-4">
+                    <button onClick={handleSaveOrder} className="flex items-center justify-center px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"><Save className="w-5 h-5 mr-2"/> Zapisz</button>
+                    <button onClick={handleExportCsv} className="flex items-center justify-center px-5 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"><FileDown className="w-5 h-5 mr-2"/> CSV</button>
+                    <button onClick={handlePrint} className="flex items-center justify-center px-5 py-2.5 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"><Printer className="w-5 h-5 mr-2"/> Drukuj</button>
                 </div>
             </div>
             <Modal isOpen={noteModal.isOpen} onClose={() => setNoteModal({ isOpen: false, itemIndex: null, text: '' })} title="Dodaj notatkę do pozycji">
