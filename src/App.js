@@ -944,7 +944,91 @@ const NewInventorySheet = ({ user, onSave, existingInventory = null }) => {
         event.target.value = null;
     };
 
-    return (<div className="h-full flex flex-col"><div className="p-4 md:p-8 pb-36"><div className="flex justify-between items-center mb-4"><h1 className="text-3xl font-bold">{existingInventory ? 'Edycja' : 'Nowa'} Inwentaryzacja</h1><div className="flex gap-2"><input type="file" ref={importFileRef} onChange={handleFileImport} className="hidden" accept=".csv" /><button onClick={() => importFileRef.current.click()} className="flex items-center px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600"><FileUp className="w-5 h-5 mr-2"/> Importuj Arkusz</button></div></div><input type="text" value={listName} onChange={(e) => setListName(e.target.value)} placeholder="Wprowadź nazwę listy spisowej" className="w-full max-w-lg p-3 mb-6 bg-white dark:bg-gray-700 border rounded-lg"/></div><div className="flex-grow overflow-y-auto bg-gray-50 dark:bg-gray-900 p-4 rounded-lg shadow-inner mb-4">{inventoryItems.length > 0 ? <table className="w-full text-left"><thead><tr className="border-b"><th className="p-3">Nazwa</th><th className="p-3">Kod produktu</th><th className="p-3 text-center">Ilość Oczekiwana</th><th className="p-3 text-center">Ilość Zliczona</th><th className="p-3 text-center">Akcje</th></tr></thead><tbody>{inventoryItems.map(item => <tr key={item._id} className={`border-b last:border-0 ${item.isCustom ? 'text-red-500' : ''}`}><td className="p-2 font-medium">{item.name}</td><td className="p-2">{item.product_code}</td><td className="p-2 text-center">{item.expectedQuantity ?? 'N/A'}</td><td className="p-2 text-center"><input type="number" value={item.quantity || 0} onChange={(e) => updateQuantity(item._id, e.target.value)} className="w-20 text-center bg-transparent border rounded-md p-1"/></td><td className="p-2 text-center"><button onClick={() => removeItem(item._id)} className="text-red-500 hover:text-red-700"><Trash2 className="w-5 h-5" /></button></td></tr>)}</tbody></table> : <p className="text-center text-gray-500">Brak pozycji na liście.</p>}<div ref={listEndRef} /></div><div className="flex gap-4"><button onClick={handleSave} className="flex items-center justify-center px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700"><Save className="w-5 h-5 mr-2"/> Zapisz inwentaryzację</button></div></div><div className="fixed bottom-0 left-0 lg:left-64 right-0 p-4 bg-white dark:bg-gray-800 border-t z-20"><div className="max-w-4xl mx-auto relative"><input type="text" value={inputValue} onChange={(e) => setInputValue(e.target.value)} onKeyDown={handleKeyDown} placeholder="Dodaj produkt (zatwierdź Enterem)" className="w-full p-4 bg-gray-100 dark:bg-gray-700 border rounded-lg"/>{suggestions.length > 0 && <ul className="absolute bottom-full mb-2 w-full bg-white dark:bg-gray-700 border rounded-lg shadow-xl max-h-60 overflow-y-auto z-30">{suggestions.map(p => <li key={p._id} onClick={() => addProductToInventory(p)} className="p-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 border-b"><p className="font-semibold">{p.name}</p><p className="text-sm text-gray-500">{p.product_code}</p></li>)}</ul>}</div></div></div>);
+    return (
+        <div className="h-full flex flex-col">
+            <div className="p-4 md:p-8 pb-36">
+                <div className="flex-shrink-0">
+                    <div className="flex justify-between items-center mb-4">
+                        <h1 className="text-3xl font-bold">{existingInventory ? 'Edycja' : 'Nowa'} Inwentaryzacja</h1>
+                        <div className="flex gap-2">
+                            <input type="file" ref={importFileRef} onChange={handleFileImport} className="hidden" accept=".csv" />
+                            <button onClick={() => importFileRef.current.click()} className="flex items-center px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600">
+                                <FileUp className="w-5 h-5 mr-2"/> Importuj Arkusz
+                            </button>
+                        </div>
+                    </div>
+                    <input type="text" value={listName} onChange={(e) => setListName(e.target.value)} placeholder="Wprowadź nazwę listy spisowej" className="w-full max-w-lg p-3 mb-6 bg-white dark:bg-gray-700 border rounded-lg"/>
+                </div>
+                <div className="flex-grow overflow-y-auto bg-gray-50 dark:bg-gray-900 p-4 rounded-lg shadow-inner mb-4">
+                    {inventoryItems.length > 0 ? (
+                        <table className="w-full text-left">
+                            <thead>
+                                <tr className="border-b">
+                                    <th className="p-3">Nazwa</th>
+                                    <th className="p-3">Kod produktu</th>
+                                    <th className="p-3 text-center">Ilość Oczekiwana</th>
+                                    <th className="p-3 text-center">Ilość Zliczona</th>
+                                    <th className="p-3 text-center">Akcje</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {inventoryItems.map(item => (
+                                    <tr key={item._id} className={`border-b last:border-0 ${item.isCustom ? 'text-red-500' : ''}`}>
+                                        <td className="p-2 font-medium">{item.name}</td>
+                                        <td className="p-2">{item.product_code}</td>
+                                        <td className="p-2 text-center">{item.expectedQuantity ?? 'N/A'}</td>
+                                        <td className="p-2 text-center">
+                                            <input 
+                                                type="number" 
+                                                value={item.quantity || 0} 
+                                                onChange={(e) => updateQuantity(item._id, e.target.value)} 
+                                                className="w-20 text-center bg-transparent border rounded-md p-1"
+                                            />
+                                        </td>
+                                        <td className="p-2 text-center">
+                                            <button onClick={() => removeItem(item._id)} className="text-red-500 hover:text-red-700">
+                                                <Trash2 className="w-5 h-5" />
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    ) : (
+                        <p className="text-center text-gray-500">Brak pozycji na liście.</p>
+                    )}
+                    <div ref={listEndRef} />
+                </div>
+                <div className="flex gap-4">
+                    <button onClick={handleSave} className="flex items-center justify-center px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                        <Save className="w-5 h-5 mr-2"/> Zapisz inwentaryzację
+                    </button>
+                </div>
+            </div>
+            <div className="fixed bottom-0 left-0 lg:left-64 right-0 p-4 bg-white dark:bg-gray-800 border-t z-20">
+                <div className="max-w-4xl mx-auto relative">
+                    <input 
+                        type="text" 
+                        value={inputValue} 
+                        onChange={(e) => setInputValue(e.target.value)} 
+                        onKeyDown={handleKeyDown} 
+                        placeholder="Dodaj produkt (zatwierdź Enterem)" 
+                        className="w-full p-4 bg-gray-100 dark:bg-gray-700 border rounded-lg"
+                    />
+                    {suggestions.length > 0 && (
+                        <ul className="absolute bottom-full mb-2 w-full bg-white dark:bg-gray-700 border rounded-lg shadow-xl max-h-60 overflow-y-auto z-30">
+                            {suggestions.map(p => (
+                                <li key={p._id} onClick={() => addProductToInventory(p)} className="p-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 border-b">
+                                    <p className="font-semibold">{p.name}</p>
+                                    <p className="text-sm text-gray-500">{p.product_code}</p>
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
 };
 
 const InventoryDetails = ({ inventory, onBack }) => {
@@ -1236,7 +1320,7 @@ const HomeView = ({ user, setActiveView }) => {
     return (
         <div className="p-4 md:p-8">
             <h1 className="text-3xl md:text-4xl font-bold">Witaj, {user.username}!</h1>
-            <p className="mt-2 text-lg text-gray-500">{format(time, 'eeee, d MMMM yyyy, HH:mm:ss', { locale: pl })}</p>
+            <p className="mt-2 text-lg text-gray-500">{format(new Date(), 'eeee, d MMMM yyyy, HH:mm:ss', { locale: pl })}</p>
             <div className="mt-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 <StatCard title="Zamówień do skompletowania" value={stats?.pendingOrders} icon={<List className="h-8 w-8 text-orange-600" />} color="bg-orange-100" onClick={() => setActiveView('picking')} />
                 <StatCard title="Skompletowane zamówienia" value={stats?.completedOrders} icon={<CheckCircle className="h-8 w-8 text-green-600" />} color="bg-green-100" onClick={() => setActiveView('orders')} />
