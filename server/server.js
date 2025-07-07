@@ -56,7 +56,8 @@ const orderSchema = new mongoose.Schema({
     items: Array,
     total: Number,
     status: String,
-    date: { type: Date, default: Date.now }
+    date: { type: Date, default: Date.now },
+    isDirty: { type: Boolean, default: false }
 });
 const Order = mongoose.models.Order || mongoose.model('Order', orderSchema);
 
@@ -66,7 +67,8 @@ const inventorySchema = new mongoose.Schema({
     items: Array,
     totalItems: Number,
     totalQuantity: Number,
-    date: { type: Date, default: Date.now }
+    date: { type: Date, default: Date.now },
+    isDirty: { type: Boolean, default: false }
 });
 const Inventory = mongoose.models.Inventory || mongoose.model('Inventory', inventorySchema);
 
@@ -102,6 +104,33 @@ const adminMiddleware = (req, res, next) => {
         res.status(403).json({ message: 'Brak uprawnień administratora.' });
     }
 };
+
+// --- Funkcja pomocnicza do importu CSV ---
+const parseCsv = (buffer) => {
+    return new Promise((resolve, reject) => {
+        const items = [];
+        const decodedBuffer = iconv.decode(buffer, 'win1250');
+        const firstLine = decodedBuffer.split('\n')[0];
+        const separator = firstLine.includes(';') ? ';' : ',';
+
+        const readableStream = Readable.from(decodedBuffer);
+        readableStream
+            .pipe(csv({ headers: false, separator: separator }))
+            .on('data', (row) => {
+                const barcode = row[0]?.trim();
+                const quantityStr = row[1]?.trim();
+                if (barcode && quantityStr) {
+                    const quantity = parseInt(quantityStr, 10);
+                    if (!isNaN(quantity)) {
+                        items.push({ barcode, quantity });
+                    }
+                }
+            })
+            .on('end', () => resolve(items))
+            .on('error', (err) => reject(err));
+    });
+};
+
 
 // --- API Endpoints - Uwierzytelnianie ---
 app.post('/api/register', async (req, res) => {
@@ -350,7 +379,8 @@ app.get('/api/admin/all-products', authMiddleware, adminMiddleware, async (req, 
         res.json({
             products,
             totalPages: Math.ceil(count / limit),
-            currentPage: page
+            currentPage: parseInt(page, 10),
+            totalProducts: count
         });
     } catch (error) {
         res.status(500).json({ message: 'Błąd pobierania produktów' });
@@ -361,6 +391,7 @@ app.get('/api/admin/all-products', authMiddleware, adminMiddleware, async (req, 
 // --- API Endpoints - Dashboard ---
 app.get('/api/dashboard-stats', authMiddleware, async (req, res) => {
     try {
+        const productCount = await Product.countDocuments();
         const pendingOrders = await Order.countDocuments({ status: 'Zapisane' });
         const completedOrders = await Order.countDocuments({ status: 'Skompletowane' });
         
@@ -395,6 +426,7 @@ app.get('/api/dashboard-stats', authMiddleware, async (req, res) => {
         ]);
         
         res.json({ 
+            productCount,
             pendingOrders, 
             completedOrders, 
             ordersByAuthor,
@@ -429,20 +461,11 @@ app.get('/api/products', authMiddleware, async (req, res) => {
 app.post('/api/orders/import-csv', authMiddleware, upload.single('orderFile'), async (req, res) => {
     if (!req.file) return res.status(400).json({ message: 'Nie przesłano pliku.' });
     try {
-        const itemsFromCsv = [];
-        const decodedBuffer = iconv.decode(req.file.buffer, 'win1250');
-        const readableStream = Readable.from(decodedBuffer);
-        await new Promise((resolve, reject) => {
-            readableStream.pipe(csv({ headers: false, separator: /[,;]/ }))
-            .on('data', (row) => {
-                const barcode = row[0]?.trim();
-                const quantity = parseInt(row[1]?.trim(), 10);
-                if (barcode && !isNaN(quantity)) {
-                    itemsFromCsv.push({ barcode, quantity });
-                }
-            }).on('end', resolve).on('error', reject);
-        });
-        if (itemsFromCsv.length === 0) return res.status(400).json({ message: 'Plik CSV jest pusty lub ma nieprawidłowy format. Wymagane kolumny: ean,ilosc' });
+        const itemsFromCsv = await parseCsv(req.file.buffer);
+
+        if (itemsFromCsv.length === 0) {
+            return res.status(400).json({ message: 'Plik CSV jest pusty lub ma nieprawidłowy format. Wymagane kolumny: ean,ilosc (oddzielone przecinkiem lub średnikiem).' });
+        }
         
         const barcodes = itemsFromCsv.map(item => item.barcode);
         const foundProducts = await Product.find({ barcodes: { $in: barcodes } }).lean();
@@ -462,13 +485,16 @@ app.post('/api/orders/import-csv', authMiddleware, upload.single('orderFile'), a
             }
         }
         res.json({ items: orderItems, notFound: notFoundBarcodes });
-    } catch (error) { res.status(500).json({ message: 'Wystąpił błąd serwera podczas importu zamówienia.', error: error.message }); }
+    } catch (error) { 
+        console.error("Błąd importu CSV zamówienia:", error);
+        res.status(500).json({ message: 'Wystąpił błąd serwera podczas importu zamówienia.', error: error.message }); 
+    }
 });
 
 app.post('/api/orders', authMiddleware, async (req, res) => {
     const orderData = req.body;
     const total = (orderData.items || []).reduce((sum, item) => sum + (item.price * item.quantity), 0);
-    const newOrder = new Order({ id: `ZAM-${Date.now()}`, ...orderData, total: total, author: req.user.username, status: 'Zapisane' });
+    const newOrder = new Order({ id: `ZAM-${Date.now()}`, ...orderData, total: total, author: req.user.username, status: 'Zapisane', isDirty: false });
     try {
         const savedOrder = await newOrder.save();
         res.status(201).json({ message: 'Zamówienie zapisane!', order: savedOrder });
@@ -480,6 +506,7 @@ app.put('/api/orders/:id', authMiddleware, async (req, res) => {
     try {
         const orderData = req.body;
         orderData.total = (orderData.items || []).reduce((sum, item) => sum + (item.price * item.quantity), 0);
+        orderData.isDirty = false;
         const updatedOrder = await Order.findByIdAndUpdate(req.params.id, orderData, { new: true });
         if (!updatedOrder) return res.status(404).json({ message: 'Nie znaleziono zamówienia.' });
         res.json({ message: 'Zamówienie zaktualizowane!', order: updatedOrder });
@@ -549,7 +576,7 @@ app.post('/api/inventories', authMiddleware, async (req, res) => {
         if (!name || !items) return res.status(400).json({ message: 'Nazwa i lista produktów są wymagane.' });
         const totalItems = items.length;
         const totalQuantity = items.reduce((sum, item) => sum + (item.quantity || 0), 0);
-        const newInventory = new Inventory({ name, items, author: req.user.username, totalItems, totalQuantity });
+        const newInventory = new Inventory({ name, items, author: req.user.username, totalItems, totalQuantity, isDirty: false });
         await newInventory.save();
         res.status(201).json({ message: 'Inwentaryzacja została zapisana.', inventory: newInventory });
     } catch (error) {
@@ -563,7 +590,7 @@ app.put('/api/inventories/:id', authMiddleware, async (req, res) => {
         if (!name || !items) return res.status(400).json({ message: 'Nazwa i lista produktów są wymagane.' });
         const totalItems = items.length;
         const totalQuantity = items.reduce((sum, item) => sum + (item.quantity || 0), 0);
-        const updatedInventory = await Inventory.findByIdAndUpdate(req.params.id, { name, items, totalItems, totalQuantity }, { new: true });
+        const updatedInventory = await Inventory.findByIdAndUpdate(req.params.id, { name, items, totalItems, totalQuantity, isDirty: false }, { new: true });
         if (!updatedInventory) return res.status(404).json({ message: 'Nie znaleziono inwentaryzacji.' });
         res.status(200).json({ message: 'Inwentaryzacja zaktualizowana.', inventory: updatedInventory });
     } catch (error) {
@@ -603,20 +630,11 @@ app.delete('/api/inventories/:id', authMiddleware, adminMiddleware, async (req, 
 app.post('/api/inventories/import-sheet', authMiddleware, upload.single('sheetFile'), async (req, res) => {
     if (!req.file) return res.status(400).json({ message: 'Nie przesłano pliku.' });
     try {
-        const itemsFromCsv = [];
-        const decodedBuffer = iconv.decode(req.file.buffer, 'win1250');
-        const readableStream = Readable.from(decodedBuffer);
-        await new Promise((resolve, reject) => {
-            readableStream.pipe(csv({ headers: false, separator: /[,;]/ }))
-            .on('data', (row) => {
-                const barcode = row[0]?.trim();
-                const expectedQuantity = parseInt(row[1]?.trim(), 10);
-                if (barcode && !isNaN(expectedQuantity)) {
-                    itemsFromCsv.push({ barcode, expectedQuantity });
-                }
-            }).on('end', resolve).on('error', reject);
-        });
-        if (itemsFromCsv.length === 0) return res.status(400).json({ message: 'Plik CSV jest pusty lub ma nieprawidłowy format. Wymagane kolumny: ean,ilosc' });
+        const itemsFromCsv = await parseCsv(req.file.buffer);
+
+        if (itemsFromCsv.length === 0) {
+            return res.status(400).json({ message: 'Plik CSV jest pusty lub ma nieprawidłowy format. Wymagane kolumny: ean,ilosc (oddzielone przecinkiem lub średnikiem).' });
+        }
         
         const barcodes = itemsFromCsv.map(item => item.barcode);
         const foundProducts = await Product.find({ barcodes: { $in: barcodes } }).lean();
@@ -630,13 +648,17 @@ app.post('/api/inventories/import-sheet', authMiddleware, upload.single('sheetFi
         for (const csvItem of itemsFromCsv) {
             const product = productMap.get(csvItem.barcode);
             if (product) {
-                inventoryItems.push({ ...product, quantity: 0, expectedQuantity: csvItem.expectedQuantity });
+                // Dla arkusza inwentaryzacyjnego, ilość z pliku to ilość oczekiwana
+                inventoryItems.push({ ...product, quantity: 0, expectedQuantity: csvItem.quantity });
             } else {
                 notFoundBarcodes.push(csvItem.barcode);
             }
         }
         res.json({ items: inventoryItems, notFound: notFoundBarcodes });
-    } catch (error) { res.status(500).json({ message: 'Wystąpił błąd serwera podczas importu arkusza.', error: error.message }); }
+    } catch (error) { 
+        console.error("Błąd importu arkusza inwentaryzacyjnego:", error);
+        res.status(500).json({ message: 'Wystąpił błąd serwera podczas importu arkusza.', error: error.message }); 
+    }
 });
 
 // --- API Endpoints - Notatki ---
@@ -659,6 +681,22 @@ app.post('/api/notes', authMiddleware, async (req, res) => {
         res.status(500).json({ message: 'Błąd tworzenia notatki' });
     }
 });
+
+app.put('/api/notes/:id', authMiddleware, async (req, res) => {
+    try {
+        const { content, color, position } = req.body;
+        const note = await Note.findOneAndUpdate(
+            { _id: req.params.id, userId: req.user.userId },
+            { content, color, position },
+            { new: true }
+        );
+        if (!note) return res.status(404).json({ message: "Nie znaleziono notatki" });
+        res.json(note);
+    } catch (error) {
+        res.status(500).json({ message: 'Błąd aktualizacji notatki' });
+    }
+});
+
 
 app.delete('/api/notes/:id', authMiddleware, async (req, res) => {
     try {
