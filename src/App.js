@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, createContext, useContext, useCallback } from 'react';
-import { Search, List, Wrench, User, Sun, Moon, LogOut, FileDown, Printer, Save, CheckCircle, AlertTriangle, Upload, Trash2, XCircle, UserPlus, KeyRound, PlusCircle, MessageSquare, Archive, Edit, Home, Menu, Filter, RotateCcw, FileUp, GitMerge, Eye } from 'lucide-react';
+import { Search, List, Wrench, User, Sun, Moon, LogOut, FileDown, Printer, Save, CheckCircle, AlertTriangle, Upload, Trash2, XCircle, UserPlus, KeyRound, PlusCircle, MessageSquare, Archive, Edit, Home, Menu, Filter, RotateCcw, FileUp, GitMerge, Eye, Target, Trophy, Crown } from 'lucide-react';
 import { format } from 'date-fns';
 import { pl } from 'date-fns/locale';
 
@@ -767,6 +767,7 @@ const InventoryView = ({ user }) => {
     const [currentInventory, setCurrentInventory] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     const { showNotification } = useNotification();
+    const [deleteModal, setDeleteModal] = useState({ isOpen: false, invId: null });
 
     const fetchInventories = useCallback(async () => {
         setIsLoading(true);
@@ -786,11 +787,17 @@ const InventoryView = ({ user }) => {
         }
     }, [view, fetchInventories]);
 
-    const handleViewDetails = async (id) => {
+    const handleEdit = (inventory) => {
+        setCurrentInventory(inventory);
+        setView('edit');
+    };
+
+    const handleDelete = async () => {
         try {
-            const data = await api.getInventoryById(id);
-            setCurrentInventory(data);
-            setView('details');
+            await api.deleteInventory(deleteModal.invId);
+            showNotification('Inwentaryzacja usunięta.', 'success');
+            setDeleteModal({ isOpen: false, invId: null });
+            fetchInventories();
         } catch (error) {
             showNotification(error.message, 'error');
         }
@@ -803,9 +810,9 @@ const InventoryView = ({ user }) => {
     if (view === 'new') {
         return <NewInventorySheet user={user} onSave={() => setView('list')} />;
     }
-
-    if (view === 'details' && currentInventory) {
-        return <InventoryDetails inventory={currentInventory} onBack={() => setView('list')} />;
+    
+    if (view === 'edit' && currentInventory) {
+        return <NewInventorySheet user={user} onSave={() => setView('list')} existingInventory={currentInventory} />;
     }
 
     return (
@@ -827,23 +834,33 @@ const InventoryView = ({ user }) => {
                                 <td className="p-4">{format(new Date(inv.date), 'd MMM yy, HH:mm', { locale: pl })}</td>
                                 <td className="p-4">{inv.totalItems}</td>
                                 <td className="p-4">{inv.totalQuantity}</td>
-                                <td className="p-4"><button onClick={() => handleViewDetails(inv._id)} className="p-2 text-blue-500 hover:text-blue-700"><Eye className="w-5 h-5"/></button></td>
+                                <td className="p-4">
+                                    <button onClick={() => handleEdit(inv)} className="p-2 text-blue-500 hover:text-blue-700"><Edit className="w-5 h-5"/></button>
+                                    {user.role === 'administrator' && (
+                                        <button onClick={() => setDeleteModal({ isOpen: true, invId: inv._id })} className="p-2 text-red-500 hover:text-red-700"><Trash2 className="w-5 h-5"/></button>
+                                    )}
+                                </td>
                             </tr>
                         ))}
                     </tbody>
                 </table>
             </div>
+            <Modal isOpen={deleteModal.isOpen} onClose={() => setDeleteModal({ isOpen: false, invId: null })} title="Potwierdź usunięcie">
+                <p>Czy na pewno chcesz usunąć tę inwentaryzację? Tej operacji nie można cofnąć.</p>
+                <div className="flex justify-end gap-4 mt-6"><button onClick={() => setDeleteModal({ isOpen: false, invId: null })} className="px-4 py-2 bg-gray-200 dark:bg-gray-600 rounded-lg">Anuluj</button><button onClick={handleDelete} className="px-4 py-2 bg-red-600 text-white rounded-lg">Usuń</button></div>
+            </Modal>
         </div>
     );
 };
 
-const NewInventorySheet = ({ user, onSave }) => {
-    const [listName, setListName] = useState('');
-    const [inventoryItems, setInventoryItems] = useState([]);
+const NewInventorySheet = ({ user, onSave, existingInventory = null }) => {
+    const [listName, setListName] = useState(existingInventory?.name || '');
+    const [inventoryItems, setInventoryItems] = useState(existingInventory?.items || []);
     const [inputValue, setInputValue] = useState('');
     const [suggestions, setSuggestions] = useState([]);
     const { showNotification } = useNotification();
     const listEndRef = useRef(null);
+    const importFileRef = useRef(null);
 
     const scrollToBottom = () => listEndRef.current?.scrollIntoView({ behavior: "smooth" });
     useEffect(scrollToBottom, [inventoryItems]);
@@ -862,7 +879,7 @@ const NewInventorySheet = ({ user, onSave }) => {
     const addProductToInventory = (product) => {
         const existingItem = inventoryItems.find(item => item._id === product._id);
         if (existingItem) {
-            setInventoryItems(inventoryItems.map(item => item._id === product._id ? { ...item, quantity: item.quantity + 1 } : item));
+            setInventoryItems(inventoryItems.map(item => item._id === product._id ? { ...item, quantity: (item.quantity || 0) + 1 } : item));
         } else {
             setInventoryItems([...inventoryItems, { ...product, quantity: 1, isCustom: false }]);
         }
@@ -902,7 +919,8 @@ const NewInventorySheet = ({ user, onSave }) => {
             return;
         }
         try {
-            await api.saveInventory({ name: listName, items: inventoryItems });
+            const payload = { _id: existingInventory?._id, name: listName, items: inventoryItems };
+            await api.saveInventory(payload);
             showNotification('Inwentaryzacja została pomyślnie zapisana.', 'success');
             onSave();
         } catch (error) {
@@ -910,20 +928,23 @@ const NewInventorySheet = ({ user, onSave }) => {
         }
     };
 
-    const handleExport = () => {
-        const csvData = inventoryItems.map(item => `${(item.barcodes && item.barcodes[0]) || ''},${item.quantity}`).join('\n');
-        const blob = new Blob([`\uFEFF${csvData}`], { type: 'text/csv;charset=utf-8;' });
-        const link = document.createElement("a");
-        const url = URL.createObjectURL(blob);
-        link.setAttribute("href", url);
-        link.setAttribute("download", `inwentaryzacja_${listName.replace(/\s/g, '_') || 'lista'}.csv`);
-        link.style.visibility = 'hidden';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+    const handleFileImport = async (event) => {
+        const file = event.target.files[0];
+        if (!file) return;
+        try {
+            const { items, notFound } = await api.importInventorySheet(file);
+            setInventoryItems(items);
+            showNotification(`Zaimportowano ${items.length} pozycji do arkusza.`, 'success');
+            if (notFound.length > 0) {
+                showNotification(`Nie znaleziono produktów dla kodów: ${notFound.join(', ')}`, 'error');
+            }
+        } catch (error) {
+            showNotification(error.message, 'error');
+        }
+        event.target.value = null;
     };
 
-    return (<div className="h-full flex flex-col"><div className="p-4 md:p-8 pb-36"><div className="flex-shrink-0"><h1 className="text-3xl font-bold mb-4">Nowa Inwentaryzacja</h1><input type="text" value={listName} onChange={(e) => setListName(e.target.value)} placeholder="Wprowadź nazwę listy spisowej" className="w-full max-w-lg p-3 mb-6 bg-white dark:bg-gray-700 border rounded-lg"/></div><div className="flex-grow overflow-y-auto bg-gray-50 dark:bg-gray-900 p-4 rounded-lg shadow-inner mb-4">{inventoryItems.length > 0 ? <table className="w-full text-left"><thead><tr className="border-b"><th className="p-3">Nazwa</th><th className="p-3">Kod produktu</th><th className="p-3 text-center">Ilość</th><th className="p-3 text-center">Akcje</th></tr></thead><tbody>{inventoryItems.map(item => <tr key={item._id} className={`border-b last:border-0 ${item.isCustom ? 'text-red-500' : ''}`}><td className="p-2 font-medium">{item.name}</td><td className="p-2">{item.product_code}</td><td className="p-2 text-center"><input type="number" value={item.quantity} onChange={(e) => updateQuantity(item._id, e.target.value)} className="w-20 text-center bg-transparent border rounded-md p-1"/></td><td className="p-2 text-center"><button onClick={() => removeItem(item._id)} className="text-red-500 hover:text-red-700"><Trash2 className="w-5 h-5" /></button></td></tr>)}</tbody></table> : <p className="text-center text-gray-500">Brak pozycji na liście.</p>}<div ref={listEndRef} /></div><div className="flex gap-4"><button onClick={handleSave} className="flex items-center justify-center px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700"><Save className="w-5 h-5 mr-2"/> Zapisz inwentaryzację</button><button onClick={handleExport} className="flex items-center justify-center px-5 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700"><FileDown className="w-5 h-5 mr-2"/> Eksportuj (EAN, Ilość)</button></div></div><div className="fixed bottom-0 left-0 lg:left-64 right-0 p-4 bg-white dark:bg-gray-800 border-t z-20"><div className="max-w-4xl mx-auto relative"><input type="text" value={inputValue} onChange={(e) => setInputValue(e.target.value)} onKeyDown={handleKeyDown} placeholder="Dodaj produkt (zatwierdź Enterem)" className="w-full p-4 bg-gray-100 dark:bg-gray-700 border rounded-lg"/>{suggestions.length > 0 && <ul className="absolute bottom-full mb-2 w-full bg-white dark:bg-gray-700 border rounded-lg shadow-xl max-h-60 overflow-y-auto z-30">{suggestions.map(p => <li key={p._id} onClick={() => addProductToInventory(p)} className="p-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 border-b"><p className="font-semibold">{p.name}</p><p className="text-sm text-gray-500">{p.product_code}</p></li>)}</ul>}</div></div></div>);
+    return (<div className="h-full flex flex-col"><div className="p-4 md:p-8 pb-36"><div className="flex justify-between items-center mb-4"><h1 className="text-3xl font-bold">{existingInventory ? 'Edycja' : 'Nowa'} Inwentaryzacja</h1><div className="flex gap-2"><input type="file" ref={importFileRef} onChange={handleFileImport} className="hidden" accept=".csv" /><button onClick={() => importFileRef.current.click()} className="flex items-center px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600"><FileUp className="w-5 h-5 mr-2"/> Importuj Arkusz</button></div></div><input type="text" value={listName} onChange={(e) => setListName(e.target.value)} placeholder="Wprowadź nazwę listy spisowej" className="w-full max-w-lg p-3 mb-6 bg-white dark:bg-gray-700 border rounded-lg"/></div><div className="flex-grow overflow-y-auto bg-gray-50 dark:bg-gray-900 p-4 rounded-lg shadow-inner mb-4">{inventoryItems.length > 0 ? <table className="w-full text-left"><thead><tr className="border-b"><th className="p-3">Nazwa</th><th className="p-3">Kod produktu</th><th className="p-3 text-center">Ilość Oczekiwana</th><th className="p-3 text-center">Ilość Zliczona</th><th className="p-3 text-center">Akcje</th></tr></thead><tbody>{inventoryItems.map(item => <tr key={item._id} className={`border-b last:border-0 ${item.isCustom ? 'text-red-500' : ''}`}><td className="p-2 font-medium">{item.name}</td><td className="p-2">{item.product_code}</td><td className="p-2 text-center">{item.expectedQuantity ?? 'N/A'}</td><td className="p-2 text-center"><input type="number" value={item.quantity || 0} onChange={(e) => updateQuantity(item._id, e.target.value)} className="w-20 text-center bg-transparent border rounded-md p-1"/></td><td className="p-2 text-center"><button onClick={() => removeItem(item._id)} className="text-red-500 hover:text-red-700"><Trash2 className="w-5 h-5" /></button></td></tr>)}</tbody></table> : <p className="text-center text-gray-500">Brak pozycji na liście.</p>}<div ref={listEndRef} /></div><div className="flex gap-4"><button onClick={handleSave} className="flex items-center justify-center px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700"><Save className="w-5 h-5 mr-2"/> Zapisz inwentaryzację</button></div></div><div className="fixed bottom-0 left-0 lg:left-64 right-0 p-4 bg-white dark:bg-gray-800 border-t z-20"><div className="max-w-4xl mx-auto relative"><input type="text" value={inputValue} onChange={(e) => setInputValue(e.target.value)} onKeyDown={handleKeyDown} placeholder="Dodaj produkt (zatwierdź Enterem)" className="w-full p-4 bg-gray-100 dark:bg-gray-700 border rounded-lg"/>{suggestions.length > 0 && <ul className="absolute bottom-full mb-2 w-full bg-white dark:bg-gray-700 border rounded-lg shadow-xl max-h-60 overflow-y-auto z-30">{suggestions.map(p => <li key={p._id} onClick={() => addProductToInventory(p)} className="p-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 border-b"><p className="font-semibold">{p.name}</p><p className="text-sm text-gray-500">{p.product_code}</p></li>)}</ul>}</div></div></div>);
 };
 
 const InventoryDetails = ({ inventory, onBack }) => {
