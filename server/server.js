@@ -69,7 +69,6 @@ const inventorySchema = new mongoose.Schema({
 });
 const Inventory = mongoose.models.Inventory || mongoose.model('Inventory', inventorySchema);
 
-
 // --- Middleware ---
 const authMiddleware = (req, res, next) => {
     const authHeader = req.headers.authorization;
