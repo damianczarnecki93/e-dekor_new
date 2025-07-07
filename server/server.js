@@ -109,7 +109,7 @@ const adminMiddleware = (req, res, next) => {
 const parseCsv = (buffer) => {
     return new Promise((resolve, reject) => {
         const items = [];
-        const decodedBuffer = iconv.decode(buffer, 'win1250');
+        const decodedBuffer = iconv.decode(buffer, 'UTF-8');
         const firstLine = decodedBuffer.split('\n')[0];
         const separator = firstLine.includes(';') ? ';' : ',';
 
@@ -265,7 +265,7 @@ app.post('/api/admin/upload-products', authMiddleware, adminMiddleware, upload.s
     try {
         const productsToImport = [];
         const csvHeaders = ['barcode', 'name', 'price', 'product_code', 'quantity', 'availability'];
-        const decodedBuffer = iconv.decode(req.file.buffer, 'win1250');
+        const decodedBuffer = iconv.decode(req.file.buffer, 'UTF-8');
         const readableStream = Readable.from(decodedBuffer);
         
         await new Promise((resolve, reject) => {
@@ -311,7 +311,7 @@ app.post('/api/admin/merge-products', authMiddleware, adminMiddleware, async (re
         const productInfo = new Map();
         const p2Path = path.join(__dirname, 'produkty2.csv');
         if (fs.existsSync(p2Path)) {
-            const stream2 = fs.createReadStream(p2Path).pipe(iconv.decodeStream('win1250')).pipe(csv({ separator: ';' }));
+            const stream2 = fs.createReadStream(p2Path).pipe(iconv.decodeStream('UTF-8')).pipe(csv({ separator: ';' }));
             for await (const row of stream2) {
                 if (row.product_code) {
                     productInfo.set(row.product_code, { name: row.name });
