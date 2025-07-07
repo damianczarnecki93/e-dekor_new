@@ -267,8 +267,9 @@ app.post('/api/admin/upload-products', authMiddleware, adminMiddleware, upload.s
         const csvHeaders = ['barcode', 'name', 'price', 'product_code', 'quantity', 'availability'];
         const decodedBuffer = iconv.decode(req.file.buffer, 'win1250');
         const readableStream = Readable.from(decodedBuffer);
+        
         await new Promise((resolve, reject) => {
-            readableStream.pipe(csv({ headers: csvHeaders, skipLines: 1 }))
+            readableStream.pipe(csv({ headers: csvHeaders, separator: ';', skipLines: 1 }))
                 .on('data', (row) => {
                     if (!row.barcode) return;
                     productsToImport.push({
@@ -281,6 +282,7 @@ app.post('/api/admin/upload-products', authMiddleware, adminMiddleware, upload.s
                     });
                 }).on('end', resolve).on('error', reject);
         });
+
         if (productsToImport.length === 0) return res.status(400).json({ message: 'Plik CSV jest pusty lub nie zawiera poprawnych danych.' });
 
         if (mode === 'overwrite') {
