@@ -34,7 +34,8 @@ const userSchema = new mongoose.Schema({
     username: { type: String, required: true, unique: true, lowercase: true },
     password: { type: String, required: true },
     role: { type: String, default: 'user', enum: ['user', 'administrator'] },
-    status: { type: String, enum: ['oczekujący', 'zaakceptowany'], default: 'oczekujący' }
+    status: { type: String, enum: ['oczekujący', 'zaakceptowany'], default: 'oczekujący' },
+    salesGoal: { type: Number, default: 0 }
 });
 const User = mongoose.models.User || mongoose.model('User', userSchema);
 
@@ -68,6 +69,15 @@ const inventorySchema = new mongoose.Schema({
     date: { type: Date, default: Date.now }
 });
 const Inventory = mongoose.models.Inventory || mongoose.model('Inventory', inventorySchema);
+
+const noteSchema = new mongoose.Schema({
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    content: String,
+    color: String,
+    position: { x: Number, y: Number },
+    date: { type: Date, default: Date.now }
+});
+const Note = mongoose.models.Note || mongoose.model('Note', noteSchema);
 
 // --- Middleware ---
 const authMiddleware = (req, res, next) => {
@@ -123,7 +133,7 @@ app.post('/api/login', async (req, res) => {
         const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) return res.status(401).json({ message: 'Nieprawidłowe dane logowania.' });
         const token = jwt.sign({ userId: user._id, role: user.role, username: user.username }, jwtSecret, { expiresIn: '1d' });
-        res.json({ token, user: { id: user._id, username: user.username, role: user.role } });
+        res.json({ token, user: { id: user._id, username: user.username, role: user.role, salesGoal: user.salesGoal } });
     } catch (error) {
         res.status(500).json({ message: 'Błąd serwera podczas logowania.', error: error.message });
     }
@@ -141,6 +151,16 @@ app.post('/api/user/password', authMiddleware, async (req, res) => {
         res.json({ message: 'Hasło zostało zmienione.' });
     } catch (error) {
         res.status(500).json({ message: 'Błąd serwera podczas zmiany hasła.' });
+    }
+});
+
+app.post('/api/user/goal', authMiddleware, async (req, res) => {
+    try {
+        const { goal } = req.body;
+        const user = await User.findByIdAndUpdate(req.user.userId, { salesGoal: goal }, { new: true });
+        res.json({ salesGoal: user.salesGoal });
+    } catch (error) {
+        res.status(500).json({ message: 'Błąd podczas ustawiania celu.' });
     }
 });
 
@@ -309,17 +329,79 @@ app.post('/api/admin/merge-products', authMiddleware, adminMiddleware, async (re
     }
 });
 
+app.get('/api/admin/all-products', authMiddleware, adminMiddleware, async (req, res) => {
+    try {
+        const { page = 1, limit = 20, search = '' } = req.query;
+        const query = search ? {
+            $or: [
+                { name: { $regex: search, $options: 'i' } },
+                { product_code: { $regex: search, $options: 'i' } },
+                { barcodes: { $regex: search, $options: 'i' } }
+            ]
+        } : {};
+
+        const products = await Product.find(query)
+            .limit(limit * 1)
+            .skip((page - 1) * limit)
+            .exec();
+        
+        const count = await Product.countDocuments(query);
+
+        res.json({
+            products,
+            totalPages: Math.ceil(count / limit),
+            currentPage: page
+        });
+    } catch (error) {
+        res.status(500).json({ message: 'Błąd pobierania produktów' });
+    }
+});
+
 
 // --- API Endpoints - Dashboard ---
 app.get('/api/dashboard-stats', authMiddleware, async (req, res) => {
     try {
         const pendingOrders = await Order.countDocuments({ status: 'Zapisane' });
         const completedOrders = await Order.countDocuments({ status: 'Skompletowane' });
+        
         const ordersByAuthor = await Order.aggregate([
             { $group: { _id: '$author', count: { $sum: 1 } } },
             { $sort: { count: -1 } }
         ]);
-        res.json({ pendingOrders, completedOrders, ordersByAuthor });
+
+        const topProducts = await Order.aggregate([
+            { $unwind: "$items" },
+            { $group: { _id: "$items.name", totalSold: { $sum: "$items.quantity" } } },
+            { $sort: { totalSold: -1 } },
+            { $limit: 5 }
+        ]);
+
+        const topCustomers = await Order.aggregate([
+            { $group: { _id: "$customerName", orderCount: { $sum: 1 } } },
+            { $sort: { orderCount: -1 } },
+            { $limit: 5 }
+        ]);
+
+        const startOfMonth = new Date();
+        startOfMonth.setDate(1);
+        startOfMonth.setHours(0, 0, 0, 0);
+
+        const endOfMonth = new Date(startOfMonth);
+        endOfMonth.setMonth(endOfMonth.getMonth() + 1);
+
+        const monthlySales = await Order.aggregate([
+            { $match: { date: { $gte: startOfMonth, $lt: endOfMonth }, author: req.user.username } },
+            { $group: { _id: null, total: { $sum: "$total" } } }
+        ]);
+        
+        res.json({ 
+            pendingOrders, 
+            completedOrders, 
+            ordersByAuthor,
+            topProducts,
+            topCustomers,
+            monthlySales: monthlySales.length > 0 ? monthlySales[0].total : 0
+        });
     } catch (error) {
         res.status(500).json({ message: 'Błąd pobierania statystyk.' });
     }
@@ -555,6 +637,37 @@ app.post('/api/inventories/import-sheet', authMiddleware, upload.single('sheetFi
         }
         res.json({ items: inventoryItems, notFound: notFoundBarcodes });
     } catch (error) { res.status(500).json({ message: 'Wystąpił błąd serwera podczas importu arkusza.', error: error.message }); }
+});
+
+// --- API Endpoints - Notatki ---
+app.get('/api/notes', authMiddleware, async (req, res) => {
+    try {
+        const notes = await Note.find({ userId: req.user.userId });
+        res.json(notes);
+    } catch (error) {
+        res.status(500).json({ message: 'Błąd pobierania notatek' });
+    }
+});
+
+app.post('/api/notes', authMiddleware, async (req, res) => {
+    try {
+        const { content, color, position } = req.body;
+        const newNote = new Note({ userId: req.user.userId, content, color, position });
+        await newNote.save();
+        res.status(201).json(newNote);
+    } catch (error) {
+        res.status(500).json({ message: 'Błąd tworzenia notatki' });
+    }
+});
+
+app.delete('/api/notes/:id', authMiddleware, async (req, res) => {
+    try {
+        const note = await Note.findOneAndDelete({ _id: req.params.id, userId: req.user.userId });
+        if (!note) return res.status(404).json({ message: "Nie znaleziono notatki" });
+        res.json({ message: "Notatka usunięta" });
+    } catch (error) {
+        res.status(500).json({ message: 'Błąd usuwania notatki' });
+    }
 });
 
 
