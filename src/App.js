@@ -1212,7 +1212,7 @@ const HomeView = ({ user, setActiveView }) => {
     return (
         <div className="p-4 md:p-8">
             <h1 className="text-3xl md:text-4xl font-bold">Witaj, {user.username}!</h1>
-            <p className="mt-2 text-lg text-gray-500">{format(time, 'eeee, d MMMM yyyy, HH:mm:ss', { locale: pl })}</p>
+            <p className="mt-2 text-lg text-gray-500">{format(time, 'eeee, d MMMMurupani, HH:mm:ss', { locale: pl })}</p>
             <div className="mt-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 <StatCard title="Zamówień do skompletowania" value={stats?.pendingOrders} icon={<List className="h-8 w-8 text-orange-600" />} color="bg-orange-100" onClick={() => setActiveView('picking')} />
                 <StatCard title="Skompletowane zamówienia" value={stats?.completedOrders} icon={<CheckCircle className="h-8 w-8 text-green-600" />} color="bg-green-100" onClick={() => setActiveView('orders')} />
