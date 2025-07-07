@@ -322,14 +322,31 @@ const OrderView = ({ currentOrder, setCurrentOrder, user }) => {
     const printRef = useRef(null);
     const importFileRef = useRef(null);
     const { showNotification } = useNotification();
+    const [isDirty, setIsDirty] = useState(false);
 
-    useEffect(() => { setOrder(currentOrder); }, [currentOrder]);
+    useEffect(() => { 
+        setOrder(currentOrder);
+        setIsDirty(false); 
+    }, [currentOrder]);
+    
+    useEffect(() => {
+        const handleBeforeUnload = (e) => {
+            if (isDirty) {
+                e.preventDefault();
+                e.returnValue = '';
+            }
+        };
+        window.addEventListener('beforeunload', handleBeforeUnload);
+        return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+    }, [isDirty]);
+
     const scrollToBottom = () => listEndRef.current?.scrollIntoView({ behavior: "smooth" });
     useEffect(scrollToBottom, [order.items]);
 
     const updateOrder = (updatedOrder) => {
         setOrder(updatedOrder);
         setCurrentOrder(updatedOrder);
+        setIsDirty(true);
     };
 
     const addProductToOrder = (product) => {
@@ -362,11 +379,14 @@ const OrderView = ({ currentOrder, setCurrentOrder, user }) => {
             const { message, order: savedOrder } = await api.saveOrder(orderToSave);
             showNotification(message, 'success');
             updateOrder(savedOrder);
+            setIsDirty(false);
         } catch (error) { showNotification(error.message, 'error'); }
     };
 
     const handleNewOrder = async () => {
-        if (order._id && (order.customerName || (order.items && order.items.length > 0))) { await handleSaveOrder(); }
+        if (isDirty && window.confirm("Masz niezapisane zmiany. Czy chcesz je zapisać przed utworzeniem nowego zamówienia?")) {
+            await handleSaveOrder();
+        }
         setCurrentOrder({ customerName: '', items: [] });
     };
 
