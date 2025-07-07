@@ -69,6 +69,7 @@ const inventorySchema = new mongoose.Schema({
 });
 const Inventory = mongoose.models.Inventory || mongoose.model('Inventory', inventorySchema);
 
+
 // --- Middleware ---
 const authMiddleware = (req, res, next) => {
     const authHeader = req.headers.authorization;
@@ -351,22 +352,16 @@ app.post('/api/orders/import-csv', authMiddleware, upload.single('orderFile'), a
         const decodedBuffer = iconv.decode(req.file.buffer, 'win1250');
         const readableStream = Readable.from(decodedBuffer);
         await new Promise((resolve, reject) => {
-            readableStream.pipe(csv({
-                mapHeaders: ({ header }) => {
-                    const lowerCaseHeader = header.toLowerCase().trim();
-                    if (lowerCaseHeader.includes('kod_kreskowy') || lowerCaseHeader.includes('barcode')) return 'barcode';
-                    if (lowerCaseHeader.includes('ilość') || lowerCaseHeader.includes('quantity')) return 'quantity';
-                    return null;
-                },
-                separator: /[,;]/
-            }))
+            readableStream.pipe(csv({ headers: false, separator: /[,;]/ }))
             .on('data', (row) => {
-                if (row.barcode && row.quantity) {
-                    itemsFromCsv.push({ barcode: row.barcode.trim(), quantity: parseInt(row.quantity.trim(), 10) });
+                const barcode = row[0]?.trim();
+                const quantity = parseInt(row[1]?.trim(), 10);
+                if (barcode && !isNaN(quantity)) {
+                    itemsFromCsv.push({ barcode, quantity });
                 }
             }).on('end', resolve).on('error', reject);
         });
-        if (itemsFromCsv.length === 0) return res.status(400).json({ message: 'Plik CSV jest pusty lub ma nieprawidłowy format. Wymagane kolumny: barcode/kod_kreskowy, quantity/ilość' });
+        if (itemsFromCsv.length === 0) return res.status(400).json({ message: 'Plik CSV jest pusty lub ma nieprawidłowy format. Wymagane kolumny: ean,ilosc' });
         
         const barcodes = itemsFromCsv.map(item => item.barcode);
         const foundProducts = await Product.find({ barcodes: { $in: barcodes } }).lean();
@@ -466,18 +461,32 @@ app.delete('/api/orders/:id', authMiddleware, async (req, res) => {
 });
 
 
-// --- NOWE API Endpoints - Inwentaryzacja ---
+// --- API Endpoints - Inwentaryzacja ---
 app.post('/api/inventories', authMiddleware, async (req, res) => {
     try {
         const { name, items } = req.body;
         if (!name || !items) return res.status(400).json({ message: 'Nazwa i lista produktów są wymagane.' });
         const totalItems = items.length;
-        const totalQuantity = items.reduce((sum, item) => sum + item.quantity, 0);
+        const totalQuantity = items.reduce((sum, item) => sum + (item.quantity || 0), 0);
         const newInventory = new Inventory({ name, items, author: req.user.username, totalItems, totalQuantity });
         await newInventory.save();
         res.status(201).json({ message: 'Inwentaryzacja została zapisana.', inventory: newInventory });
     } catch (error) {
         res.status(500).json({ message: 'Błąd podczas zapisywania inwentaryzacji.', error: error.message });
+    }
+});
+
+app.put('/api/inventories/:id', authMiddleware, async (req, res) => {
+    try {
+        const { name, items } = req.body;
+        if (!name || !items) return res.status(400).json({ message: 'Nazwa i lista produktów są wymagane.' });
+        const totalItems = items.length;
+        const totalQuantity = items.reduce((sum, item) => sum + (item.quantity || 0), 0);
+        const updatedInventory = await Inventory.findByIdAndUpdate(req.params.id, { name, items, totalItems, totalQuantity }, { new: true });
+        if (!updatedInventory) return res.status(404).json({ message: 'Nie znaleziono inwentaryzacji.' });
+        res.status(200).json({ message: 'Inwentaryzacja zaktualizowana.', inventory: updatedInventory });
+    } catch (error) {
+        res.status(500).json({ message: 'Błąd podczas aktualizacji inwentaryzacji.', error: error.message });
     }
 });
 
@@ -498,6 +507,55 @@ app.get('/api/inventories/:id', authMiddleware, async (req, res) => {
     } catch (error) {
         res.status(500).json({ message: 'Błąd pobierania inwentaryzacji.' });
     }
+});
+
+app.delete('/api/inventories/:id', authMiddleware, adminMiddleware, async (req, res) => {
+    try {
+        const inventory = await Inventory.findByIdAndDelete(req.params.id);
+        if (!inventory) return res.status(404).json({ message: 'Nie znaleziono inwentaryzacji.' });
+        res.status(200).json({ message: 'Inwentaryzacja usunięta.' });
+    } catch (error) {
+        res.status(500).json({ message: 'Błąd podczas usuwania inwentaryzacji.' });
+    }
+});
+
+app.post('/api/inventories/import-sheet', authMiddleware, upload.single('sheetFile'), async (req, res) => {
+    if (!req.file) return res.status(400).json({ message: 'Nie przesłano pliku.' });
+    try {
+        const itemsFromCsv = [];
+        const decodedBuffer = iconv.decode(req.file.buffer, 'win1250');
+        const readableStream = Readable.from(decodedBuffer);
+        await new Promise((resolve, reject) => {
+            readableStream.pipe(csv({ headers: false, separator: /[,;]/ }))
+            .on('data', (row) => {
+                const barcode = row[0]?.trim();
+                const expectedQuantity = parseInt(row[1]?.trim(), 10);
+                if (barcode && !isNaN(expectedQuantity)) {
+                    itemsFromCsv.push({ barcode, expectedQuantity });
+                }
+            }).on('end', resolve).on('error', reject);
+        });
+        if (itemsFromCsv.length === 0) return res.status(400).json({ message: 'Plik CSV jest pusty lub ma nieprawidłowy format. Wymagane kolumny: ean,ilosc' });
+        
+        const barcodes = itemsFromCsv.map(item => item.barcode);
+        const foundProducts = await Product.find({ barcodes: { $in: barcodes } }).lean();
+        const productMap = new Map();
+        foundProducts.forEach(p => {
+            p.barcodes.forEach(b => productMap.set(b, p));
+        });
+
+        const inventoryItems = [];
+        const notFoundBarcodes = [];
+        for (const csvItem of itemsFromCsv) {
+            const product = productMap.get(csvItem.barcode);
+            if (product) {
+                inventoryItems.push({ ...product, quantity: 0, expectedQuantity: csvItem.expectedQuantity });
+            } else {
+                notFoundBarcodes.push(csvItem.barcode);
+            }
+        }
+        res.json({ items: inventoryItems, notFound: notFoundBarcodes });
+    } catch (error) { res.status(500).json({ message: 'Wystąpił błąd serwera podczas importu arkusza.', error: error.message }); }
 });
 
 
