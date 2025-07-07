@@ -928,7 +928,7 @@ const InventoryDetails = ({ inventory, onBack }) => {
         <div className="p-4 md:p-8">
             <button onClick={onBack} className="mb-4 text-indigo-600 hover:underline">&larr; Powrót do listy</button>
             <h1 className="text-3xl font-bold">{inventory.name}</h1>
-            <p className="text-gray-500">Autor: {inventory.author} | Data: {format(new Date(inventory.date), 'd MMM<y_bin_423>, HH:mm', { locale: pl })}</p>
+            <p className="text-gray-500">Autor: {inventory.author} | Data: {format(new Date(inventory.date), 'd MMM yyyy, HH:mm', { locale: pl })}</p>
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-x-auto mt-6">
                 <table className="w-full text-left">
                     <thead className="bg-gray-50 dark:bg-gray-700"><tr><th className="p-4">Nazwa</th><th className="p-4">Kod produktu</th><th className="p-4">Kody EAN</th><th className="p-4 text-center">Ilość</th></tr></thead>
