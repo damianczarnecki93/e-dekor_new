@@ -1503,7 +1503,7 @@ const DashboardView = ({ user, onNavigate }) => {
     return (
         <div className="p-4 md:p-8">
             <h1 className="text-3xl md:text-4xl font-bold">Witaj, {user.username}!</h1>
-            <p className="mt-2 text-lg text-gray-500 dark:text-gray-400">{format(new Date(), 'eeee, d MMMM Yfine', { locale: pl })}</p>
+            <p className="mt-2 text-lg text-gray-500 dark:text-gray-400">{format(new Date(), 'eeee, PPPP', { locale: pl })}</p>
             
             <div className="mt-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 <StatCard title="Produktów w bazie" value={stats?.productCount} icon={<Package className="h-8 w-8 text-blue-600" />} color="bg-blue-100 dark:bg-blue-900/30" />
