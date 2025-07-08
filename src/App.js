@@ -340,16 +340,24 @@ const ProductDetailsCard = ({ product }) => (
 
 const MainSearchView = () => {
     const [selectedProduct, setSelectedProduct] = useState(null);
+    const searchInputRef = useRef(null);
+
+    const handleProductSelect = (product) => {
+        setSelectedProduct(product);
+        // Pozostaw okno aktywne
+        setTimeout(() => searchInputRef.current?.focus(), 0);
+    };
+
     return (
         <div className="p-4 md:p-8">
             <h1 className="text-3xl font-bold mb-6 text-gray-800 dark:text-white">Szybkie Wyszukiwanie</h1>
-            <SearchView onProductSelect={setSelectedProduct} />
+            <SearchView onProductSelect={handleProductSelect} inputRef={searchInputRef} />
             {selectedProduct && <ProductDetailsCard product={selectedProduct} />}
         </div>
     );
 };
 
-const SearchView = ({ onProductSelect, showFilter = true }) => {
+const SearchView = ({ onProductSelect, showFilter = true, inputRef }) => {
     const [query, setQuery] = useState('');
     const [suggestions, setSuggestions] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
@@ -379,7 +387,7 @@ const SearchView = ({ onProductSelect, showFilter = true }) => {
         <div className="relative max-w-2xl mx-auto">
             <div className="flex items-center bg-white dark:bg-gray-700 rounded-full shadow-lg">
                 <Search className="h-6 w-6 ml-4 text-gray-400" />
-                <input type="text" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Wpisz kod EAN, kod produktu lub nazwę..." className="w-full p-4 bg-transparent focus:outline-none text-gray-900 dark:text-white" />
+                <input ref={inputRef} type="text" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Wpisz kod EAN, kod produktu lub nazwę..." className="w-full p-4 bg-transparent focus:outline-none text-gray-900 dark:text-white" />
             </div>
             {showFilter && (
                 <div className="flex items-center justify-center mt-4">
@@ -509,6 +517,14 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty }) => {
     const printRef = useRef(null);
     const importFileRef = useRef(null);
     const { showNotification } = useNotification();
+    const { items: sortedItems, requestSort, sortConfig } = useSortableData(order.items || []);
+
+    const getSortIcon = (name) => {
+        if (!sortConfig || sortConfig.key !== name) {
+            return <ChevronsUpDown className="w-4 h-4 ml-1 opacity-40" />;
+        }
+        return sortConfig.direction === 'ascending' ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />;
+    };
     
     useEffect(() => { 
         setOrder(currentOrder);
@@ -638,9 +654,18 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty }) => {
                     <div className="print-header hidden p-4"><h2 className="text-2xl font-bold">Zamówienie dla: {order.customerName}</h2><p>Data: {new Date().toLocaleDateString()}</p></div>
                     <div className="overflow-x-auto">
                         <table className="w-full text-left text-sm">
-                            <thead><tr className="border-b border-gray-200 dark:border-gray-700"><th className="p-2">Nazwa</th><th className="hidden md:table-cell p-2">Kod produktu</th><th className="p-2 text-right">Cena</th><th className="p-2 text-center">Ilość</th><th className="p-2 text-right">Wartość</th><th className="p-2 text-center">Akcje</th></tr></thead>
+                            <thead>
+                                <tr className="border-b border-gray-200 dark:border-gray-700">
+                                    <th className="p-2 cursor-pointer" onClick={() => requestSort('name')}><div className="flex items-center">Nazwa {getSortIcon('name')}</div></th>
+                                    <th className="hidden md:table-cell p-2 cursor-pointer" onClick={() => requestSort('product_code')}><div className="flex items-center">Kod produktu {getSortIcon('product_code')}</div></th>
+                                    <th className="p-2 text-right cursor-pointer" onClick={() => requestSort('price')}><div className="flex items-center justify-end">Cena {getSortIcon('price')}</div></th>
+                                    <th className="p-2 text-center cursor-pointer" onClick={() => requestSort('quantity')}><div className="flex items-center justify-center">Ilość {getSortIcon('quantity')}</div></th>
+                                    <th className="p-2 text-right">Wartość</th>
+                                    <th className="p-2 text-center">Akcje</th>
+                                </tr>
+                            </thead>
                             <tbody>
-                                {(order.items || []).map((item, index) => (
+                                {sortedItems.map((item, index) => (
                                     <tr key={item._id || index} className={`border-b border-gray-200 dark:border-gray-700 last:border-0 ${item.isCustom ? 'text-yellow-500' : ''}`}>
                                         <td className="p-2 font-medium"><span className="truncate block max-w-[15ch] sm:max-w-none">{item.name}</span>{item.note && <p className="text-xs text-gray-400 mt-1">Notatka: {item.note}</p>}</td>
                                         <td className="hidden md:table-cell p-2">{item.product_code}</td>
@@ -1673,7 +1698,6 @@ const DashboardView = ({ user, onNavigate }) => {
     const [stats, setStats] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     const { showNotification } = useNotification();
-    const [salesGoal, setSalesGoal] = useState(user.salesGoal || 0);
     const [goalInput, setGoalInput] = useState(user.salesGoal || 0);
     const [manualSaleInput, setManualSaleInput] = useState('');
 
@@ -1682,8 +1706,7 @@ const DashboardView = ({ user, onNavigate }) => {
         try {
             const data = await api.getDashboardStats();
             setStats(data);
-            setSalesGoal(data.salesGoal);
-            setGoalInput(data.salesGoal);
+            setGoalInput(data.individualSalesGoal);
         } catch (error) {
             showNotification(error.message, 'error');
         } finally {
@@ -1704,8 +1727,8 @@ const DashboardView = ({ user, onNavigate }) => {
         }
         try {
             await api.setUserGoal(goalValue);
-            setSalesGoal(goalValue);
             showNotification('Cel miesięczny został zaktualizowany!', 'success');
+            fetchStats();
         } catch (error) {
             showNotification(error.message, 'error');
         }
@@ -1728,7 +1751,8 @@ const DashboardView = ({ user, onNavigate }) => {
         }
     };
 
-    const goalProgress = salesGoal > 0 ? ((stats?.monthlySales || 0) / salesGoal) * 100 : 0;
+    const individualGoalProgress = stats?.individualSalesGoal > 0 ? ((stats?.individualMonthlySales || 0) / stats.individualSalesGoal) * 100 : 0;
+    const totalGoalProgress = stats?.totalSalesGoal > 0 ? ((stats?.totalMonthlySales || 0) / stats.totalSalesGoal) * 100 : 0;
 
     const StatCard = ({ title, value, icon, color, onClick }) => (
         <div onClick={onClick} className={`bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md flex items-center text-left transition-all hover:shadow-xl hover:scale-105 ${onClick ? 'cursor-pointer' : ''}`}>
@@ -1754,19 +1778,32 @@ const DashboardView = ({ user, onNavigate }) => {
             <div className="mt-8 grid grid-cols-1 lg:grid-cols-3 gap-8">
                 <div className="lg:col-span-2 space-y-8">
                     <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md">
-                        <h2 className="text-2xl font-bold mb-4">Twój cel miesięczny</h2>
-                        <div className="mb-4">
-                            <div className="flex justify-between mb-1">
-                                <span className="text-base font-medium text-indigo-700 dark:text-white">Postęp</span>
-                                <span className="text-sm font-medium text-indigo-700 dark:text-white">{(stats?.monthlySales || 0).toFixed(2)} PLN / {salesGoal.toFixed(2)} PLN</span>
+                        <h2 className="text-2xl font-bold mb-4">Cele Sprzedażowe</h2>
+                        <div className="space-y-4">
+                            <div>
+                                <h3 className="text-lg font-semibold">Twój cel miesięczny</h3>
+                                <div className="flex justify-between mb-1 text-sm">
+                                    <span className="font-medium text-indigo-700 dark:text-white">Postęp</span>
+                                    <span>{(stats?.individualMonthlySales || 0).toFixed(2)} / {(stats?.individualSalesGoal || 0).toFixed(2)} PLN</span>
+                                </div>
+                                <div className="w-full bg-gray-200 rounded-full h-4 dark:bg-gray-700">
+                                    <div className="bg-indigo-600 h-4 rounded-full" style={{ width: `${Math.min(individualGoalProgress, 100)}%` }}></div>
+                                </div>
                             </div>
-                            <div className="w-full bg-gray-200 rounded-full h-4 dark:bg-gray-700">
-                                <div className="bg-indigo-600 h-4 rounded-full" style={{ width: `${Math.min(goalProgress, 100)}%` }}></div>
+                            <div>
+                                <h3 className="text-lg font-semibold">Cel ogólny</h3>
+                                <div className="flex justify-between mb-1 text-sm">
+                                    <span className="font-medium text-purple-700 dark:text-white">Postęp</span>
+                                    <span>{(stats?.totalMonthlySales || 0).toFixed(2)} / {(stats?.totalSalesGoal || 0).toFixed(2)} PLN</span>
+                                </div>
+                                <div className="w-full bg-gray-200 rounded-full h-4 dark:bg-gray-700">
+                                    <div className="bg-purple-600 h-4 rounded-full" style={{ width: `${Math.min(totalGoalProgress, 100)}%` }}></div>
+                                </div>
                             </div>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
                             <form onSubmit={handleSetGoal} className="flex items-center gap-2">
-                                <input type="number" value={goalInput} onChange={(e) => setGoalInput(e.target.value)} className="p-2 border rounded-md bg-gray-50 dark:bg-gray-700 w-full" placeholder="Ustaw nowy cel..."/>
+                                <input type="number" value={goalInput} onChange={(e) => setGoalInput(e.target.value)} className="p-2 border rounded-md bg-gray-50 dark:bg-gray-700 w-full" placeholder="Ustaw swój cel..."/>
                                 <button type="submit" className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">Ustaw</button>
                             </form>
                             <form onSubmit={handleAddManualSale} className="flex items-center gap-2">
