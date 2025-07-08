@@ -686,6 +686,14 @@ const OrdersListView = ({ onEdit }) => {
     const [filters, setFilters] = useState({ customer: '', author: '', dateFrom: '', dateTo: '' });
     const [showFilters, setShowFilters] = useState(false);
     const importMultipleRef = useRef(null);
+    const { items: sortedOrders, requestSort, sortConfig } = useSortableData(orders);
+
+    const getSortIcon = (name) => {
+        if (!sortConfig || sortConfig.key !== name) {
+            return <ChevronsUpDown className="w-4 h-4 ml-1 opacity-40" />;
+        }
+        return sortConfig.direction === 'ascending' ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />;
+    };
 
     const fetchOrders = useCallback(async () => {
         setIsLoading(true);
@@ -772,9 +780,25 @@ const OrdersListView = ({ onEdit }) => {
                 )}
                 <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-x-auto">
                     <table className="w-full text-left text-sm">
-                        <thead className="bg-gray-50 dark:bg-gray-700"><tr><th className="p-2">Klient</th><th className="hidden md:table-cell p-2">Autor</th><th className="hidden sm:table-cell p-2">Data</th><th className="p-2 text-right">Wartość</th><th className="p-2 text-center">Akcje</th></tr></thead>
+                        <thead className="bg-gray-50 dark:bg-gray-700">
+                            <tr>
+                                <th className="p-2 cursor-pointer" onClick={() => requestSort('customerName')}>
+                                    <div className="flex items-center">Klient {getSortIcon('customerName')}</div>
+                                </th>
+                                <th className="hidden md:table-cell p-2 cursor-pointer" onClick={() => requestSort('author')}>
+                                    <div className="flex items-center">Autor {getSortIcon('author')}</div>
+                                </th>
+                                <th className="hidden sm:table-cell p-2 cursor-pointer" onClick={() => requestSort('date')}>
+                                    <div className="flex items-center">Data {getSortIcon('date')}</div>
+                                </th>
+                                <th className="p-2 text-right cursor-pointer" onClick={() => requestSort('total')}>
+                                    <div className="flex items-center justify-end">Wartość {getSortIcon('total')}</div>
+                                </th>
+                                <th className="p-2 text-center">Akcje</th>
+                            </tr>
+                        </thead>
                         <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                            {isLoading ? (<tr><td colSpan="5" className="p-8 text-center text-gray-500">Ładowanie...</td></tr>) : orders.length > 0 ? (orders.map(order => (
+                            {isLoading ? (<tr><td colSpan="5" className="p-8 text-center text-gray-500">Ładowanie...</td></tr>) : sortedOrders.length > 0 ? (sortedOrders.map(order => (
                                 <tr key={order._id}>
                                     <td className="p-2 font-medium"><span className="truncate block max-w-[20ch]">{order.customerName}</span></td>
                                     <td className="hidden md:table-cell p-2">{order.author}</td>
@@ -1030,6 +1054,14 @@ const InventoryView = ({ user, onNavigate, isDirty, setIsDirty }) => {
     const { showNotification } = useNotification();
     const [deleteModal, setDeleteModal] = useState({ isOpen: false, invId: null });
     const importMultipleRef = useRef(null);
+    const { items: sortedInventories, requestSort, sortConfig } = useSortableData(inventories);
+
+    const getSortIcon = (name) => {
+        if (!sortConfig || sortConfig.key !== name) {
+            return <ChevronsUpDown className="w-4 h-4 ml-1 opacity-40" />;
+        }
+        return sortConfig.direction === 'ascending' ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />;
+    };
 
     const fetchInventories = useCallback(async () => {
         setIsLoading(true);
@@ -1097,9 +1129,18 @@ const InventoryView = ({ user, onNavigate, isDirty, setIsDirty }) => {
             </div>
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-x-auto">
                 <table className="w-full text-left">
-                    <thead className="bg-gray-50 dark:bg-gray-700"><tr><th className="p-4">Nazwa</th><th className="p-4">Autor</th><th className="p-4">Data</th><th className="p-4">Pozycje</th><th className="p-4">Sztuki</th><th className="p-4">Akcje</th></tr></thead>
+                    <thead className="bg-gray-50 dark:bg-gray-700">
+                        <tr>
+                            <th className="p-4 cursor-pointer" onClick={() => requestSort('name')}><div className="flex items-center">Nazwa {getSortIcon('name')}</div></th>
+                            <th className="p-4 cursor-pointer" onClick={() => requestSort('author')}><div className="flex items-center">Autor {getSortIcon('author')}</div></th>
+                            <th className="p-4 cursor-pointer" onClick={() => requestSort('date')}><div className="flex items-center">Data {getSortIcon('date')}</div></th>
+                            <th className="p-4 cursor-pointer" onClick={() => requestSort('totalItems')}><div className="flex items-center">Pozycje {getSortIcon('totalItems')}</div></th>
+                            <th className="p-4 cursor-pointer" onClick={() => requestSort('totalQuantity')}><div className="flex items-center">Sztuki {getSortIcon('totalQuantity')}</div></th>
+                            <th className="p-4">Akcje</th>
+                        </tr>
+                    </thead>
                     <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                        {inventories.map(inv => (
+                        {sortedInventories.map(inv => (
                             <tr key={inv._id}>
                                 <td className="p-4 font-medium">{inv.name}</td>
                                 <td className="p-4">{inv.author}</td>
@@ -1133,6 +1174,13 @@ const NewInventorySheet = ({ user, onSave, inventoryId = null, setDirty }) => {
     const { showNotification } = useNotification();
     const importFileRef = useRef(null);
     const { items: sortedItems, requestSort, sortConfig } = useSortableData(inventory.items);
+
+    const getSortIcon = (name) => {
+        if (!sortConfig || sortConfig.key !== name) {
+            return <ChevronsUpDown className="w-4 h-4 ml-1 opacity-40" />;
+        }
+        return sortConfig.direction === 'ascending' ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />;
+    };
 
     useEffect(() => {
         if (inventoryId) {
@@ -1268,10 +1316,10 @@ const NewInventorySheet = ({ user, onSave, inventoryId = null, setDirty }) => {
                     <table className="w-full text-left min-w-[700px]">
                         <thead className="bg-gray-50 dark:bg-gray-700">
                             <tr className="border-b">
-                                <th className="p-3">Nazwa</th>
-                                <th className="p-3">Kod produktu</th>
-                                <th className="p-3 text-center">Ilość Oczekiwana</th>
-                                <th className="p-3 text-center">Ilość Zliczona</th>
+                                <th className="p-3 cursor-pointer" onClick={() => requestSort('name')}><div className="flex items-center">Nazwa {getSortIcon('name')}</div></th>
+                                <th className="p-3 cursor-pointer" onClick={() => requestSort('product_code')}><div className="flex items-center">Kod produktu {getSortIcon('product_code')}</div></th>
+                                <th className="p-3 text-center cursor-pointer" onClick={() => requestSort('expectedQuantity')}><div className="flex items-center justify-center">Oczekiwano {getSortIcon('expectedQuantity')}</div></th>
+                                <th className="p-3 text-center cursor-pointer" onClick={() => requestSort('quantity')}><div className="flex items-center justify-center">Zliczono {getSortIcon('quantity')}</div></th>
                                 <th className="p-3 text-center">Różnica</th>
                                 <th className="p-3 text-center">Akcje</th>
                             </tr>
@@ -1515,7 +1563,7 @@ const AdminProductsView = () => {
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-x-auto">
                 <table className="w-full text-left min-w-[800px]">
                     <thead className="bg-gray-50 dark:bg-gray-700"><tr><th className="p-4">Nazwa</th><th className="p-4">Kod produktu</th><th className="p-4">Kody EAN</th><th className="p-4">Ilość</th><th className="p-4">Cena</th></tr></thead>
-                    <tbody>
+                    <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                         {isLoading ? <tr><td colSpan="5" className="text-center p-8">Ładowanie...</td></tr> :
                         products.map(p => (
                             <tr key={p._id} className="border-b dark:border-gray-700">
