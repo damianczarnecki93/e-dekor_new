@@ -110,7 +110,6 @@ const adminMiddleware = (req, res, next) => {
 const parseCsv = (buffer) => {
     return new Promise((resolve, reject) => {
         const items = [];
-        // Poprawka: Dekodowanie bufora jako UTF-8
         const decodedBuffer = buffer.toString('utf8');
         const firstLine = decodedBuffer.split('\n')[0];
         const separator = firstLine.includes(';') ? ';' : ',';
@@ -277,7 +276,6 @@ app.post('/api/admin/upload-products', authMiddleware, adminMiddleware, upload.s
     try {
         const productsToImport = [];
         const csvHeaders = ['barcode', 'name', 'price', 'product_code', 'quantity', 'availability'];
-        // Poprawka: Dekodowanie bufora jako UTF-8
         const decodedBuffer = req.file.buffer.toString('utf8');
         const readableStream = Readable.from(decodedBuffer);
         
