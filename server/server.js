@@ -626,6 +626,19 @@ app.post('/api/orders/:id/complete', authMiddleware, async (req, res) => {
         res.status(500).json({ message: 'Wystąpił błąd serwera.', error: error.message });
     }
 });
+app.post('/api/orders/:id/revert', authMiddleware, async (req, res) => {
+    try {
+        const order = await Order.findById(req.params.id);
+        if (!order) {
+            return res.status(404).json({ message: 'Nie znaleziono zamówienia.' });
+        }
+        order.status = 'Zapisane';
+        await order.save();
+        res.status(200).json({ message: 'Przywrócono zamówienie do kompletacji.', order });
+    } catch (error) {
+        res.status(500).json({ message: 'Wystąpił błąd serwera.', error: error.message });
+    }
+});
 app.delete('/api/orders/:id', authMiddleware, async (req, res) => {
     try {
         const order = await Order.findByIdAndDelete(req.params.id);
