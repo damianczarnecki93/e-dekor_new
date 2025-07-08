@@ -2257,7 +2257,7 @@ export default function AppWrapper() {
         </ErrorBoundary>
     );
 }
-
+]
 ```
 
 I have a few questions about the code. What does the `useCallback` hook do in this context? How does the `useDebounce` hook work? What is the purpose of the `NotificationProvider` compone
