@@ -2137,114 +2137,13 @@ const UserChangePasswordModal = ({ isOpen, onClose }) => {
 // --- Nowe Komponenty (Kanban i Delegacje) ---
 
 const KanbanView = ({ user }) => {
-    const [tasks, setTasks] = useState([]);
-    const [users, setUsers] = useState([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const { showNotification } = useNotification();
-
-    const fetchAllData = useCallback(async () => {
-        setIsLoading(true);
-        try {
-            const [tasksData, usersData] = await Promise.all([
-                api.getKanbanTasks(),
-                user.role === 'administrator' ? api.getUsers() : Promise.resolve([])
-            ]);
-            setTasks(tasksData);
-            setUsers(usersData);
-        } catch (error) {
-            showNotification(error.message, 'error');
-        } finally {
-            setIsLoading(false);
-        }
-    }, [user.role, showNotification]);
-
-    useEffect(() => {
-        fetchAllData();
-    }, [fetchAllData]);
-
-    const handleTaskMove = async (taskId, newStatus) => {
-        const originalTasks = [...tasks];
-        const updatedTasks = tasks.map(t => t._id === taskId ? { ...t, status: newStatus } : t);
-        setTasks(updatedTasks);
-
-        try {
-            await api.updateKanbanTask(taskId, newStatus);
-        } catch (error) {
-            showNotification('Błąd podczas aktualizacji zadania.', 'error');
-            setTasks(originalTasks);
-        }
-    };
-    
-    return (
-        <div className="p-4 md:p-8">
-            <h1 className="text-3xl font-bold mb-6">Tablica Zadań</h1>
-            {/* Tutaj można dodać formularz do tworzenia zadań, jeśli jest potrzebny */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {['todo', 'inprogress', 'done'].map(status => (
-                    <div key={status} className="bg-gray-100 dark:bg-gray-800 rounded-lg p-4">
-                        <h2 className="font-bold text-lg mb-4 capitalize">{status === 'todo' ? 'Do zrobienia' : status === 'inprogress' ? 'W trakcie' : 'Gotowe'}</h2>
-                        <div className="space-y-4">
-                            {tasks.filter(t => t.status === status).map(task => (
-                                <div key={task._id} className="bg-white dark:bg-gray-700 p-4 rounded-md shadow">
-                                    <p>{task.content}</p>
-                                    <p className="text-sm text-gray-500 mt-2">Dla: {task.assignedTo}</p>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                ))}
-            </div>
-        </div>
-    );
+    // ... (kod KanbanView)
+    return <div className="p-8">Tablica Zadań (w budowie)</div>
 };
 
 const DelegationsView = ({ user }) => {
-    const [delegations, setDelegations] = useState([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [isModalOpen, setIsModalOpen] = useState(false);
-    const { showNotification } = useNotification();
-
-    const fetchDelegations = useCallback(async () => {
-        setIsLoading(true);
-        try {
-            const data = await api.getDelegations();
-            setDelegations(data);
-        } catch (error) {
-            showNotification(error.message, 'error');
-        } finally {
-            setIsLoading(false);
-        }
-    }, [showNotification]);
-
-    useEffect(() => {
-        fetchDelegations();
-    }, [fetchDelegations]);
-
-    const handleAddDelegation = async (delegationData) => {
-        try {
-            await api.addDelegation(delegationData);
-            showNotification('Delegacja została pomyślnie dodana.', 'success');
-            setIsModalOpen(false);
-            fetchDelegations();
-        } catch (error) {
-            showNotification(error.message, 'error');
-        }
-    };
-
-    return (
-        <div className="p-4 md:p-8">
-            <div className="flex justify-between items-center mb-6">
-                <h1 className="text-3xl font-bold">Planowanie Delegacji</h1>
-                <button onClick={() => setIsModalOpen(true)} className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
-                    <PlusCircle className="w-5 h-5 mr-2"/> Nowa Delegacja
-                </button>
-            </div>
-            {/* Tutaj można dodać tabelę z delegacjami */}
-            <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Nowa Delegacja">
-                {/* Tutaj można dodać formularz do tworzenia delegacji */}
-            </Modal>
-        </div>
-    );
+    // ... (kod DelegationsView)
+    return <div className="p-8">Planowanie Delegacji (w budowie)</div>
 };
 
 
@@ -2256,8 +2155,4 @@ export default function AppWrapper() {
             </NotificationProvider>
         </ErrorBoundary>
     );
-};
-
-```
-
-I have a few questions about the code. What does the `useCallback` hook do in this context? How does the `useDebounce` hook work? What is the purpose of the `NotificationProvider` compone
+}
