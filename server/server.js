@@ -35,7 +35,8 @@ const userSchema = new mongoose.Schema({
     password: { type: String, required: true },
     role: { type: String, default: 'user', enum: ['user', 'administrator'] },
     status: { type: String, enum: ['oczekujący', 'zaakceptowany'], default: 'oczekujący' },
-    salesGoal: { type: Number, default: 0 }
+    salesGoal: { type: Number, default: 0 },
+    manualSales: { type: Number, default: 0 } 
 });
 const User = mongoose.models.User || mongoose.model('User', userSchema);
 
@@ -162,7 +163,7 @@ app.post('/api/login', async (req, res) => {
         const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) return res.status(401).json({ message: 'Nieprawidłowe dane logowania.' });
         const token = jwt.sign({ userId: user._id, role: user.role, username: user.username }, jwtSecret, { expiresIn: '1d' });
-        res.json({ token, user: { id: user._id, username: user.username, role: user.role, salesGoal: user.salesGoal } });
+        res.json({ token, user: { id: user._id, username: user.username, role: user.role, salesGoal: user.salesGoal, manualSales: user.manualSales } });
     } catch (error) {
         res.status(500).json({ message: 'Błąd serwera podczas logowania.', error: error.message });
     }
@@ -190,6 +191,16 @@ app.post('/api/user/goal', authMiddleware, async (req, res) => {
         res.json({ salesGoal: user.salesGoal });
     } catch (error) {
         res.status(500).json({ message: 'Błąd podczas ustawiania celu.' });
+    }
+});
+
+app.post('/api/user/manual-sales', authMiddleware, async (req, res) => {
+    try {
+        const { sales } = req.body;
+        const user = await User.findByIdAndUpdate(req.user.userId, { $inc: { manualSales: sales } }, { new: true });
+        res.json({ manualSales: user.manualSales });
+    } catch (error) {
+        res.status(500).json({ message: 'Błąd podczas dodawania sprzedaży.' });
     }
 });
 
@@ -393,6 +404,11 @@ app.get('/api/admin/all-products', authMiddleware, adminMiddleware, async (req, 
 // --- API Endpoints - Dashboard ---
 app.get('/api/dashboard-stats', authMiddleware, async (req, res) => {
     try {
+        const user = await User.findById(req.user.userId);
+        if (!user) {
+            return res.status(404).json({ message: 'Nie znaleziono użytkownika.' });
+        }
+
         const productCount = await Product.countDocuments();
         const pendingOrders = await Order.countDocuments({ status: 'Zapisane' });
         const completedOrders = await Order.countDocuments({ status: 'Skompletowane' });
@@ -422,11 +438,14 @@ app.get('/api/dashboard-stats', authMiddleware, async (req, res) => {
         const endOfMonth = new Date(startOfMonth);
         endOfMonth.setMonth(endOfMonth.getMonth() + 1);
 
-        const monthlySales = await Order.aggregate([
+        const monthlySalesResult = await Order.aggregate([
             { $match: { date: { $gte: startOfMonth, $lt: endOfMonth }, author: req.user.username } },
             { $group: { _id: null, total: { $sum: "$total" } } }
         ]);
         
+        const monthlySales = monthlySalesResult.length > 0 ? monthlySalesResult[0].total : 0;
+        const totalMonthlySales = monthlySales + (user.manualSales || 0);
+
         res.json({ 
             productCount,
             pendingOrders, 
@@ -434,7 +453,8 @@ app.get('/api/dashboard-stats', authMiddleware, async (req, res) => {
             ordersByAuthor,
             topProducts,
             topCustomers,
-            monthlySales: monthlySales.length > 0 ? monthlySales[0].total : 0
+            monthlySales: totalMonthlySales,
+            salesGoal: user.salesGoal
         });
     } catch (error) {
         res.status(500).json({ message: 'Błąd pobierania statystyk.' });
@@ -698,7 +718,6 @@ app.post('/api/inventories/import-sheet', authMiddleware, upload.single('sheetFi
         for (const csvItem of itemsFromCsv) {
             const product = productMap.get(csvItem.barcode);
             if (product) {
-                // Dla arkusza inwentaryzacyjnego, ilość z pliku to ilość oczekiwana
                 inventoryItems.push({ ...product, quantity: 0, expectedQuantity: csvItem.quantity });
             } else {
                 notFoundBarcodes.push(csvItem.barcode);
