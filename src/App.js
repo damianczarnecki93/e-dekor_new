@@ -73,21 +73,6 @@ const NotificationProvider = ({ children }) => {
 };
 const useNotification = () => useContext(NotificationContext);
 
-// --- Hook do auto-zapisu (debouncing) ---
-const useDebounce = (value, delay) => {
-    const [debouncedValue, setDebouncedValue] = useState(value);
-    useEffect(() => {
-        const handler = setTimeout(() => {
-            setDebouncedValue(value);
-        }, delay);
-        return () => {
-            clearTimeout(handler);
-        };
-    }, [value, delay]);
-    return debouncedValue;
-};
-
-
 // --- API Client ---
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://dekor.onrender.com';
 
@@ -570,6 +555,19 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty }) => {
         }
         event.target.value = null;
     };
+    
+    const handleExportOrder = () => {
+        const csvData = order.items.map(item => `${item.barcodes[0] || ''},${item.quantity || 0}`).join('\n');
+        const blob = new Blob([`\uFEFF${csvData}`], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a");
+        const url = URL.createObjectURL(blob);
+        link.setAttribute("href", url);
+        link.setAttribute("download", `zamowienie_${order.customerName.replace(/\s/g, '_') || 'nowe'}.csv`);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
 
     const handlePrint = () => {
         const content = printRef.current;
@@ -592,6 +590,9 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty }) => {
                     <div className="flex gap-2">
                         <button onClick={handlePrint} className="flex items-center justify-center p-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors">
                             <Printer className="w-5 h-5"/> <span className="hidden sm:inline ml-2">Drukuj</span>
+                        </button>
+                        <button onClick={handleExportOrder} className="flex items-center justify-center p-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
+                            <FileDown className="w-5 h-5"/> <span className="hidden sm:inline ml-2">Eksportuj</span>
                         </button>
                         <input type="file" ref={importFileRef} onChange={handleFileImport} className="hidden" accept=".csv" />
                         <button onClick={() => importFileRef.current.click()} className="flex items-center justify-center p-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors">
@@ -1983,4 +1984,4 @@ export default function AppWrapper() {
             </NotificationProvider>
         </ErrorBoundary>
     );
-]
+}
