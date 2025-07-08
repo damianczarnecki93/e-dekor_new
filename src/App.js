@@ -2148,7 +2148,7 @@ const KanbanView = ({ user }) => {
         try {
             const [tasksData, usersData] = await Promise.all([
                 api.getKanbanTasks(),
-                user.role === 'administrator' ? api.getUsers() : Promise.resolve([])
+                user.role === 'user' ? api.getUsers() : Promise.resolve([])
             ]);
             setTasks(tasksData);
             setUsers(usersData.filter(u => u.status === 'zaakceptowany'));
