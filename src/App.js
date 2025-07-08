@@ -1321,12 +1321,9 @@ const NewInventorySheet = ({ user, onSave, inventoryId = null, setDirty }) => {
         const file = event.target.files[0];
         if (!file) return;
         try {
-            const { items, notFound } = await api.importInventorySheet(file);
+            const { items } = await api.importInventorySheet(file);
             updateInventory({ items });
             showNotification(`Zaimportowano ${items.length} pozycji do arkusza.`, 'success');
-            if (notFound.length > 0) {
-                showNotification(`Nie znaleziono produktów dla kodów: ${notFound.join(', ')}`, 'error');
-            }
         } catch (error) {
             showNotification(error.message, 'error');
         }
@@ -2138,6 +2135,18 @@ const UserChangePasswordModal = ({ isOpen, onClose }) => {
             </form>
         </Modal>
     );
+};
+
+// --- Nowe Komponenty (Kanban i Delegacje) ---
+
+const KanbanView = ({ user }) => {
+    // ... (kod KanbanView)
+    return <div className="p-8">Tablica Zadań (w budowie)</div>
+};
+
+const DelegationsView = ({ user }) => {
+    // ... (kod DelegationsView)
+    return <div className="p-8">Planowanie Delegacji (w budowie)</div>
 };
 
 export default function AppWrapper() {
