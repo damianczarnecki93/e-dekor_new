@@ -1983,5 +1983,4 @@ export default function AppWrapper() {
             </NotificationProvider>
         </ErrorBoundary>
     );
-}
 ]
