@@ -2094,7 +2094,7 @@ function App() {
                 </nav>
                 <main className="flex-1 flex flex-col overflow-hidden">
                     <div className="lg:hidden p-2 bg-white dark:bg-gray-800 border-b dark:border-gray-700 flex justify-between items-center">
-                        <button onClick={() => setIsNavOpen(!isNavOpen)} className="p-2 rounded-md"><Menu className="w-6 h-6" /></button>
+                        <button onClick={() => setIsNavOpen(!isNavOpen)} className="p-2 rounded-md"><Menu className="w-6 w-6" /></button>
                         <span className="font-semibold">{navItems.find(item => item.id === activeView.view)?.label}</span>
                     </div>
                     <div className="flex-1 overflow-x-hidden overflow-y-auto">{renderView()}</div>
@@ -2174,15 +2174,6 @@ const KanbanView = ({ user }) => {
             setTasks(originalTasks);
         }
     };
-
-    const onDragStart = (e, taskId) => {
-        e.dataTransfer.setData("taskId", taskId);
-    };
-
-    const onDrop = (e, newStatus) => {
-        const taskId = e.dataTransfer.getData("taskId");
-        handleTaskMove(taskId, newStatus);
-    };
     
     return (
         <div className="p-4 md:p-8">
@@ -2193,14 +2184,17 @@ const KanbanView = ({ user }) => {
                     <div key={status} 
                          className="bg-gray-100 dark:bg-gray-800 rounded-lg p-4"
                          onDragOver={(e) => e.preventDefault()}
-                         onDrop={(e) => onDrop(e, status)}
+                         onDrop={(e) => {
+                            const taskId = e.dataTransfer.getData("taskId");
+                            handleTaskMove(taskId, status);
+                         }}
                     >
                         <h2 className="font-bold text-lg mb-4 capitalize">{status === 'todo' ? 'Do zrobienia' : status === 'inprogress' ? 'W trakcie' : 'Gotowe'}</h2>
                         <div className="space-y-4">
                             {tasks.filter(t => t.status === status).map(task => (
                                 <div key={task._id} 
                                      draggable 
-                                     onDragStart={(e) => onDragStart(e, task._id)}
+                                     onDragStart={(e) => e.dataTransfer.setData("taskId", task._id)}
                                      className="bg-white dark:bg-gray-700 p-4 rounded-md shadow cursor-move"
                                 >
                                     <p>{task.content}</p>
@@ -2258,6 +2252,18 @@ const DelegationsView = ({ user }) => {
         }
     };
     
+    const handleDelete = async (id) => {
+        if(window.confirm("Czy na pewno chcesz usunąć tę delegację?")) {
+            try {
+                await api.deleteDelegation(id);
+                showNotification("Delegacja usunięta", "success");
+                fetchDelegations();
+            } catch (error) {
+                showNotification(error.message, "error");
+            }
+        }
+    };
+
     return (
         <div className="p-4 md:p-8">
             <div className="flex justify-between items-center mb-6">
@@ -2268,10 +2274,15 @@ const DelegationsView = ({ user }) => {
             </div>
             {/* Tutaj można dodać tabelę z delegacjami */}
             <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Nowa Delegacja">
-                {/* Tutaj można dodać formularz do tworzenia delegacji */}
+                <DelegationForm onSubmit={handleAddDelegation} />
             </Modal>
         </div>
     );
+};
+
+const DelegationForm = ({ onSubmit }) => {
+    // ... (kod formularza delegacji)
+    return <div>Formularz delegacji (w budowie)</div>
 };
 
 export default function AppWrapper() {
