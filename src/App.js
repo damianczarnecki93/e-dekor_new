@@ -2038,8 +2038,8 @@ function App() {
         { id: 'orders', label: 'Zamówienia', icon: Archive, roles: ['user', 'administrator'] },
         { id: 'picking', label: 'Kompletacja', icon: List, roles: ['user', 'administrator'] },
         { id: 'inventory', label: 'Inwentaryzacja', icon: Wrench, roles: ['user', 'administrator'] },
-        { id: 'kanban', label: 'Tablica Zadań', icon: ClipboardList, roles: ['user', 'administrator'] },
-        { id: 'delegations', label: 'Delegacje', icon: Plane, roles: ['user', 'administrator'] },
+        { id: 'kanban', label: 'Tablica Zadań - Wersja Testowa', icon: ClipboardList, roles: ['user', 'administrator'] },
+        { id: 'delegations', label: 'Delegacje - Wersja Testowa', icon: Plane, roles: ['user', 'administrator'] },
         { id: 'admin', label: 'Panel Admina', icon: Settings, roles: ['administrator'] },
     ];
     
@@ -2217,7 +2217,7 @@ const KanbanView = ({ user }) => {
     return (
         <div className="p-4 md:p-8">
             <div className="flex flex-wrap justify-between items-center mb-6">
-                <h1 className="text-3xl font-bold">Tablica Zadań</h1>
+                <h1 className="text-3xl font-bold">Tablica Zadań - Wersja Testowa</h1>
                 {user.role === 'administrator' && (
                     <button onClick={() => setIsModalOpen(true)} className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
                         <PlusCircle className="w-5 h-5 mr-2"/> Nowe Zadanie
@@ -2385,7 +2385,7 @@ const DelegationsView = ({ user }) => {
     return (
         <div className="p-4 md:p-8">
             <div className="flex flex-wrap gap-4 justify-between items-center mb-6">
-                <h1 className="text-3xl font-bold">Planowanie Delegacji</h1>
+                <h1 className="text-3xl font-bold">Planowanie Delegacji - Wersja Testowa</h1>
                 <button onClick={() => setIsModalOpen(true)} className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
                     <PlusCircle className="w-5 h-5 mr-2"/> Nowa Delegacja
                 </button>
