@@ -118,12 +118,12 @@ const parseCsv = (buffer) => {
         readableStream
             .pipe(csv({ headers: false, separator: separator }))
             .on('data', (row) => {
-                const barcode = row[0]?.trim();
+                const identifier = row[0]?.trim(); // Może być EAN lub kod produktu
                 const quantityStr = row[1]?.trim();
-                if (barcode && quantityStr) {
+                if (identifier && quantityStr) {
                     const quantity = parseInt(quantityStr, 10);
                     if (!isNaN(quantity)) {
-                        items.push({ barcode, quantity });
+                        items.push({ identifier, quantity });
                     }
                 }
             })
@@ -503,7 +503,7 @@ app.post('/api/orders/import-csv', authMiddleware, upload.single('orderFile'), a
             return res.status(400).json({ message: 'Plik CSV jest pusty lub ma nieprawidłowy format. Wymagane kolumny: ean,ilosc (oddzielone przecinkiem lub średnikiem).' });
         }
         
-        const barcodes = itemsFromCsv.map(item => item.barcode);
+        const barcodes = itemsFromCsv.map(item => item.identifier);
         const foundProducts = await Product.find({ barcodes: { $in: barcodes } }).lean();
         const productMap = new Map();
         foundProducts.forEach(p => {
@@ -513,11 +513,11 @@ app.post('/api/orders/import-csv', authMiddleware, upload.single('orderFile'), a
         const orderItems = [];
         const notFoundBarcodes = [];
         for (const csvItem of itemsFromCsv) {
-            const product = productMap.get(csvItem.barcode);
+            const product = productMap.get(csvItem.identifier);
             if (product) {
                 orderItems.push({ ...product, quantity: csvItem.quantity });
             } else {
-                notFoundBarcodes.push(csvItem.barcode);
+                notFoundBarcodes.push(csvItem.identifier);
             }
         }
         res.json({ items: orderItems, notFound: notFoundBarcodes });
@@ -537,14 +537,14 @@ app.post('/api/orders/import-multiple-csv', authMiddleware, upload.array('orderF
         for (const file of req.files) {
             const itemsFromCsv = await parseCsv(file.buffer);
             if (itemsFromCsv.length > 0) {
-                const barcodes = itemsFromCsv.map(item => item.barcode);
+                const barcodes = itemsFromCsv.map(item => item.identifier);
                 const foundProducts = await Product.find({ barcodes: { $in: barcodes } }).lean();
                 const productMap = new Map();
                 foundProducts.forEach(p => p.barcodes.forEach(b => productMap.set(b, p)));
 
                 const orderItems = [];
                 for (const csvItem of itemsFromCsv) {
-                    const product = productMap.get(csvItem.barcode);
+                    const product = productMap.get(csvItem.identifier);
                     if (product) {
                         orderItems.push({ ...product, quantity: csvItem.quantity });
                     }
@@ -730,27 +730,36 @@ app.post('/api/inventories/import-sheet', authMiddleware, upload.single('sheetFi
         const itemsFromCsv = await parseCsv(req.file.buffer);
 
         if (itemsFromCsv.length === 0) {
-            return res.status(400).json({ message: 'Plik CSV jest pusty lub ma nieprawidłowy format. Wymagane kolumny: ean,ilosc (oddzielone przecinkiem lub średnikiem).' });
+            return res.status(400).json({ message: 'Plik CSV jest pusty lub ma nieprawidłowy format. Wymagane kolumny: kod_produktu,ilosc' });
         }
         
-        const barcodes = itemsFromCsv.map(item => item.barcode);
-        const foundProducts = await Product.find({ barcodes: { $in: barcodes } }).lean();
+        const productCodes = itemsFromCsv.map(item => item.identifier);
+        const foundProducts = await Product.find({ product_code: { $in: productCodes } }).lean();
         const productMap = new Map();
         foundProducts.forEach(p => {
-            p.barcodes.forEach(b => productMap.set(b, p));
+            productMap.set(p.product_code, p);
         });
 
         const inventoryItems = [];
-        const notFoundBarcodes = [];
         for (const csvItem of itemsFromCsv) {
-            const product = productMap.get(csvItem.barcode);
+            const product = productMap.get(csvItem.identifier);
             if (product) {
                 inventoryItems.push({ ...product, quantity: 0, expectedQuantity: csvItem.quantity });
             } else {
-                notFoundBarcodes.push(csvItem.barcode);
+                // Jeżeli nie znaleziono, stwórz pozycję bez nazwy
+                inventoryItems.push({
+                    _id: `custom-${Date.now()}-${csvItem.identifier}`,
+                    name: '',
+                    product_code: csvItem.identifier,
+                    barcodes: [],
+                    price: 0,
+                    quantity: 0,
+                    expectedQuantity: csvItem.quantity,
+                    isCustom: true,
+                });
             }
         }
-        res.json({ items: inventoryItems, notFound: notFoundBarcodes });
+        res.json({ items: inventoryItems });
     } catch (error) { 
         console.error("Błąd importu arkusza inwentaryzacyjnego:", error);
         res.status(500).json({ message: 'Wystąpił błąd serwera podczas importu arkusza.', error: error.message }); 
@@ -767,16 +776,27 @@ app.post('/api/inventories/import-multiple-sheets', authMiddleware, upload.array
         for (const file of req.files) {
             const itemsFromCsv = await parseCsv(file.buffer);
             if (itemsFromCsv.length > 0) {
-                const barcodes = itemsFromCsv.map(item => item.barcode);
-                const foundProducts = await Product.find({ barcodes: { $in: barcodes } }).lean();
+                const productCodes = itemsFromCsv.map(item => item.identifier);
+                const foundProducts = await Product.find({ product_code: { $in: productCodes } }).lean();
                 const productMap = new Map();
-                foundProducts.forEach(p => p.barcodes.forEach(b => productMap.set(b, p)));
+                foundProducts.forEach(p => productMap.set(p.product_code, p));
 
                 const inventoryItems = [];
                 for (const csvItem of itemsFromCsv) {
-                    const product = productMap.get(csvItem.barcode);
+                    const product = productMap.get(csvItem.identifier);
                     if (product) {
                         inventoryItems.push({ ...product, quantity: 0, expectedQuantity: csvItem.quantity });
+                    } else {
+                        inventoryItems.push({
+                            _id: `custom-${Date.now()}-${csvItem.identifier}`,
+                            name: '',
+                            product_code: csvItem.identifier,
+                            barcodes: [],
+                            price: 0,
+                            quantity: 0,
+                            expectedQuantity: csvItem.quantity,
+                            isCustom: true,
+                        });
                     }
                 }
                 
