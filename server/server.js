@@ -404,8 +404,8 @@ app.get('/api/admin/all-products', authMiddleware, adminMiddleware, async (req, 
 // --- API Endpoints - Dashboard ---
 app.get('/api/dashboard-stats', authMiddleware, async (req, res) => {
     try {
-        const user = await User.findById(req.user.userId);
-        if (!user) {
+        const currentUser = await User.findById(req.user.userId);
+        if (!currentUser) {
             return res.status(404).json({ message: 'Nie znaleziono użytkownika.' });
         }
 
@@ -438,13 +438,25 @@ app.get('/api/dashboard-stats', authMiddleware, async (req, res) => {
         const endOfMonth = new Date(startOfMonth);
         endOfMonth.setMonth(endOfMonth.getMonth() + 1);
 
-        const monthlySalesResult = await Order.aggregate([
+        // Individual sales
+        const individualSalesResult = await Order.aggregate([
             { $match: { date: { $gte: startOfMonth, $lt: endOfMonth }, author: req.user.username } },
             { $group: { _id: null, total: { $sum: "$total" } } }
         ]);
+        const individualOrderSales = individualSalesResult.length > 0 ? individualSalesResult[0].total : 0;
+        const totalIndividualSales = individualOrderSales + (currentUser.manualSales || 0);
+
+        // Global sales
+        const allUsers = await User.find({});
+        const totalManualSales = allUsers.reduce((sum, user) => sum + (user.manualSales || 0), 0);
+        const totalSalesGoal = allUsers.reduce((sum, user) => sum + (user.salesGoal || 0), 0);
         
-        const monthlySales = monthlySalesResult.length > 0 ? monthlySalesResult[0].total : 0;
-        const totalMonthlySales = monthlySales + (user.manualSales || 0);
+        const globalOrderSalesResult = await Order.aggregate([
+            { $match: { date: { $gte: startOfMonth, $lt: endOfMonth } } },
+            { $group: { _id: null, total: { $sum: "$total" } } }
+        ]);
+        const globalOrderSales = globalOrderSalesResult.length > 0 ? globalOrderSalesResult[0].total : 0;
+        const totalGlobalSales = globalOrderSales + totalManualSales;
 
         res.json({ 
             productCount,
@@ -453,8 +465,10 @@ app.get('/api/dashboard-stats', authMiddleware, async (req, res) => {
             ordersByAuthor,
             topProducts,
             topCustomers,
-            monthlySales: totalMonthlySales,
-            salesGoal: user.salesGoal
+            individualMonthlySales: totalIndividualSales,
+            individualSalesGoal: currentUser.salesGoal,
+            totalMonthlySales: totalGlobalSales,
+            totalSalesGoal: totalSalesGoal,
         });
     } catch (error) {
         res.status(500).json({ message: 'Błąd pobierania statystyk.' });
