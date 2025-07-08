@@ -123,6 +123,14 @@ const api = {
         if (!response.ok) throw new Error(data.message || 'Błąd importu pliku');
         return data;
     },
+    importMultipleOrdersFromCsv: async (files) => {
+        const formData = new FormData();
+        files.forEach(file => formData.append('orderFiles', file));
+        const response = await fetchWithAuth(`${API_BASE_URL}/api/orders/import-multiple-csv`, { method: 'POST', body: formData });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.message || 'Błąd importu plików');
+        return data;
+    },
     saveOrder: async (order) => {
         const url = order._id ? `${API_BASE_URL}/api/orders/${order._id}` : `${API_BASE_URL}/api/orders`;
         const method = order._id ? 'PUT' : 'POST';
@@ -202,6 +210,14 @@ const api = {
         const response = await fetchWithAuth(`${API_BASE_URL}/api/inventories/import-sheet`, { method: 'POST', body: formData });
         const data = await response.json();
         if (!response.ok) throw new Error(data.message || 'Błąd importu arkusza');
+        return data;
+    },
+    importMultipleInventorySheets: async (files) => {
+        const formData = new FormData();
+        files.forEach(file => formData.append('sheetFiles', file));
+        const response = await fetchWithAuth(`${API_BASE_URL}/api/inventories/import-multiple-sheets`, { method: 'POST', body: formData });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.message || 'Błąd importu plików');
         return data;
     },
     login: async (username, password) => {
@@ -404,11 +420,10 @@ const PinnedInputBar = ({ onProductAdd }) => {
             if (suggestions.length > 0) {
                 handleAdd(suggestions[0]);
             } else {
-                // Dodaj produkt spoza bazy
                 const customItem = {
                     _id: `custom-${Date.now()}`,
-                    name: `Produkt ${query}`,
-                    product_code: 'N/A',
+                    name: `EAN: ${query}`,
+                    product_code: 'SPOZA LISTY',
                     barcodes: [query],
                     price: 0,
                     isCustom: true,
@@ -462,25 +477,6 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty }) => {
     const importFileRef = useRef(null);
     const { showNotification } = useNotification();
     
-    const debouncedOrder = useDebounce(order, 2000); 
-
-    useEffect(() => {
-        const autoSave = async () => {
-            if (order.isDirty && debouncedOrder._id) {
-                try {
-                    const saved = await api.saveOrder(debouncedOrder);
-                    setOrder(saved.order);
-                    setCurrentOrder(saved.order);
-                    setDirty(false); // Aktualizacja w głównym komponencie
-                    showNotification('Zmiany zapisane automatycznie.', 'success');
-                } catch (error) {
-                    showNotification('Błąd automatycznego zapisu: ' + error.message, 'error');
-                }
-            }
-        };
-        autoSave();
-    }, [debouncedOrder, order.isDirty, showNotification, setCurrentOrder, setDirty]);
-
     useEffect(() => { 
         setOrder(currentOrder);
         setDirty(currentOrder.isDirty || false);
@@ -498,7 +494,7 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty }) => {
 
     const addProductToOrder = (product, quantity) => {
         const newItems = [...(order.items || [])];
-        const existingItemIndex = newItems.findIndex(item => item._id === product._id);
+        const existingItemIndex = newItems.findIndex(item => item._id === product._id && !item.isCustom);
         if (existingItemIndex > -1) { 
             newItems[existingItemIndex].quantity += quantity;
         } else { 
@@ -561,7 +557,7 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty }) => {
 
     return (
         <div className="h-full flex flex-col">
-            <div className="flex-grow p-4 md:p-8 pb-32"> {/* Dodany padding na dole */}
+            <div className="flex-grow p-4 md:p-8 pb-32">
                 <div className="flex flex-wrap gap-4 justify-between items-center mb-4">
                     <h1 className="text-3xl font-bold text-gray-800 dark:text-white">{order._id ? `Edycja Zamówienia` : 'Nowe Zamówienie'}</h1>
                     <div className="flex gap-2">
@@ -605,9 +601,16 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty }) => {
                     {(!order.items || order.items.length === 0) && <p className="text-center text-gray-500 py-8">Brak pozycji na zamówieniu.</p>}
                     <div ref={listEndRef} />
                 </div>
-                <div className="flex flex-wrap justify-end items-center gap-4 mt-4">
-                    <span className="text-lg font-bold text-gray-700 dark:text-gray-300">Suma:</span>
-                    <span className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">{totalValue.toFixed(2)} PLN</span>
+                <div className="flex flex-wrap justify-between items-center gap-4 mt-4">
+                    <div>
+                        <button onClick={handleSaveOrder} className="flex items-center justify-center px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-blue-400" disabled={!order.isDirty}>
+                            <Save className="w-5 h-5 mr-2"/> {order.isDirty ? 'Zapisz zmiany' : 'Zapisano'}
+                        </button>
+                    </div>
+                    <div className="flex items-center gap-4">
+                        <span className="text-lg font-bold text-gray-700 dark:text-gray-300">Suma:</span>
+                        <span className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">{totalValue.toFixed(2)} PLN</span>
+                    </div>
                 </div>
             </div>
             
@@ -629,6 +632,7 @@ const OrdersListView = ({ onEdit }) => {
     const { showNotification } = useNotification();
     const [filters, setFilters] = useState({ customer: '', author: '', dateFrom: '', dateTo: '' });
     const [showFilters, setShowFilters] = useState(false);
+    const importMultipleRef = useRef(null);
 
     const fetchOrders = useCallback(async () => {
         setIsLoading(true);
@@ -665,12 +669,43 @@ const OrdersListView = ({ onEdit }) => {
         setFilters({ customer: '', author: '', dateFrom: '', dateTo: '' });
     };
 
+    const handleMultipleFileImport = async (event) => {
+        const files = Array.from(event.target.files);
+        if (files.length === 0) return;
+        try {
+            const result = await api.importMultipleOrdersFromCsv(files);
+            showNotification(result.message, 'success');
+            fetchOrders();
+        } catch (error) {
+            showNotification(error.message, 'error');
+        }
+        event.target.value = null;
+    };
+
+    const handleExportOrders = () => {
+        const csvData = orders.flatMap(order => 
+            order.items.map(item => `${item.barcodes[0] || ''},${item.quantity || 0}`)
+        ).join('\n');
+        const blob = new Blob([`\uFEFF${csvData}`], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a");
+        const url = URL.createObjectURL(blob);
+        link.setAttribute("href", url);
+        link.setAttribute("download", `zamowienia_${view}_${new Date().toISOString().split('T')[0]}.csv`);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
     return (
         <>
             <div className="p-4 md:p-8">
                 <div className="flex flex-wrap gap-4 items-center justify-between mb-4">
                     <h1 className="text-3xl font-bold text-gray-800 dark:text-white">Zamówienia</h1>
                     <div className="flex items-center gap-2">
+                        <button onClick={handleExportOrders} className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"><FileDown className="w-5 h-5 mr-2"/> Eksportuj listę</button>
+                        <input type="file" ref={importMultipleRef} onChange={handleMultipleFileImport} className="hidden" accept=".csv" multiple />
+                        <button onClick={() => importMultipleRef.current.click()} className="flex items-center px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600"><FileUp className="w-5 h-5 mr-2"/> Importuj wiele</button>
                         <button onClick={() => setShowFilters(!showFilters)} className="flex items-center px-4 py-2 bg-gray-200 dark:bg-gray-700 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600"><Filter className="w-5 h-5 mr-2"/> Filtry</button>
                         <div className="flex items-center bg-gray-200 dark:bg-gray-700 rounded-lg p-1">
                             <button onClick={() => setView('Zapisane')} className={`px-4 py-2 text-sm font-semibold rounded-md ${view === 'Zapisane' ? 'bg-white dark:bg-gray-900 text-indigo-600' : 'text-gray-500'}`}>Zapisane</button>
@@ -836,12 +871,12 @@ const PickingView = () => {
         setToPickItems(prev => [...prev, itemToUndo]);
     };
 
-    if (isLoading) { return <div className="p-8 text-center">Ładowanie zamówień...</div> }
+    if (isLoading) { return <div className="p-4 text-center">Ładowanie zamówień...</div> }
     if (!selectedOrder) {
         return (
             <div className="p-4 md:p-8">
                 <h1 className="text-3xl font-bold mb-6 text-gray-800 dark:text-white">Kompletacja Zamówień</h1>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     {orders.map(order => (
                         <div key={order._id} onClick={() => handleSelectOrder(order)} className="p-4 bg-white dark:bg-gray-800 rounded-lg shadow-md cursor-pointer hover:shadow-lg hover:scale-105 transition-all">
                             <p className="font-bold text-lg text-indigo-600 dark:text-indigo-400">{order.customerName}</p>
@@ -924,6 +959,7 @@ const InventoryView = ({ user, onNavigate, isDirty, setIsDirty }) => {
     const [isLoading, setIsLoading] = useState(true);
     const { showNotification } = useNotification();
     const [deleteModal, setDeleteModal] = useState({ isOpen: false, invId: null });
+    const importMultipleRef = useRef(null);
 
     const fetchInventories = useCallback(async () => {
         setIsLoading(true);
@@ -959,6 +995,19 @@ const InventoryView = ({ user, onNavigate, isDirty, setIsDirty }) => {
             showNotification(error.message, 'error');
         }
     };
+    
+    const handleMultipleFileImport = async (event) => {
+        const files = Array.from(event.target.files);
+        if (files.length === 0) return;
+        try {
+            const result = await api.importMultipleInventorySheets(files);
+            showNotification(result.message, 'success');
+            fetchInventories();
+        } catch (error) {
+            showNotification(error.message, 'error');
+        }
+        event.target.value = null;
+    };
 
     if (isLoading) {
         return <div className="p-8 text-center">Ładowanie...</div>;
@@ -968,9 +1017,13 @@ const InventoryView = ({ user, onNavigate, isDirty, setIsDirty }) => {
         <div className="p-4 md:p-8">
             <div className="flex justify-between items-center mb-6">
                 <h1 className="text-3xl font-bold">Zapisane inwentaryzacje</h1>
-                <button onClick={handleNewInventory} className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
-                    <PlusCircle className="w-5 h-5 mr-2"/> Nowa inwentaryzacja
-                </button>
+                <div className="flex gap-2">
+                    <input type="file" ref={importMultipleRef} onChange={handleMultipleFileImport} className="hidden" accept=".csv" multiple />
+                    <button onClick={() => importMultipleRef.current.click()} className="flex items-center px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600"><FileUp className="w-5 h-5 mr-2"/> Importuj wiele</button>
+                    <button onClick={handleNewInventory} className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
+                        <PlusCircle className="w-5 h-5 mr-2"/> Nowa inwentaryzacja
+                    </button>
+                </div>
             </div>
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-x-auto">
                 <table className="w-full text-left">
@@ -1010,24 +1063,6 @@ const NewInventorySheet = ({ user, onSave, inventoryId = null, setDirty }) => {
     const { showNotification } = useNotification();
     const importFileRef = useRef(null);
 
-    const debouncedInventory = useDebounce(inventory, 2500);
-
-    useEffect(() => {
-        const autoSave = async () => {
-            if (inventory.isDirty && debouncedInventory._id) {
-                try {
-                    const saved = await api.saveInventory(debouncedInventory);
-                    setInventory(saved.inventory);
-                    setDirty(false);
-                    showNotification('Zmiany zapisane automatycznie.', 'success');
-                } catch (error) {
-                    showNotification('Błąd automatycznego zapisu: ' + error.message, 'error');
-                }
-            }
-        };
-        autoSave();
-    }, [debouncedInventory, inventory.isDirty, showNotification, setDirty]);
-
     useEffect(() => {
         if (inventoryId) {
             const fetchInventory = async () => {
@@ -1055,7 +1090,7 @@ const NewInventorySheet = ({ user, onSave, inventoryId = null, setDirty }) => {
 
     const addProductToInventory = (product, quantity) => {
         const newItems = [...inventory.items];
-        const existingItemIndex = newItems.findIndex(item => item._id === product._id);
+        const existingItemIndex = newItems.findIndex(item => item._id === product._id && !item.isCustom);
         if (existingItemIndex > -1) {
             newItems[existingItemIndex].quantity = (newItems[existingItemIndex].quantity || 0) + quantity;
         } else {
@@ -1086,8 +1121,8 @@ const NewInventorySheet = ({ user, onSave, inventoryId = null, setDirty }) => {
         }
         try {
             const payload = { ...inventory, author: user.username };
-            const saved = await api.saveInventory(payload);
-            setInventory(saved.inventory);
+            const { inventory: savedInventory } = await api.saveInventory(payload);
+            setInventory(savedInventory);
             setDirty(false);
             showNotification('Inwentaryzacja została pomyślnie zapisana.', 'success');
             onSave();
@@ -1101,7 +1136,7 @@ const NewInventorySheet = ({ user, onSave, inventoryId = null, setDirty }) => {
         if (!file) return;
         try {
             const { items, notFound } = await api.importInventorySheet(file);
-            updateInventory({ items: items });
+            updateInventory({ items });
             showNotification(`Zaimportowano ${items.length} pozycji do arkusza.`, 'success');
             if (notFound.length > 0) {
                 showNotification(`Nie znaleziono produktów dla kodów: ${notFound.join(', ')}`, 'error');
