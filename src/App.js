@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, createContext, useContext, useCallback } from 'react';
-import { Search, List, Wrench, User, Sun, Moon, LogOut, FileDown, Printer, Save, CheckCircle, AlertTriangle, Upload, Trash2, XCircle, UserPlus, KeyRound, PlusCircle, MessageSquare, Archive, Edit, Home, Menu, Filter, RotateCcw, FileUp, GitMerge, Eye, Target, Trophy, Crown, BarChart2, Users, Package, StickyNote, Settings } from 'lucide-react';
+import { Search, List, Wrench, User, Sun, Moon, LogOut, FileDown, Printer, Save, CheckCircle, AlertTriangle, Upload, Trash2, XCircle, UserPlus, KeyRound, PlusCircle, MessageSquare, Archive, Edit, Home, Menu, Filter, RotateCcw, FileUp, GitMerge, Eye, Target, Trophy, Crown, BarChart2, Users, Package, StickyNote, Settings, ChevronsUpDown, ChevronUp, ChevronDown } from 'lucide-react';
 import { format } from 'date-fns';
 import { pl } from 'date-fns/locale';
 
@@ -72,6 +72,38 @@ const NotificationProvider = ({ children }) => {
     );
 };
 const useNotification = () => useContext(NotificationContext);
+
+// --- Hook do sortowania ---
+const useSortableData = (items, config = null) => {
+    const [sortConfig, setSortConfig] = useState(config);
+
+    const sortedItems = useMemo(() => {
+        let sortableItems = [...items];
+        if (sortConfig !== null) {
+            sortableItems.sort((a, b) => {
+                if (a[sortConfig.key] < b[sortConfig.key]) {
+                    return sortConfig.direction === 'ascending' ? -1 : 1;
+                }
+                if (a[sortConfig.key] > b[sortConfig.key]) {
+                    return sortConfig.direction === 'ascending' ? 1 : -1;
+                }
+                return 0;
+            });
+        }
+        return sortableItems;
+    }, [items, sortConfig]);
+
+    const requestSort = (key) => {
+        let direction = 'ascending';
+        if (sortConfig && sortConfig.key === key && sortConfig.direction === 'ascending') {
+            direction = 'descending';
+        }
+        setSortConfig({ key, direction });
+    };
+
+    return { items: sortedItems, requestSort, sortConfig };
+};
+
 
 // --- API Client ---
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://dekor.onrender.com';
@@ -1100,6 +1132,7 @@ const NewInventorySheet = ({ user, onSave, inventoryId = null, setDirty }) => {
     const printRef = useRef(null);
     const { showNotification } = useNotification();
     const importFileRef = useRef(null);
+    const { items: sortedItems, requestSort, sortConfig } = useSortableData(inventory.items);
 
     useEffect(() => {
         if (inventoryId) {
@@ -1244,7 +1277,7 @@ const NewInventorySheet = ({ user, onSave, inventoryId = null, setDirty }) => {
                             </tr>
                         </thead>
                         <tbody>
-                            {inventory.items.map(item => {
+                            {sortedItems.map(item => {
                                 const expected = item.expectedQuantity ?? 0;
                                 const counted = item.quantity || 0;
                                 const diff = counted - expected;
@@ -1272,7 +1305,7 @@ const NewInventorySheet = ({ user, onSave, inventoryId = null, setDirty }) => {
             <PinnedInputBar onProductAdd={addProductToInventory} onSave={handleSave} isDirty={inventory.isDirty} />
 
             <Modal isOpen={discrepancyModal.isOpen} onClose={() => setDiscrepancyModal({ isOpen: false })} title="Wykaz Rozbieżności" maxWidth="4xl">
-                <div ref={printRef}>
+                <div ref={printRef} className="max-h-[70vh] overflow-y-auto">
                     <h2 className="text-2xl font-bold mb-4">Rozbieżności w inwentaryzacji: {inventory.name}</h2>
                     <p>Data: {format(new Date(), 'PPpp', { locale: pl })}</p>
                     {discrepancies.length > 0 ? (
