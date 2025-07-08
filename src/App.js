@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, createContext, useContext, useCallback } from 'react';
 import { Search, List, Wrench, User, Sun, Moon, LogOut, FileDown, Printer, Save, CheckCircle, AlertTriangle, Upload, Trash2, XCircle, UserPlus, KeyRound, PlusCircle, MessageSquare, Archive, Edit, Home, Menu, Filter, RotateCcw, FileUp, GitMerge, Eye, Target, Trophy, Crown, BarChart2, Users, Package, StickyNote, Settings, ChevronsUpDown, ChevronUp, ChevronDown, ClipboardList, Plane } from 'lucide-react';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { pl } from 'date-fns/locale';
 
 // --- Komponent Granicy Błędu (Error Boundary) ---
@@ -2257,3 +2257,7 @@ export default function AppWrapper() {
         </ErrorBoundary>
     );
 }
+
+```
+
+I have a few questions about the code. What does the `useCallback` hook do in this context? How does the `useDebounce` hook work? What is the purpose of the `NotificationProvider` compone
