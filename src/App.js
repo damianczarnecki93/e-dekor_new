@@ -358,88 +358,176 @@ const SearchView = ({ onProductSelect, showFilter = true }) => {
     );
 };
 
-const OrderView = ({ currentOrder, setCurrentOrder, user, onNavigate }) => {
+const PinnedInputBar = ({ onProductAdd }) => {
+    const [query, setQuery] = useState('');
+    const [quantity, setQuantity] = useState(1);
+    const [suggestions, setSuggestions] = useState([]);
+    const [isLoading, setIsLoading] = useState(false);
+    const { showNotification } = useNotification();
+    const inputRef = useRef(null);
+
+    useEffect(() => {
+        if (query.length < 2) {
+            setSuggestions([]);
+            return;
+        }
+        const handler = setTimeout(async () => {
+            setIsLoading(true);
+            try {
+                const results = await api.searchProducts(query);
+                setSuggestions(results);
+            } catch (error) {
+                showNotification(error.message, 'error');
+            } finally {
+                setIsLoading(false);
+            }
+        }, 300);
+        return () => clearTimeout(handler);
+    }, [query, showNotification]);
+
+    const handleAdd = (product) => {
+        const qty = Number(quantity);
+        if (isNaN(qty) || qty <= 0) {
+            showNotification('Wprowadź poprawną ilość.', 'error');
+            return;
+        }
+        onProductAdd(product, qty);
+        setSuggestions([]);
+        setQuery('');
+        setQuantity(1);
+        inputRef.current?.focus();
+    };
+    
+    const handleKeyDown = (e) => {
+        if (e.key === 'Enter' && query.trim() !== '') {
+            e.preventDefault();
+            if (suggestions.length > 0) {
+                handleAdd(suggestions[0]);
+            } else {
+                // Dodaj produkt spoza bazy
+                const customItem = {
+                    _id: `custom-${Date.now()}`,
+                    name: `Produkt ${query}`,
+                    product_code: 'N/A',
+                    barcodes: [query],
+                    price: 0,
+                    isCustom: true,
+                };
+                handleAdd(customItem);
+            }
+        }
+    };
+
+    return (
+        <div className="fixed bottom-0 left-0 lg:left-64 right-0 bg-white dark:bg-gray-800 border-t dark:border-gray-700 shadow-top z-20 p-4">
+            <div className="max-w-4xl mx-auto relative">
+                {suggestions.length > 0 && (
+                    <ul className="absolute bottom-full mb-2 w-full bg-white dark:bg-gray-700 border rounded-lg shadow-xl max-h-60 overflow-y-auto z-30">
+                        {suggestions.map(p => (
+                            <li key={p._id} onClick={() => handleAdd(p)} className="p-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 border-b last:border-b-0">
+                                <p className="font-semibold">{p.name}</p>
+                                <p className="text-sm text-gray-500">{p.product_code}</p>
+                            </li>
+                        ))}
+                    </ul>
+                )}
+                <div className="flex items-center gap-4">
+                    <input
+                        ref={inputRef}
+                        type="text"
+                        value={query}
+                        onChange={(e) => setQuery(e.target.value)}
+                        onKeyDown={handleKeyDown}
+                        placeholder="Wyszukaj lub zeskanuj produkt..."
+                        className="w-full p-3 bg-gray-100 dark:bg-gray-700 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                    <input
+                        type="number"
+                        value={quantity}
+                        onChange={(e) => setQuantity(e.target.value)}
+                        onKeyDown={handleKeyDown}
+                        className="w-24 p-3 text-center bg-gray-100 dark:bg-gray-700 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty }) => {
     const [order, setOrder] = useState(currentOrder);
     const [noteModal, setNoteModal] = useState({ isOpen: false, itemIndex: null, text: '' });
     const listEndRef = useRef(null);
     const printRef = useRef(null);
     const importFileRef = useRef(null);
     const { showNotification } = useNotification();
-    const [isDirty, setIsDirty] = useState(false);
-
-    const debouncedOrder = useDebounce(order, 2000); // Auto-zapis co 2 sekundy
+    
+    const debouncedOrder = useDebounce(order, 2000); 
 
     useEffect(() => {
         const autoSave = async () => {
-            if (isDirty && debouncedOrder._id) {
+            if (order.isDirty && debouncedOrder._id) {
                 try {
-                    await api.saveOrder(debouncedOrder);
+                    const saved = await api.saveOrder(debouncedOrder);
+                    setOrder(saved.order);
+                    setCurrentOrder(saved.order);
+                    setDirty(false); // Aktualizacja w głównym komponencie
                     showNotification('Zmiany zapisane automatycznie.', 'success');
-                    setIsDirty(false);
                 } catch (error) {
                     showNotification('Błąd automatycznego zapisu: ' + error.message, 'error');
                 }
             }
         };
         autoSave();
-    }, [debouncedOrder, isDirty, showNotification]);
+    }, [debouncedOrder, order.isDirty, showNotification, setCurrentOrder, setDirty]);
 
     useEffect(() => { 
         setOrder(currentOrder);
-        setIsDirty(false); 
-    }, [currentOrder]);
+        setDirty(currentOrder.isDirty || false);
+    }, [currentOrder, setDirty]);
     
-    useEffect(() => {
-        const handleBeforeUnload = (e) => {
-            if (isDirty) {
-                e.preventDefault();
-                e.returnValue = 'Masz niezapisane zmiany. Czy na pewno chcesz opuścić stronę?';
-            }
-        };
-        window.addEventListener('beforeunload', handleBeforeUnload);
-        return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-    }, [isDirty]);
-
     const scrollToBottom = () => listEndRef.current?.scrollIntoView({ behavior: "smooth" });
     useEffect(scrollToBottom, [order.items]);
 
-    const updateOrder = (updatedOrder) => {
-        setOrder(updatedOrder);
-        setCurrentOrder(updatedOrder);
-        setIsDirty(true);
+    const updateOrder = (updates, isDirty = true) => {
+        const newOrder = { ...order, ...updates, isDirty };
+        setOrder(newOrder);
+        setCurrentOrder(newOrder);
+        setDirty(isDirty);
     };
 
-    const addProductToOrder = (product) => {
+    const addProductToOrder = (product, quantity) => {
         const newItems = [...(order.items || [])];
         const existingItemIndex = newItems.findIndex(item => item._id === product._id);
-        if (existingItemIndex > -1) { newItems[existingItemIndex].quantity += 1; }
-        else { newItems.push({ ...product, quantity: 1, note: '' }); }
-        updateOrder({ ...order, items: newItems });
+        if (existingItemIndex > -1) { 
+            newItems[existingItemIndex].quantity += quantity;
+        } else { 
+            newItems.push({ ...product, quantity: quantity, note: '' });
+        }
+        updateOrder({ items: newItems });
     };
 
     const updateQuantity = (itemIndex, newQuantityStr) => {
         const newQuantity = parseInt(newQuantityStr, 10);
+        const newItems = [...order.items];
         if (!isNaN(newQuantity) && newQuantity >= 0) {
-            const newItems = [...order.items];
             newItems[itemIndex].quantity = newQuantity;
-            updateOrder({ ...order, items: newItems });
         } else if (newQuantityStr === '') {
-            const newItems = [...order.items];
             newItems[itemIndex].quantity = 0;
-            updateOrder({ ...order, items: newItems });
         }
+        updateOrder({ items: newItems });
     };
 
     const removeItemFromOrder = (itemIndex) => {
         const newItems = [...order.items];
         newItems.splice(itemIndex, 1);
-        updateOrder({ ...order, items: newItems });
+        updateOrder({ items: newItems });
     };
 
     const handleNoteSave = () => {
         const newItems = [...order.items];
         newItems[noteModal.itemIndex].note = noteModal.text;
-        updateOrder({ ...order, items: newItems });
+        updateOrder({ items: newItems });
         setNoteModal({ isOpen: false, itemIndex: null, text: '' });
     };
 
@@ -451,56 +539,16 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, onNavigate }) => {
             const orderToSave = { ...order, author: user.username };
             const { message, order: savedOrder } = await api.saveOrder(orderToSave);
             showNotification(message, 'success');
-            updateOrder(savedOrder);
-            setIsDirty(false);
+            updateOrder(savedOrder, false);
         } catch (error) { showNotification(error.message, 'error'); }
     };
-
-    const handleNewOrder = async () => {
-        if (isDirty) {
-            const confirmSave = window.confirm("Masz niezapisane zmiany. Czy chcesz je zapisać przed utworzeniem nowego zamówienia?");
-            if (confirmSave) {
-                await handleSaveOrder();
-            }
-        }
-        setCurrentOrder({ customerName: '', items: [] });
-    };
-
-    const handlePrint = () => {
-        const content = printRef.current;
-        if (content) {
-            const printWindow = window.open('', '_blank');
-            printWindow.document.write('<html><head><title>Wydruk Zamówienia</title><script src="https://cdn.tailwindcss.com"></script><style>.print-header { display: block !important; } body { padding: 2rem; }</style></head><body>');
-            printWindow.document.write(content.innerHTML);
-            printWindow.document.write('</body></html>');
-            printWindow.document.close();
-            printWindow.focus();
-            setTimeout(() => { printWindow.print(); printWindow.close(); }, 500);
-        }
-    };
-
-    const handleExportCsv = () => {
-        const headers = ["Nazwa", "Kod produktu", "Kody EAN", "Cena", "Ilość", "Wartość", "Notatka"];
-        const data = (order.items || []).map(item => [`"${item.name.replace(/"/g, '""')}"`, item.product_code, `"${(item.barcodes || []).join(',')}"`, item.price.toFixed(2), item.quantity, (item.price * item.quantity).toFixed(2), `"${(item.note || '').replace(/"/g, '""')}"`]);
-        const csvContent = [headers.join(','), ...data.map(row => row.join(','))].join('\n');
-        const blob = new Blob([`\uFEFF${csvContent}`], { type: 'text/csv;charset=utf-8;' });
-        const link = document.createElement("a");
-        const url = URL.createObjectURL(blob);
-        link.setAttribute("href", url);
-        const filename = `Zamowienie-${order.customerName.replace(/\s/g, '_') || 'nowe'}.csv`;
-        link.setAttribute("download", filename);
-        link.style.visibility = 'hidden';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-    };
-
+    
     const handleFileImport = async (event) => {
         const file = event.target.files[0];
         if (!file) return;
         try {
             const { items, notFound } = await api.importOrderFromCsv(file);
-            updateOrder({ ...order, items: [...(order.items || []), ...items] });
+            updateOrder({ items: [...(order.items || []), ...items] });
             showNotification(`Zaimportowano ${items.length} pozycji.`, 'success');
             if (notFound.length > 0) {
                 showNotification(`Nie znaleziono produktów dla kodów: ${notFound.join(', ')}`, 'error');
@@ -512,8 +560,8 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, onNavigate }) => {
     };
 
     return (
-        <>
-            <div className="p-4 md:p-8">
+        <div className="h-full flex flex-col">
+            <div className="flex-grow p-4 md:p-8 pb-32"> {/* Dodany padding na dole */}
                 <div className="flex flex-wrap gap-4 justify-between items-center mb-4">
                     <h1 className="text-3xl font-bold text-gray-800 dark:text-white">{order._id ? `Edycja Zamówienia` : 'Nowe Zamówienie'}</h1>
                     <div className="flex gap-2">
@@ -521,25 +569,18 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, onNavigate }) => {
                         <button onClick={() => importFileRef.current.click()} className="flex items-center justify-center px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors">
                             <FileUp className="w-5 h-5 mr-2"/> Importuj z CSV
                         </button>
-                        <button onClick={handleNewOrder} className="flex items-center justify-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
-                            <PlusCircle className="w-5 h-5 mr-2"/> Nowa Lista
-                        </button>
                     </div>
                 </div>
-                <input type="text" value={order.customerName || ''} onChange={(e) => updateOrder({ ...order, customerName: e.target.value })} placeholder="Wprowadź nazwę klienta" className="w-full max-w-lg p-3 mb-6 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                <input type="text" value={order.customerName || ''} onChange={(e) => updateOrder({ customerName: e.target.value })} placeholder="Wprowadź nazwę klienta" className="w-full max-w-lg p-3 mb-6 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
                 
-                <div className="mb-6">
-                    <SearchView onProductSelect={addProductToOrder} />
-                </div>
-
-                <div ref={printRef} className="flex-grow bg-gray-50 dark:bg-gray-900 p-4 rounded-lg shadow-inner mb-4 mt-6">
+                <div ref={printRef} className="flex-grow bg-gray-50 dark:bg-gray-900 p-4 rounded-lg shadow-inner mt-6">
                     <div className="print-header hidden p-4"><h2 className="text-2xl font-bold">Zamówienie dla: {order.customerName}</h2><p>Data: {new Date().toLocaleDateString()}</p></div>
                     <div className="overflow-x-auto">
                         <table className="w-full text-left min-w-[600px]">
                             <thead><tr className="border-b border-gray-200 dark:border-gray-700"><th className="p-3">Nazwa</th><th className="p-3">Kod produktu</th><th className="p-3 text-right">Cena</th><th className="p-3 text-center">Ilość</th><th className="p-3 text-right">Wartość</th><th className="p-3 text-center">Akcje</th></tr></thead>
                             <tbody>
                                 {(order.items || []).map((item, index) => (
-                                    <tr key={item._id || index} className={`border-b border-gray-200 dark:border-gray-700 last:border-0 ${item.isCustom ? 'text-red-500' : ''}`}>
+                                    <tr key={item._id || index} className={`border-b border-gray-200 dark:border-gray-700 last:border-0 ${item.isCustom ? 'text-yellow-500' : ''}`}>
                                         <td className="p-3 font-medium">{item.name}{item.note && <p className="text-xs text-gray-400 mt-1">Notatka: {item.note}</p>}</td>
                                         <td className="p-3">{item.product_code}</td>
                                         <td className="p-3 text-right">{item.price.toFixed(2)} PLN</td>
@@ -568,19 +609,15 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, onNavigate }) => {
                     <span className="text-lg font-bold text-gray-700 dark:text-gray-300">Suma:</span>
                     <span className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">{totalValue.toFixed(2)} PLN</span>
                 </div>
-                 <div className="flex flex-wrap justify-end space-x-3 mt-4">
-                    <button onClick={handleSaveOrder} className="flex items-center justify-center px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-blue-400" disabled={!isDirty}>
-                        <Save className="w-5 h-5 mr-2"/> {isDirty ? 'Zapisz zmiany' : 'Zapisano'}
-                    </button>
-                    <button onClick={handleExportCsv} className="flex items-center justify-center px-5 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"><FileDown className="w-5 h-5 mr-2"/> CSV</button>
-                    <button onClick={handlePrint} className="flex items-center justify-center px-5 py-2.5 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"><Printer className="w-5 h-5 mr-2"/> Drukuj</button>
-                </div>
             </div>
+            
+            <PinnedInputBar onProductAdd={addProductToOrder} />
+
             <Modal isOpen={noteModal.isOpen} onClose={() => setNoteModal({ isOpen: false, itemIndex: null, text: '' })} title="Dodaj notatkę do pozycji">
                 <textarea value={noteModal.text} onChange={(e) => setNoteModal({...noteModal, text: e.target.value})} className="w-full p-2 border rounded-md min-h-[100px] bg-white dark:bg-gray-700"></textarea>
                 <div className="flex justify-end gap-4 mt-4"><button onClick={() => setNoteModal({ isOpen: false, itemIndex: null, text: '' })} className="px-4 py-2 bg-gray-200 dark:bg-gray-600 rounded-lg">Anuluj</button><button onClick={handleNoteSave} className="px-4 py-2 bg-blue-600 text-white rounded-lg">Zapisz notatkę</button></div>
             </Modal>
-        </>
+        </div>
     );
 };
 
@@ -882,7 +919,7 @@ const PickingView = () => {
     );
 };
 
-const InventoryView = ({ user, onNavigate }) => {
+const InventoryView = ({ user, onNavigate, isDirty, setIsDirty }) => {
     const [inventories, setInventories] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const { showNotification } = useNotification();
@@ -904,6 +941,10 @@ const InventoryView = ({ user, onNavigate }) => {
         fetchInventories();
     }, [fetchInventories]);
 
+    const handleNewInventory = () => {
+        onNavigate('inventory-sheet');
+    };
+    
     const handleEdit = (inventoryId) => {
         onNavigate('inventory-sheet', { inventoryId });
     };
@@ -927,7 +968,7 @@ const InventoryView = ({ user, onNavigate }) => {
         <div className="p-4 md:p-8">
             <div className="flex justify-between items-center mb-6">
                 <h1 className="text-3xl font-bold">Zapisane inwentaryzacje</h1>
-                <button onClick={() => onNavigate('inventory-sheet')} className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
+                <button onClick={handleNewInventory} className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
                     <PlusCircle className="w-5 h-5 mr-2"/> Nowa inwentaryzacja
                 </button>
             </div>
@@ -961,10 +1002,11 @@ const InventoryView = ({ user, onNavigate }) => {
     );
 };
 
-const NewInventorySheet = ({ user, onSave, inventoryId = null }) => {
+const NewInventorySheet = ({ user, onSave, inventoryId = null, setDirty }) => {
     const [inventory, setInventory] = useState({ name: '', items: [] });
     const [isLoading, setIsLoading] = useState(!!inventoryId);
-    const [isDirty, setIsDirty] = useState(false);
+    const [discrepancyModal, setDiscrepancyModal] = useState({ isOpen: false });
+    const printRef = useRef(null);
     const { showNotification } = useNotification();
     const importFileRef = useRef(null);
 
@@ -972,29 +1014,19 @@ const NewInventorySheet = ({ user, onSave, inventoryId = null }) => {
 
     useEffect(() => {
         const autoSave = async () => {
-            if (isDirty && debouncedInventory._id) {
+            if (inventory.isDirty && debouncedInventory._id) {
                 try {
-                    await api.saveInventory(debouncedInventory);
+                    const saved = await api.saveInventory(debouncedInventory);
+                    setInventory(saved.inventory);
+                    setDirty(false);
                     showNotification('Zmiany zapisane automatycznie.', 'success');
-                    setIsDirty(false);
                 } catch (error) {
                     showNotification('Błąd automatycznego zapisu: ' + error.message, 'error');
                 }
             }
         };
         autoSave();
-    }, [debouncedInventory, isDirty, showNotification]);
-
-    useEffect(() => {
-        const handleBeforeUnload = (e) => {
-            if (isDirty) {
-                e.preventDefault();
-                e.returnValue = 'Masz niezapisane zmiany. Czy na pewno chcesz opuścić stronę?';
-            }
-        };
-        window.addEventListener('beforeunload', handleBeforeUnload);
-        return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-    }, [isDirty]);
+    }, [debouncedInventory, inventory.isDirty, showNotification, setDirty]);
 
     useEffect(() => {
         if (inventoryId) {
@@ -1010,40 +1042,41 @@ const NewInventorySheet = ({ user, onSave, inventoryId = null }) => {
                 }
             };
             fetchInventory();
+        } else {
+            setInventory({ name: '', items: [], isDirty: false });
         }
     }, [inventoryId, showNotification]);
 
-    const updateInventory = (updates) => {
-        setInventory(prev => ({ ...prev, ...updates }));
-        setIsDirty(true);
+    const updateInventory = (updates, isDirty = true) => {
+        const newInventory = { ...inventory, ...updates, isDirty };
+        setInventory(newInventory);
+        setDirty(isDirty);
     };
-    
-    const addProductToInventory = (product) => {
-        const existingItem = inventory.items.find(item => item._id === product._id);
-        if (existingItem) {
-            const newItems = inventory.items.map(item => 
-                item._id === product._id ? { ...item, quantity: (item.quantity || 0) + 1 } : item
-            );
-            updateInventory({ items: newItems });
+
+    const addProductToInventory = (product, quantity) => {
+        const newItems = [...inventory.items];
+        const existingItemIndex = newItems.findIndex(item => item._id === product._id);
+        if (existingItemIndex > -1) {
+            newItems[existingItemIndex].quantity = (newItems[existingItemIndex].quantity || 0) + quantity;
         } else {
-            updateInventory({ items: [...inventory.items, { ...product, quantity: 1, expectedQuantity: product.quantity }] });
+            newItems.push({ ...product, quantity, expectedQuantity: product.quantity, isCustom: !!product.isCustom });
         }
+        updateInventory({ items: newItems });
     };
 
     const updateQuantity = (id, newQuantityStr) => {
         const newQuantity = parseInt(newQuantityStr, 10);
-        if (!isNaN(newQuantity) && newQuantity >= 0) {
-            const newItems = inventory.items.map(item => item._id === id ? {...item, quantity: newQuantity} : item);
-            updateInventory({ items: newItems });
-        } else if (newQuantityStr === '') {
-            const newItems = inventory.items.map(item => item._id === id ? {...item, quantity: 0} : item);
-            updateInventory({ items: newItems });
-        }
+        const newItems = inventory.items.map(item => {
+            if (item._id === id) {
+                return { ...item, quantity: isNaN(newQuantity) || newQuantity < 0 ? 0 : newQuantity };
+            }
+            return item;
+        });
+        updateInventory({ items: newItems });
     };
     
     const removeItem = (id) => {
-        const newItems = inventory.items.filter(item => item._id !== id);
-        updateInventory({ items: newItems });
+        updateInventory({ items: inventory.items.filter(item => item._id !== id) });
     };
 
     const handleSave = async () => {
@@ -1053,9 +1086,10 @@ const NewInventorySheet = ({ user, onSave, inventoryId = null }) => {
         }
         try {
             const payload = { ...inventory, author: user.username };
-            await api.saveInventory(payload);
+            const saved = await api.saveInventory(payload);
+            setInventory(saved.inventory);
+            setDirty(false);
             showNotification('Inwentaryzacja została pomyślnie zapisana.', 'success');
-            setIsDirty(false);
             onSave();
         } catch (error) {
             showNotification(error.message, 'error');
@@ -1077,81 +1111,118 @@ const NewInventorySheet = ({ user, onSave, inventoryId = null }) => {
         }
         event.target.value = null;
     };
+    
+    const handleExport = () => {
+        const csvContent = inventory.items
+            .map(item => `${item.barcodes[0] || ''},${item.quantity || 0}`)
+            .join('\n');
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a");
+        const url = URL.createObjectURL(blob);
+        link.setAttribute("href", url);
+        link.setAttribute("download", `inwentaryzacja_${inventory.name.replace(/\s/g, '_')}.csv`);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
 
-    if (isLoading) {
-        return <div className="p-8 text-center">Ładowanie danych inwentaryzacji...</div>;
-    }
+    const handlePrintDiscrepancies = () => {
+        const content = printRef.current;
+        if (content) {
+            const printWindow = window.open('', '_blank');
+            printWindow.document.write('<html><head><title>Wykaz Rozbieżności</title><style>body{font-family:sans-serif; padding: 2rem;} table{width:100%; border-collapse:collapse;} th,td{border:1px solid #ddd; padding:8px; text-align:left;} th{background-color:#f2f2f2;}</style></head><body>');
+            printWindow.document.write(content.innerHTML);
+            printWindow.document.write('</body></html>');
+            printWindow.document.close();
+            printWindow.focus();
+            setTimeout(() => { printWindow.print(); printWindow.close(); }, 500);
+        }
+    };
+    
+    const discrepancies = inventory.items.filter(item => (item.quantity || 0) !== (item.expectedQuantity ?? 0));
+
+    if (isLoading) { return <div className="p-8 text-center">Ładowanie...</div>; }
 
     return (
-        <div className="p-4 md:p-8">
-            <div className="flex justify-between items-center mb-4">
-                <h1 className="text-3xl font-bold">{inventoryId ? 'Edycja' : 'Nowa'} Inwentaryzacja</h1>
-                <div className="flex gap-2">
-                    <input type="file" ref={importFileRef} onChange={handleFileImport} className="hidden" accept=".csv" />
-                    <button onClick={() => importFileRef.current.click()} className="flex items-center px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600">
-                        <FileUp className="w-5 h-5 mr-2"/> Importuj Arkusz z CSV
+        <div className="h-full flex flex-col">
+            <div className="flex-grow p-4 md:p-8 pb-32">
+                <div className="flex justify-between items-center mb-4">
+                    <h1 className="text-3xl font-bold">{inventoryId ? 'Edycja' : 'Nowa'} Inwentaryzacja</h1>
+                    <div className="flex gap-2">
+                        <button onClick={() => setDiscrepancyModal({ isOpen: true })} className="flex items-center px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"><BarChart2 className="w-5 h-5 mr-2"/> Wykaz rozbieżności</button>
+                        <button onClick={handleExport} className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"><FileDown className="w-5 h-5 mr-2"/> Eksportuj</button>
+                        <input type="file" ref={importFileRef} onChange={handleFileImport} className="hidden" accept=".csv" />
+                        <button onClick={() => importFileRef.current.click()} className="flex items-center px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600"><FileUp className="w-5 h-5 mr-2"/> Importuj</button>
+                    </div>
+                </div>
+                <input type="text" value={inventory.name} onChange={(e) => updateInventory({ name: e.target.value })} placeholder="Wprowadź nazwę listy spisowej" className="w-full max-w-lg p-3 mb-6 bg-white dark:bg-gray-700 border rounded-lg"/>
+                
+                <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-x-auto">
+                    <table className="w-full text-left min-w-[700px]">
+                        <thead className="bg-gray-50 dark:bg-gray-700">
+                            <tr className="border-b">
+                                <th className="p-3">Nazwa</th>
+                                <th className="p-3">Kod produktu</th>
+                                <th className="p-3 text-center">Ilość Oczekiwana</th>
+                                <th className="p-3 text-center">Ilość Zliczona</th>
+                                <th className="p-3 text-center">Różnica</th>
+                                <th className="p-3 text-center">Akcje</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {inventory.items.map(item => {
+                                const expected = item.expectedQuantity ?? 0;
+                                const counted = item.quantity || 0;
+                                const diff = counted - expected;
+                                return (
+                                    <tr key={item._id} className={`border-b last:border-0 ${(item.quantity || 0) === 0 ? 'bg-orange-50 dark:bg-orange-900/20' : ''} ${item.isCustom ? 'text-yellow-500' : ''}`}>
+                                        <td className="p-2 font-medium">{item.name}</td>
+                                        <td className="p-2">{item.product_code}</td>
+                                        <td className="p-2 text-center">{item.expectedQuantity ?? 'N/A'}</td>
+                                        <td className="p-2 text-center">
+                                            <input type="number" value={item.quantity || ''} onChange={(e) => updateQuantity(item._id, e.target.value)} className="w-24 text-center bg-transparent border rounded-md p-1 focus:ring-2 focus:ring-indigo-500 outline-none" />
+                                        </td>
+                                        <td className={`p-2 text-center font-bold ${diff === 0 ? 'text-green-500' : 'text-red-500'}`}>{diff > 0 ? `+${diff}` : diff}</td>
+                                        <td className="p-2 text-center">
+                                            <button onClick={() => removeItem(item._id)} className="text-red-500 hover:text-red-700"><Trash2 className="w-5 h-5" /></button>
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                    {inventory.items.length === 0 && <p className="text-center text-gray-500 p-8">Brak pozycji na liście. Zaimportuj arkusz lub dodaj produkty, aby rozpocząć.</p>}
+                </div>
+                <div className="flex gap-4 p-4 mt-4">
+                    <button onClick={handleSave} className="flex items-center justify-center px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-blue-400" disabled={!inventory.isDirty}>
+                        <Save className="w-5 h-5 mr-2"/> {inventory.isDirty ? 'Zapisz zmiany' : 'Zapisano'}
                     </button>
+                    <button onClick={onSave} className="flex items-center justify-center px-5 py-2.5 bg-gray-200 dark:bg-gray-600 rounded-lg hover:bg-gray-300">Anuluj</button>
                 </div>
             </div>
-            <input type="text" value={inventory.name} onChange={(e) => updateInventory({ name: e.target.value })} placeholder="Wprowadź nazwę listy spisowej" className="w-full max-w-lg p-3 mb-6 bg-white dark:bg-gray-700 border rounded-lg"/>
             
-            <div className="mb-6">
-                <SearchView onProductSelect={addProductToInventory} showFilter={false} />
-            </div>
+            <PinnedInputBar onProductAdd={addProductToInventory} />
 
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-x-auto">
-                <table className="w-full text-left min-w-[700px]">
-                    <thead className="bg-gray-50 dark:bg-gray-700">
-                        <tr className="border-b">
-                            <th className="p-3">Nazwa</th>
-                            <th className="p-3">Kod produktu</th>
-                            <th className="p-3 text-center">Ilość Oczekiwana</th>
-                            <th className="p-3 text-center">Ilość Zliczona</th>
-                            <th className="p-3 text-center">Różnica</th>
-                            <th className="p-3 text-center">Akcje</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {inventory.items.map(item => {
-                            const expected = item.expectedQuantity ?? 0;
-                            const counted = item.quantity || 0;
-                            const diff = counted - expected;
-                            return (
-                                <tr key={item._id} className={`border-b last:border-0 ${item.isCustom ? 'text-red-500' : ''}`}>
-                                    <td className="p-2 font-medium">{item.name}</td>
-                                    <td className="p-2">{item.product_code}</td>
-                                    <td className="p-2 text-center">{item.expectedQuantity ?? 'N/A'}</td>
-                                    <td className="p-2 text-center">
-                                        <input 
-                                            type="number" 
-                                            value={item.quantity || ''} 
-                                            onChange={(e) => updateQuantity(item._id, e.target.value)} 
-                                            className="w-24 text-center bg-transparent border rounded-md p-1 focus:ring-2 focus:ring-indigo-500 outline-none"
-                                        />
-                                    </td>
-                                    <td className={`p-2 text-center font-bold ${diff === 0 ? 'text-green-500' : 'text-red-500'}`}>
-                                        {diff > 0 ? `+${diff}` : diff}
-                                    </td>
-                                    <td className="p-2 text-center">
-                                        <button onClick={() => removeItem(item._id)} className="text-red-500 hover:text-red-700">
-                                            <Trash2 className="w-5 h-5" />
-                                        </button>
-                                    </td>
-                                </tr>
-                            );
-                        })}
-                    </tbody>
-                </table>
-                {inventory.items.length === 0 && <p className="text-center text-gray-500 p-8">Brak pozycji na liście. Zaimportuj arkusz lub dodaj produkty, aby rozpocząć.</p>}
-            </div>
-            <div className="flex gap-4 p-4 mt-4">
-                <button onClick={handleSave} className="flex items-center justify-center px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-blue-400" disabled={!isDirty}>
-                    <Save className="w-5 h-5 mr-2"/> {isDirty ? 'Zapisz zmiany' : 'Zapisano'}
-                </button>
-                <button onClick={() => onSave()} className="flex items-center justify-center px-5 py-2.5 bg-gray-200 dark:bg-gray-600 rounded-lg hover:bg-gray-300">
-                    Anuluj
-                </button>
-            </div>
+            <Modal isOpen={discrepancyModal.isOpen} onClose={() => setDiscrepancyModal({ isOpen: false })} title="Wykaz Rozbieżności" maxWidth="4xl">
+                <div ref={printRef}>
+                    <h2 className="text-2xl font-bold mb-4">Rozbieżności w inwentaryzacji: {inventory.name}</h2>
+                    <p>Data: {format(new Date(), 'PPpp', { locale: pl })}</p>
+                    {discrepancies.length > 0 ? (
+                        <table className="w-full text-left mt-4">
+                            <thead><tr><th>Nazwa</th><th>Kod produktu</th><th>Oczekiwano</th><th>Zliczono</th><th>Różnica</th></tr></thead>
+                            <tbody>
+                                {discrepancies.map(item => (
+                                    <tr key={item._id}>
+                                        <td>{item.name}</td><td>{item.product_code}</td><td>{item.expectedQuantity ?? 0}</td><td>{item.quantity || 0}</td><td>{(item.quantity || 0) - (item.expectedQuantity ?? 0)}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    ) : <p className="mt-4">Brak rozbieżności.</p>}
+                </div>
+                <div className="flex justify-end mt-6"><button onClick={handlePrintDiscrepancies} className="px-4 py-2 bg-blue-600 text-white rounded-lg"><Printer className="w-5 h-5 mr-2 inline-block"/>Drukuj</button></div>
+            </Modal>
         </div>
     );
 };
@@ -1621,7 +1692,8 @@ const NotesWidget = () => {
 function App() {
     const [user, setUser] = useState(null);
     const [activeView, setActiveView] = useState({ view: 'dashboard', params: {} });
-    const [currentOrder, setCurrentOrder] = useState({ customerName: '', items: [] });
+    const [currentOrder, setCurrentOrder] = useState({ customerName: '', items: [], isDirty: false });
+    const [isDirty, setIsDirty] = useState(false);
     const [isDarkMode, setIsDarkMode] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
     const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
@@ -1659,6 +1731,12 @@ function App() {
     }, []);
 
     const handleNavigate = (view, params = {}) => {
+        if (isDirty) {
+            if (!window.confirm("Masz niezapisane zmiany. Czy na pewno chcesz opuścić tę stronę? Zmiany zostaną utracone.")) {
+                return;
+            }
+        }
+        setIsDirty(false); // Resetuj flagę po nawigacji
         setActiveView({ view, params });
         setIsNavOpen(false);
     };
@@ -1691,13 +1769,24 @@ function App() {
         }
     };
 
+    const handleNewOrder = () => {
+        if (isDirty) {
+            if (!window.confirm("Masz niezapisane zmiany. Czy na pewno chcesz opuścić tę stronę? Zmiany zostaną utracone.")) {
+                return;
+            }
+        }
+        setIsDirty(false);
+        setCurrentOrder({ customerName: '', items: [], isDirty: false });
+        handleNavigate('order');
+    };
+
     if (isLoading) { return <div className="flex items-center justify-center h-screen bg-gray-100 dark:bg-gray-900">Ładowanie...</div> }
     if (!user) { return <AuthPage onLogin={handleLogin} />; }
 
     const navItems = [
         { id: 'dashboard', label: 'Panel Główny', icon: Home, roles: ['user', 'administrator'] },
         { id: 'search', label: 'Wyszukiwarka', icon: Search, roles: ['user', 'administrator'] },
-        { id: 'order', label: 'Nowe Zamówienie', icon: PlusCircle, roles: ['user', 'administrator'], action: () => { setCurrentOrder({ customerName: '', items: [] }); handleNavigate('order'); } },
+        { id: 'order', label: 'Nowe Zamówienie', icon: PlusCircle, roles: ['user', 'administrator'], action: handleNewOrder },
         { id: 'orders', label: 'Zamówienia', icon: Archive, roles: ['user', 'administrator'] },
         { id: 'picking', label: 'Kompletacja', icon: List, roles: ['user', 'administrator'] },
         { id: 'inventory', label: 'Inwentaryzacja', icon: Wrench, roles: ['user', 'administrator'] },
@@ -1711,11 +1800,11 @@ function App() {
         switch (view) {
             case 'dashboard': return <DashboardView user={user} onNavigate={handleNavigate} />;
             case 'search': return <MainSearchView />;
-            case 'order': return <OrderView currentOrder={currentOrder} setCurrentOrder={setCurrentOrder} user={user} onNavigate={handleNavigate} />;
+            case 'order': return <OrderView currentOrder={currentOrder} setCurrentOrder={setCurrentOrder} user={user} setDirty={setIsDirty} />;
             case 'orders': return <OrdersListView onEdit={loadOrderForEditing} />;
             case 'picking': return <PickingView />;
-            case 'inventory': return <InventoryView user={user} onNavigate={handleNavigate} />;
-            case 'inventory-sheet': return <NewInventorySheet user={user} onSave={() => handleNavigate('inventory')} inventoryId={params.inventoryId} />;
+            case 'inventory': return <InventoryView user={user} onNavigate={handleNavigate} isDirty={isDirty} setIsDirty={setIsDirty} />;
+            case 'inventory-sheet': return <NewInventorySheet user={user} onSave={() => handleNavigate('inventory')} inventoryId={params.inventoryId} setDirty={setIsDirty} />;
             case 'admin': return <AdminView user={user} onNavigate={handleNavigate} />;
             case 'admin-users': return <AdminUsersView user={user} />;
             case 'admin-products': return <AdminProductsView />;
