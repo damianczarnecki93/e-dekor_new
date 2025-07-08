@@ -109,7 +109,7 @@ const adminMiddleware = (req, res, next) => {
 const parseCsv = (buffer) => {
     return new Promise((resolve, reject) => {
         const items = [];
-        const decodedBuffer = iconv.decode(buffer, 'UTF-8');
+        const decodedBuffer = iconv.decode(buffer, 'win1250');
         const firstLine = decodedBuffer.split('\n')[0];
         const separator = firstLine.includes(';') ? ';' : ',';
 
@@ -265,7 +265,7 @@ app.post('/api/admin/upload-products', authMiddleware, adminMiddleware, upload.s
     try {
         const productsToImport = [];
         const csvHeaders = ['barcode', 'name', 'price', 'product_code', 'quantity', 'availability'];
-        const decodedBuffer = iconv.decode(req.file.buffer, 'UTF-8');
+        const decodedBuffer = iconv.decode(req.file.buffer, 'win1250');
         const readableStream = Readable.from(decodedBuffer);
         
         await new Promise((resolve, reject) => {
@@ -311,7 +311,7 @@ app.post('/api/admin/merge-products', authMiddleware, adminMiddleware, async (re
         const productInfo = new Map();
         const p2Path = path.join(__dirname, 'produkty2.csv');
         if (fs.existsSync(p2Path)) {
-            const stream2 = fs.createReadStream(p2Path).pipe(iconv.decodeStream('UTF-8')).pipe(csv({ separator: ';' }));
+            const stream2 = fs.createReadStream(p2Path).pipe(iconv.decodeStream('win1250')).pipe(csv({ separator: ';' }));
             for await (const row of stream2) {
                 if (row.product_code) {
                     productInfo.set(row.product_code, { name: row.name });
@@ -493,6 +493,54 @@ app.post('/api/orders/import-csv', authMiddleware, upload.single('orderFile'), a
     }
 });
 
+app.post('/api/orders/import-multiple-csv', authMiddleware, upload.array('orderFiles'), async (req, res) => {
+    if (!req.files || req.files.length === 0) {
+        return res.status(400).json({ message: 'Nie przesłano plików.' });
+    }
+
+    try {
+        let createdCount = 0;
+        for (const file of req.files) {
+            const itemsFromCsv = await parseCsv(file.buffer);
+            if (itemsFromCsv.length > 0) {
+                const barcodes = itemsFromCsv.map(item => item.barcode);
+                const foundProducts = await Product.find({ barcodes: { $in: barcodes } }).lean();
+                const productMap = new Map();
+                foundProducts.forEach(p => p.barcodes.forEach(b => productMap.set(b, p)));
+
+                const orderItems = [];
+                for (const csvItem of itemsFromCsv) {
+                    const product = productMap.get(csvItem.barcode);
+                    if (product) {
+                        orderItems.push({ ...product, quantity: csvItem.quantity });
+                    }
+                }
+                
+                if (orderItems.length > 0) {
+                    const total = orderItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+                    const customerName = file.originalname.replace(/\.csv$/i, '');
+                    const newOrder = new Order({
+                        id: `ZAM-${Date.now()}-${createdCount}`,
+                        customerName: customerName,
+                        items: orderItems,
+                        total: total,
+                        author: req.user.username,
+                        status: 'Zapisane',
+                        isDirty: false
+                    });
+                    await newOrder.save();
+                    createdCount++;
+                }
+            }
+        }
+        res.status(201).json({ message: `Pomyślnie zaimportowano i utworzono ${createdCount} zamówień.` });
+    } catch (error) {
+        console.error("Błąd importu wielu plików CSV:", error);
+        res.status(500).json({ message: 'Wystąpił błąd serwera podczas importu zamówień.', error: error.message });
+    }
+});
+
+
 app.post('/api/orders', authMiddleware, async (req, res) => {
     const orderData = req.body;
     const total = (orderData.items || []).reduce((sum, item) => sum + (item.price * item.quantity), 0);
@@ -662,6 +710,54 @@ app.post('/api/inventories/import-sheet', authMiddleware, upload.single('sheetFi
         res.status(500).json({ message: 'Wystąpił błąd serwera podczas importu arkusza.', error: error.message }); 
     }
 });
+
+app.post('/api/inventories/import-multiple-sheets', authMiddleware, upload.array('sheetFiles'), async (req, res) => {
+    if (!req.files || req.files.length === 0) {
+        return res.status(400).json({ message: 'Nie przesłano plików.' });
+    }
+
+    try {
+        let createdCount = 0;
+        for (const file of req.files) {
+            const itemsFromCsv = await parseCsv(file.buffer);
+            if (itemsFromCsv.length > 0) {
+                const barcodes = itemsFromCsv.map(item => item.barcode);
+                const foundProducts = await Product.find({ barcodes: { $in: barcodes } }).lean();
+                const productMap = new Map();
+                foundProducts.forEach(p => p.barcodes.forEach(b => productMap.set(b, p)));
+
+                const inventoryItems = [];
+                for (const csvItem of itemsFromCsv) {
+                    const product = productMap.get(csvItem.barcode);
+                    if (product) {
+                        inventoryItems.push({ ...product, quantity: 0, expectedQuantity: csvItem.quantity });
+                    }
+                }
+                
+                if (inventoryItems.length > 0) {
+                    const totalItems = inventoryItems.length;
+                    const totalQuantity = inventoryItems.reduce((sum, item) => sum + (item.quantity || 0), 0);
+                    const name = file.originalname.replace(/\.csv$/i, '');
+                    const newInventory = new Inventory({
+                        name,
+                        items: inventoryItems,
+                        author: req.user.username,
+                        totalItems,
+                        totalQuantity,
+                        isDirty: false
+                    });
+                    await newInventory.save();
+                    createdCount++;
+                }
+            }
+        }
+        res.status(201).json({ message: `Pomyślnie zaimportowano i utworzono ${createdCount} arkuszy inwentaryzacyjnych.` });
+    } catch (error) {
+        console.error("Błąd importu wielu arkuszy:", error);
+        res.status(500).json({ message: 'Wystąpił błąd serwera podczas importu arkuszy.', error: error.message });
+    }
+});
+
 
 // --- API Endpoints - Notatki ---
 app.get('/api/notes', authMiddleware, async (req, res) => {
