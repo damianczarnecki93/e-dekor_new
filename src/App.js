@@ -163,6 +163,11 @@ const api = {
         if (!response.ok) { const errorData = await response.json(); throw new Error(errorData.message || 'Błąd podczas kompletacji zamówienia'); }
         return await response.json();
     },
+    revertOrderCompletion: async (orderId) => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/api/orders/${orderId}/revert`, { method: 'POST' });
+        if (!response.ok) throw new Error('Błąd przywracania zamówienia');
+        return await response.json();
+    },
     uploadProductsFile: async (file, mode) => {
         const formData = new FormData();
         formData.append('productsFile', file);
@@ -379,7 +384,7 @@ const SearchView = ({ onProductSelect, showFilter = true }) => {
     );
 };
 
-const PinnedInputBar = ({ onProductAdd }) => {
+const PinnedInputBar = ({ onProductAdd, onSave, isDirty }) => {
     const [query, setQuery] = useState('');
     const [quantity, setQuantity] = useState(1);
     const [suggestions, setSuggestions] = useState([]);
@@ -451,7 +456,7 @@ const PinnedInputBar = ({ onProductAdd }) => {
                         ))}
                     </ul>
                 )}
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2 sm:gap-4">
                     <input
                         ref={inputRef}
                         type="text"
@@ -466,8 +471,14 @@ const PinnedInputBar = ({ onProductAdd }) => {
                         value={quantity}
                         onChange={(e) => setQuantity(e.target.value)}
                         onKeyDown={handleKeyDown}
-                        className="w-24 p-3 text-center bg-gray-100 dark:bg-gray-700 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        className="w-20 sm:w-24 p-3 text-center bg-gray-100 dark:bg-gray-700 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     />
+                    {onSave && (
+                        <button onClick={onSave} className="flex items-center justify-center px-3 sm:px-5 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-blue-400" disabled={!isDirty}>
+                            <Save className="w-5 h-5"/>
+                            <span className="hidden sm:inline ml-2">{isDirty ? 'Zapisz' : 'Zapisano'}</span>
+                        </button>
+                    )}
                 </div>
             </div>
         </div>
@@ -490,11 +501,11 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty }) => {
     const scrollToBottom = () => listEndRef.current?.scrollIntoView({ behavior: "smooth" });
     useEffect(scrollToBottom, [order.items]);
 
-    const updateOrder = (updates, isDirty = true) => {
-        const newOrder = { ...order, ...updates, isDirty };
+    const updateOrder = (updates, isDirtyFlag = true) => {
+        const newOrder = { ...order, ...updates, isDirty: isDirtyFlag };
         setOrder(newOrder);
         setCurrentOrder(newOrder);
-        setDirty(isDirty);
+        setDirty(isDirtyFlag);
     };
 
     const addProductToOrder = (product, quantity) => {
@@ -559,60 +570,55 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty }) => {
         }
         event.target.value = null;
     };
-    
-    const handleExportOrder = () => {
-        const csvData = order.items.map(item => `${item.barcodes[0] || ''},${item.quantity || 0}`).join('\n');
-        const blob = new Blob([`\uFEFF${csvData}`], { type: 'text/csv;charset=utf-8;' });
-        const link = document.createElement("a");
-        const url = URL.createObjectURL(blob);
-        link.setAttribute("href", url);
-        link.setAttribute("download", `zamowienie_${order.customerName.replace(/\s/g, '_') || 'nowe'}.csv`);
-        link.style.visibility = 'hidden';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+
+    const handlePrint = () => {
+        const content = printRef.current;
+        if (content) {
+            const printWindow = window.open('', '_blank');
+            printWindow.document.write('<html><head><title>Wydruk Zamówienia</title><style>body{font-family:sans-serif; padding:1rem;} table{width:100%; border-collapse:collapse; font-size:12px;} th,td{border:1px solid #ddd; padding:4px; text-align:left;} .print-header{display:block !important;}</style></head><body>');
+            printWindow.document.write(content.innerHTML);
+            printWindow.document.write('</body></html>');
+            printWindow.document.close();
+            printWindow.focus();
+            setTimeout(() => { printWindow.print(); printWindow.close(); }, 500);
+        }
     };
 
     return (
         <div className="h-full flex flex-col">
             <div className="flex-grow p-4 md:p-8 pb-32">
-                <div className="flex flex-wrap gap-4 justify-between items-center mb-4">
-                    <h1 className="text-3xl font-bold text-gray-800 dark:text-white">{order._id ? `Edycja Zamówienia` : 'Nowe Zamówienie'}</h1>
+                <div className="flex flex-wrap gap-2 justify-between items-center mb-4">
+                    <h1 className="text-2xl md:text-3xl font-bold text-gray-800 dark:text-white">{order._id ? `Edycja Zamówienia` : 'Nowe Zamówienie'}</h1>
                     <div className="flex gap-2">
-                        <button onClick={handleExportOrder} className="flex items-center justify-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
-                            <FileDown className="w-5 h-5 mr-2"/> Eksportuj
+                        <button onClick={handlePrint} className="flex items-center justify-center p-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors">
+                            <Printer className="w-5 h-5"/> <span className="hidden sm:inline ml-2">Drukuj</span>
                         </button>
                         <input type="file" ref={importFileRef} onChange={handleFileImport} className="hidden" accept=".csv" />
-                        <button onClick={() => importFileRef.current.click()} className="flex items-center justify-center px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors">
-                            <FileUp className="w-5 h-5 mr-2"/> Importuj
+                        <button onClick={() => importFileRef.current.click()} className="flex items-center justify-center p-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors">
+                            <FileUp className="w-5 h-5"/> <span className="hidden sm:inline ml-2">Importuj</span>
                         </button>
                     </div>
                 </div>
                 <input type="text" value={order.customerName || ''} onChange={(e) => updateOrder({ customerName: e.target.value })} placeholder="Wprowadź nazwę klienta" className="w-full max-w-lg p-3 mb-6 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
                 
-                <div ref={printRef} className="flex-grow bg-gray-50 dark:bg-gray-900 p-4 rounded-lg shadow-inner mt-6">
+                <div ref={printRef} className="flex-grow bg-gray-50 dark:bg-gray-900 p-2 sm:p-4 rounded-lg shadow-inner mt-6">
                     <div className="print-header hidden p-4"><h2 className="text-2xl font-bold">Zamówienie dla: {order.customerName}</h2><p>Data: {new Date().toLocaleDateString()}</p></div>
                     <div className="overflow-x-auto">
-                        <table className="w-full text-left min-w-[600px]">
-                            <thead><tr className="border-b border-gray-200 dark:border-gray-700"><th className="p-3">Nazwa</th><th className="p-3">Kod produktu</th><th className="p-3 text-right">Cena</th><th className="p-3 text-center">Ilość</th><th className="p-3 text-right">Wartość</th><th className="p-3 text-center">Akcje</th></tr></thead>
+                        <table className="w-full text-left text-sm">
+                            <thead><tr className="border-b border-gray-200 dark:border-gray-700"><th className="p-2">Nazwa</th><th className="hidden md:table-cell p-2">Kod produktu</th><th className="p-2 text-right">Cena</th><th className="p-2 text-center">Ilość</th><th className="p-2 text-right">Wartość</th><th className="p-2 text-center">Akcje</th></tr></thead>
                             <tbody>
                                 {(order.items || []).map((item, index) => (
                                     <tr key={item._id || index} className={`border-b border-gray-200 dark:border-gray-700 last:border-0 ${item.isCustom ? 'text-yellow-500' : ''}`}>
-                                        <td className="p-3 font-medium">{item.name}{item.note && <p className="text-xs text-gray-400 mt-1">Notatka: {item.note}</p>}</td>
-                                        <td className="p-3">{item.product_code}</td>
-                                        <td className="p-3 text-right">{item.price.toFixed(2)} PLN</td>
-                                        <td className="p-3 text-center">
-                                            <input
-                                                type="number"
-                                                value={item.quantity || ''}
-                                                onChange={(e) => updateQuantity(index, e.target.value)}
-                                                className="w-20 text-center bg-transparent border rounded-md p-1 focus:ring-2 focus:ring-indigo-500 outline-none"
-                                            />
+                                        <td className="p-2 font-medium"><span className="truncate block max-w-[15ch] sm:max-w-none">{item.name}</span>{item.note && <p className="text-xs text-gray-400 mt-1">Notatka: {item.note}</p>}</td>
+                                        <td className="hidden md:table-cell p-2">{item.product_code}</td>
+                                        <td className="p-2 text-right">{item.price.toFixed(2)}</td>
+                                        <td className="p-2 text-center">
+                                            <input type="number" value={item.quantity || ''} onChange={(e) => updateQuantity(index, e.target.value)} className="w-16 text-center bg-transparent border rounded-md p-1 focus:ring-2 focus:ring-indigo-500 outline-none"/>
                                         </td>
-                                        <td className="p-3 text-right font-semibold">{(item.price * (item.quantity || 0)).toFixed(2)} PLN</td>
-                                        <td className="p-3 text-center whitespace-nowrap">
-                                            <Tooltip text="Dodaj notatkę"><button onClick={() => setNoteModal({ isOpen: true, itemIndex: index, text: item.note || '' })} className="p-2 text-gray-500 hover:text-blue-500"><MessageSquare className="w-5 h-5"/></button></Tooltip>
-                                            <Tooltip text="Usuń pozycję"><button onClick={() => removeItemFromOrder(index)} className="p-2 text-gray-500 hover:text-red-500"><Trash2 className="w-5 h-5"/></button></Tooltip>
+                                        <td className="p-2 text-right font-semibold">{(item.price * (item.quantity || 0)).toFixed(2)}</td>
+                                        <td className="p-2 text-center whitespace-nowrap">
+                                            <button onClick={() => setNoteModal({ isOpen: true, itemIndex: index, text: item.note || '' })} className="p-2 text-gray-500 hover:text-blue-500"><MessageSquare className="w-5 h-5"/></button>
+                                            <button onClick={() => removeItemFromOrder(index)} className="p-2 text-gray-500 hover:text-red-500"><Trash2 className="w-5 h-5"/></button>
                                         </td>
                                     </tr>
                                 ))}
@@ -622,20 +628,13 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty }) => {
                     {(!order.items || order.items.length === 0) && <p className="text-center text-gray-500 py-8">Brak pozycji na zamówieniu.</p>}
                     <div ref={listEndRef} />
                 </div>
-                <div className="flex flex-wrap justify-between items-center gap-4 mt-4">
-                    <div>
-                        <button onClick={handleSaveOrder} className="flex items-center justify-center px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-blue-400" disabled={!order.isDirty}>
-                            <Save className="w-5 h-5 mr-2"/> {order.isDirty ? 'Zapisz zmiany' : 'Zapisano'}
-                        </button>
-                    </div>
-                    <div className="flex items-center gap-4">
-                        <span className="text-lg font-bold text-gray-700 dark:text-gray-300">Suma:</span>
-                        <span className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">{totalValue.toFixed(2)} PLN</span>
-                    </div>
+                <div className="flex flex-wrap justify-end items-center gap-4 mt-4">
+                    <span className="text-lg font-bold text-gray-700 dark:text-gray-300">Suma:</span>
+                    <span className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">{totalValue.toFixed(2)} PLN</span>
                 </div>
             </div>
             
-            <PinnedInputBar onProductAdd={addProductToOrder} />
+            <PinnedInputBar onProductAdd={addProductToOrder} onSave={handleSaveOrder} isDirty={order.isDirty} />
 
             <Modal isOpen={noteModal.isOpen} onClose={() => setNoteModal({ isOpen: false, itemIndex: null, text: '' })} title="Dodaj notatkę do pozycji">
                 <textarea value={noteModal.text} onChange={(e) => setNoteModal({...noteModal, text: e.target.value})} className="w-full p-2 border rounded-md min-h-[100px] bg-white dark:bg-gray-700"></textarea>
@@ -649,7 +648,7 @@ const OrdersListView = ({ onEdit }) => {
     const [orders, setOrders] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [view, setView] = useState('Zapisane');
-    const [deleteModal, setDeleteModal] = useState({ isOpen: false, orderId: null });
+    const [modalState, setModalState] = useState({ isOpen: false, orderId: null, type: '' });
     const { showNotification } = useNotification();
     const [filters, setFilters] = useState({ customer: '', author: '', dateFrom: '', dateTo: '' });
     const [showFilters, setShowFilters] = useState(false);
@@ -674,13 +673,22 @@ const OrdersListView = ({ onEdit }) => {
     
     const handleDelete = async () => {
         try {
-            await api.deleteOrder(deleteModal.orderId);
+            await api.deleteOrder(modalState.orderId);
             showNotification('Zamówienie usunięte!', 'success');
-            setDeleteModal({ isOpen: false, orderId: null });
+            setModalState({ isOpen: false, orderId: null, type: '' });
             fetchOrders();
         } catch (error) { showNotification(error.message, 'error'); }
     };
     
+    const handleRevert = async () => {
+        try {
+            await api.revertOrderCompletion(modalState.orderId);
+            showNotification('Przywrócono zamówienie do kompletacji!', 'success');
+            setModalState({ isOpen: false, orderId: null, type: '' });
+            fetchOrders();
+        } catch (error) { showNotification(error.message, 'error'); }
+    };
+
     const handleFilterChange = (e) => {
         const { name, value } = e.target;
         setFilters(prev => ({...prev, [name]: value}));
@@ -706,15 +714,15 @@ const OrdersListView = ({ onEdit }) => {
     return (
         <>
             <div className="p-4 md:p-8">
-                <div className="flex flex-wrap gap-4 items-center justify-between mb-4">
-                    <h1 className="text-3xl font-bold text-gray-800 dark:text-white">Zamówienia</h1>
-                    <div className="flex items-center gap-2">
+                <div className="flex flex-wrap gap-2 justify-between items-center mb-4">
+                    <h1 className="text-2xl md:text-3xl font-bold text-gray-800 dark:text-white">Zamówienia</h1>
+                    <div className="flex items-center gap-2 flex-wrap">
                         <input type="file" ref={importMultipleRef} onChange={handleMultipleFileImport} className="hidden" accept=".csv" multiple />
-                        <button onClick={() => importMultipleRef.current.click()} className="flex items-center px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600"><FileUp className="w-5 h-5 mr-2"/> Importuj wiele</button>
-                        <button onClick={() => setShowFilters(!showFilters)} className="flex items-center px-4 py-2 bg-gray-200 dark:bg-gray-700 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600"><Filter className="w-5 h-5 mr-2"/> Filtry</button>
+                        <button onClick={() => importMultipleRef.current.click()} className="flex items-center p-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600"><FileUp className="w-5 h-5"/><span className="hidden sm:inline ml-2">Importuj</span></button>
+                        <button onClick={() => setShowFilters(!showFilters)} className="flex items-center p-2 bg-gray-200 dark:bg-gray-700 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600"><Filter className="w-5 h-5"/><span className="hidden sm:inline ml-2">Filtry</span></button>
                         <div className="flex items-center bg-gray-200 dark:bg-gray-700 rounded-lg p-1">
-                            <button onClick={() => setView('Zapisane')} className={`px-4 py-2 text-sm font-semibold rounded-md ${view === 'Zapisane' ? 'bg-white dark:bg-gray-900 text-indigo-600' : 'text-gray-500'}`}>Zapisane</button>
-                            <button onClick={() => setView('Skompletowane')} className={`px-4 py-2 text-sm font-semibold rounded-md ${view === 'Skompletowane' ? 'bg-white dark:bg-gray-900 text-indigo-600' : 'text-gray-500'}`}>Skompletowane</button>
+                            <button onClick={() => setView('Zapisane')} className={`px-3 py-1 text-sm font-semibold rounded-md ${view === 'Zapisane' ? 'bg-white dark:bg-gray-900 text-indigo-600' : 'text-gray-500'}`}>Zapisane</button>
+                            <button onClick={() => setView('Skompletowane')} className={`px-3 py-1 text-sm font-semibold rounded-md ${view === 'Skompletowane' ? 'bg-white dark:bg-gray-900 text-indigo-600' : 'text-gray-500'}`}>Skompletowane</button>
                         </div>
                     </div>
                 </div>
@@ -730,15 +738,19 @@ const OrdersListView = ({ onEdit }) => {
                     </div>
                 )}
                 <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-x-auto">
-                    <table className="w-full text-left min-w-[600px]">
-                        <thead className="bg-gray-50 dark:bg-gray-700"><tr><th className="p-4 font-semibold">Klient</th><th className="p-4 font-semibold">Autor</th><th className="p-4 font-semibold">Data</th><th className="p-4 font-semibold text-right">Wartość</th><th className="p-4 font-semibold text-center">Akcje</th></tr></thead>
+                    <table className="w-full text-left text-sm">
+                        <thead className="bg-gray-50 dark:bg-gray-700"><tr><th className="p-2">Klient</th><th className="hidden md:table-cell p-2">Autor</th><th className="hidden sm:table-cell p-2">Data</th><th className="p-2 text-right">Wartość</th><th className="p-2 text-center">Akcje</th></tr></thead>
                         <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                             {isLoading ? (<tr><td colSpan="5" className="p-8 text-center text-gray-500">Ładowanie...</td></tr>) : orders.length > 0 ? (orders.map(order => (
                                 <tr key={order._id}>
-                                    <td className="p-4 font-medium">{order.customerName}</td><td className="p-4">{order.author}</td><td className="p-4">{new Date(order.date).toLocaleDateString()}</td><td className="p-4 text-right font-semibold">{(order.total || 0).toFixed(2)} PLN</td>
-                                    <td className="p-4 text-center whitespace-nowrap">
-                                        <button onClick={() => onEdit(order._id)} className="inline-flex items-center justify-center mx-auto px-3 py-1 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600 mr-2"><Edit className="w-4 h-4 mr-1" /> {view === 'Skompletowane' ? 'Pokaż' : 'Edytuj'}</button>
-                                        <button onClick={() => setDeleteModal({ isOpen: true, orderId: order._id })} className="inline-flex items-center justify-center mx-auto px-3 py-1 bg-red-500 text-white text-sm rounded-lg hover:bg-red-600"><Trash2 className="w-4 h-4 mr-1" /> Usuń</button>
+                                    <td className="p-2 font-medium"><span className="truncate block max-w-[20ch]">{order.customerName}</span></td>
+                                    <td className="hidden md:table-cell p-2">{order.author}</td>
+                                    <td className="hidden sm:table-cell p-2">{new Date(order.date).toLocaleDateString()}</td>
+                                    <td className="p-2 text-right font-semibold">{(order.total || 0).toFixed(2)}</td>
+                                    <td className="p-2 text-center whitespace-nowrap">
+                                        <Tooltip text="Edytuj/Pokaż"><button onClick={() => onEdit(order._id)} className="p-2 text-blue-500 hover:text-blue-700"><Edit className="w-5 h-5"/></button></Tooltip>
+                                        {view === 'Skompletowane' && <Tooltip text="Cofnij do kompletacji"><button onClick={() => setModalState({ isOpen: true, orderId: order._id, type: 'revert' })} className="p-2 text-orange-500 hover:text-orange-700"><RotateCcw className="w-5 h-5"/></button></Tooltip>}
+                                        <Tooltip text="Usuń"><button onClick={() => setModalState({ isOpen: true, orderId: order._id, type: 'delete' })} className="p-2 text-red-500 hover:text-red-700"><Trash2 className="w-5 h-5"/></button></Tooltip>
                                     </td>
                                 </tr>
                             ))) : (<tr><td colSpan="5" className="p-8 text-center text-gray-500">Brak zamówień pasujących do kryteriów.</td></tr>)}
@@ -746,9 +758,13 @@ const OrdersListView = ({ onEdit }) => {
                     </table>
                 </div>
             </div>
-            <Modal isOpen={deleteModal.isOpen} onClose={() => setDeleteModal({ isOpen: false, orderId: null })} title="Potwierdź usunięcie">
+            <Modal isOpen={modalState.isOpen && modalState.type === 'delete'} onClose={() => setModalState({ isOpen: false })} title="Potwierdź usunięcie">
                 <p>Czy na pewno chcesz usunąć to zamówienie? Tej operacji nie można cofnąć.</p>
-                <div className="flex justify-end gap-4 mt-6"><button onClick={() => setDeleteModal({ isOpen: false, orderId: null })} className="px-4 py-2 bg-gray-200 dark:bg-gray-600 rounded-lg">Anuluj</button><button onClick={handleDelete} className="px-4 py-2 bg-red-600 text-white rounded-lg">Usuń</button></div>
+                <div className="flex justify-end gap-4 mt-6"><button onClick={() => setModalState({ isOpen: false })} className="px-4 py-2 bg-gray-200 dark:bg-gray-600 rounded-lg">Anuluj</button><button onClick={handleDelete} className="px-4 py-2 bg-red-600 text-white rounded-lg">Usuń</button></div>
+            </Modal>
+            <Modal isOpen={modalState.isOpen && modalState.type === 'revert'} onClose={() => setModalState({ isOpen: false })} title="Potwierdź cofnięcie">
+                <p>Czy na pewno chcesz cofnąć to zamówienie do kompletacji?</p>
+                <div className="flex justify-end gap-4 mt-6"><button onClick={() => setModalState({ isOpen: false })} className="px-4 py-2 bg-gray-200 dark:bg-gray-600 rounded-lg">Anuluj</button><button onClick={handleRevert} className="px-4 py-2 bg-orange-500 text-white rounded-lg">Tak, cofnij</button></div>
             </Modal>
         </>
     );
@@ -837,16 +853,24 @@ const PickingView = () => {
     };
 
     const handleShowSummary = () => {
-        if (pickedItems.length === 0) {
+        if (pickedItems.length === 0 && toPickItems.length > 0) {
             showNotification("Nie skompletowano żadnych produktów.", "error");
             return;
         }
-        const discrepancies = pickedItems
-            .filter(item => item.pickedQuantity !== item.originalQuantity)
-            .map(item => ({
-                ...item,
-                diff: item.pickedQuantity - item.originalQuantity
-            }));
+    
+        const allOrderItems = [...pickedItems, ...toPickItems];
+        const discrepancies = allOrderItems
+            .map(item => {
+                const pickedItem = pickedItems.find(p => p._id === item._id);
+                const pickedQuantity = pickedItem ? pickedItem.pickedQuantity : 0;
+                return {
+                    ...item,
+                    pickedQuantity: pickedQuantity,
+                    diff: pickedQuantity - item.originalQuantity
+                };
+            })
+            .filter(item => item.diff !== 0);
+    
         setSummaryModal({ isOpen: true, discrepancies });
     };
 
@@ -1242,15 +1266,9 @@ const NewInventorySheet = ({ user, onSave, inventoryId = null, setDirty }) => {
                     </table>
                     {inventory.items.length === 0 && <p className="text-center text-gray-500 p-8">Brak pozycji na liście. Zaimportuj arkusz lub dodaj produkty, aby rozpocząć.</p>}
                 </div>
-                <div className="flex gap-4 p-4 mt-4">
-                    <button onClick={handleSave} className="flex items-center justify-center px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-blue-400" disabled={!inventory.isDirty}>
-                        <Save className="w-5 h-5 mr-2"/> {inventory.isDirty ? 'Zapisz zmiany' : 'Zapisano'}
-                    </button>
-                    <button onClick={onSave} className="flex items-center justify-center px-5 py-2.5 bg-gray-200 dark:bg-gray-600 rounded-lg hover:bg-gray-300">Anuluj</button>
-                </div>
             </div>
             
-            <PinnedInputBar onProductAdd={addProductToInventory} />
+            <PinnedInputBar onProductAdd={addProductToInventory} onSave={handleSave} isDirty={inventory.isDirty} />
 
             <Modal isOpen={discrepancyModal.isOpen} onClose={() => setDiscrepancyModal({ isOpen: false })} title="Wykaz Rozbieżności" maxWidth="4xl">
                 <div ref={printRef}>
@@ -1966,3 +1984,5 @@ export default function AppWrapper() {
         </ErrorBoundary>
     );
 }
+``` in the immersive artifact.
+I have a few questions about the code. What does the `useCallback` hook do in this context? How does the `useDebounce` hook work? What is the purpose of the `NotificationProvider` compone
