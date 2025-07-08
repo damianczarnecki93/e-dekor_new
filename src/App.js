@@ -2140,6 +2140,7 @@ const KanbanView = ({ user }) => {
     const [tasks, setTasks] = useState([]);
     const [users, setUsers] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [isModalOpen, setIsModalOpen] = useState(false);
     const { showNotification } = useNotification();
 
     const fetchAllData = useCallback(async () => {
@@ -2150,7 +2151,7 @@ const KanbanView = ({ user }) => {
                 user.role === 'administrator' ? api.getUsers() : Promise.resolve([])
             ]);
             setTasks(tasksData);
-            setUsers(usersData);
+            setUsers(usersData.filter(u => u.status === 'zaakceptowany'));
         } catch (error) {
             showNotification(error.message, 'error');
         } finally {
@@ -2161,7 +2162,7 @@ const KanbanView = ({ user }) => {
     useEffect(() => {
         fetchAllData();
     }, [fetchAllData]);
-
+    
     const handleTaskMove = async (taskId, newStatus) => {
         const originalTasks = [...tasks];
         const updatedTasks = tasks.map(t => t._id === taskId ? { ...t, status: newStatus } : t);
@@ -2175,78 +2176,184 @@ const KanbanView = ({ user }) => {
         }
     };
     
+    const handleAddTask = async (taskData) => {
+        try {
+            const newTask = await api.addKanbanTask(taskData);
+            setTasks(prev => [newTask, ...prev]);
+            showNotification('Zadanie dodane pomyślnie.', 'success');
+            setIsModalOpen(false);
+        } catch(error) {
+            showNotification(error.message, 'error');
+        }
+    };
+
+    const handleDeleteTask = async (taskId) => {
+        if(window.confirm('Czy na pewno chcesz usunąć to zadanie?')) {
+            try {
+                await api.deleteKanbanTask(taskId);
+                setTasks(prev => prev.filter(t => t._id !== taskId));
+                showNotification('Zadanie usunięte.', 'success');
+            } catch (error) {
+                showNotification(error.message, 'error');
+            }
+        }
+    };
+
+    const onDragStart = (e, taskId) => {
+        e.dataTransfer.setData("taskId", taskId);
+    };
+
+    const onDrop = (e, newStatus) => {
+        const taskId = e.dataTransfer.getData("taskId");
+        handleTaskMove(taskId, newStatus);
+    };
+    
+    const columns = [
+        { id: 'todo', title: 'Do zrobienia', color: 'bg-red-500' },
+        { id: 'inprogress', title: 'W trakcie', color: 'bg-yellow-500' },
+        { id: 'done', title: 'Gotowe', color: 'bg-green-500' },
+    ];
+
     return (
         <div className="p-4 md:p-8">
-            <h1 className="text-3xl font-bold mb-6">Tablica Zadań</h1>
-            {/* Tutaj można dodać formularz do tworzenia zadań, jeśli jest potrzebny */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {['todo', 'inprogress', 'done'].map(status => (
-                    <div key={status} 
-                         className="bg-gray-100 dark:bg-gray-800 rounded-lg p-4"
-                         onDragOver={(e) => e.preventDefault()}
-                         onDrop={(e) => {
-                            const taskId = e.dataTransfer.getData("taskId");
-                            handleTaskMove(taskId, status);
-                         }}
-                    >
-                        <h2 className="font-bold text-lg mb-4 capitalize">{status === 'todo' ? 'Do zrobienia' : status === 'inprogress' ? 'W trakcie' : 'Gotowe'}</h2>
-                        <div className="space-y-4">
-                            {tasks.filter(t => t.status === status).map(task => (
-                                <div key={task._id} 
-                                     draggable 
-                                     onDragStart={(e) => e.dataTransfer.setData("taskId", task._id)}
-                                     className="bg-white dark:bg-gray-700 p-4 rounded-md shadow cursor-move"
-                                >
-                                    <p>{task.content}</p>
-                                    <p className="text-sm text-gray-500 mt-2">Dla: {task.assignedTo}</p>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                ))}
+            <div className="flex flex-wrap justify-between items-center mb-6">
+                <h1 className="text-3xl font-bold">Tablica Zadań</h1>
+                {user.role === 'administrator' && (
+                    <button onClick={() => setIsModalOpen(true)} className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
+                        <PlusCircle className="w-5 h-5 mr-2"/> Nowe Zadanie
+                    </button>
+                )}
             </div>
+            
+            {isLoading ? <div className="text-center p-8">Ładowanie...</div> : (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    {columns.map(column => (
+                        <div key={column.id} 
+                             className="bg-gray-100 dark:bg-gray-800 rounded-lg p-4 min-h-[300px]"
+                             onDragOver={(e) => e.preventDefault()}
+                             onDrop={(e) => onDrop(e, column.id)}
+                        >
+                            <h2 className={`font-bold text-lg mb-4 capitalize flex items-center`}>
+                                <span className={`w-3 h-3 rounded-full mr-2 ${column.color}`}></span>
+                                {column.title}
+                            </h2>
+                            <div className="space-y-4">
+                                {tasks.filter(t => t.status === column.id).map(task => (
+                                    <div key={task._id} 
+                                         draggable 
+                                         onDragStart={(e) => onDragStart(e, task._id)}
+                                         className="bg-white dark:bg-gray-700 p-4 rounded-md shadow cursor-move group relative"
+                                    >
+                                        <p>{task.content}</p>
+                                        <div className="text-xs text-gray-500 mt-2 flex justify-between">
+                                            <span>Dla: {task.assignedTo}</span>
+                                            <span>Od: {task.author}</span>
+                                        </div>
+                                        <button onClick={() => handleDeleteTask(task._id)} className="absolute top-1 right-1 p-1 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <Trash2 className="w-4 h-4"/>
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Nowe Zadanie">
+                <KanbanForm onSubmit={handleAddTask} users={users} />
+            </Modal>
         </div>
+    );
+};
+
+const KanbanForm = ({ onSubmit, users }) => {
+    const [content, setContent] = useState('');
+    const [assignedToId, setAssignedToId] = useState('');
+
+    const handleSubmit = (e) => {
+        e.preventDefault();
+        if (!content || !assignedToId) {
+            alert('Proszę wypełnić wszystkie pola.');
+            return;
+        }
+        const selectedUser = users.find(u => u._id === assignedToId);
+        onSubmit({ content, assignedToId, assignedTo: selectedUser.username });
+        setContent('');
+        setAssignedToId('');
+    };
+
+    return (
+        <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+                <label className="block text-sm font-medium">Treść zadania</label>
+                <textarea value={content} onChange={(e) => setContent(e.target.value)} className="w-full p-2 border rounded-md" required />
+            </div>
+            <div>
+                <label className="block text-sm font-medium">Przypisz do</label>
+                <select value={assignedToId} onChange={(e) => setAssignedToId(e.target.value)} className="w-full p-2 border rounded-md" required>
+                    <option value="">Wybierz użytkownika</option>
+                    {users.map(u => <option key={u._id} value={u._id}>{u.username}</option>)}
+                </select>
+            </div>
+            <div className="flex justify-end pt-4">
+                <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg">Dodaj zadanie</button>
+            </div>
+        </form>
     );
 };
 
 const DelegationsView = ({ user }) => {
     const [delegations, setDelegations] = useState([]);
+    const [users, setUsers] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const { showNotification } = useNotification();
+    const { items: sortedDelegations, requestSort, sortConfig } = useSortableData(delegations);
 
-    const fetchDelegations = useCallback(async () => {
+    const getSortIcon = (name) => {
+        if (!sortConfig || sortConfig.key !== name) {
+            return <ChevronsUpDown className="w-4 h-4 ml-1 opacity-40" />;
+        }
+        return sortConfig.direction === 'ascending' ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />;
+    };
+    
+    const fetchAllData = useCallback(async () => {
         setIsLoading(true);
         try {
-            const data = await api.getDelegations();
-            setDelegations(data);
+            const [delegationsData, usersData] = await Promise.all([
+                api.getDelegations(),
+                user.role === 'administrator' ? api.getUsers() : Promise.resolve([])
+            ]);
+            setDelegations(delegationsData);
+            setUsers(usersData);
         } catch (error) {
             showNotification(error.message, 'error');
         } finally {
             setIsLoading(false);
         }
-    }, [showNotification]);
+    }, [user.role, showNotification]);
 
     useEffect(() => {
-        fetchDelegations();
-    }, [fetchDelegations]);
+        fetchAllData();
+    }, [fetchAllData]);
 
     const handleAddDelegation = async (delegationData) => {
         try {
             await api.addDelegation(delegationData);
             showNotification('Delegacja została pomyślnie dodana.', 'success');
             setIsModalOpen(false);
-            fetchDelegations();
+            fetchAllData();
         } catch (error) {
             showNotification(error.message, 'error');
         }
     };
-
+    
     const handleStatusUpdate = async (id, status) => {
         try {
             await api.updateDelegationStatus(id, status);
             showNotification('Status delegacji został zaktualizowany.', 'success');
-            fetchDelegations();
+            fetchAllData();
         } catch (error) {
             showNotification(error.message, 'error');
         }
@@ -2257,23 +2364,71 @@ const DelegationsView = ({ user }) => {
             try {
                 await api.deleteDelegation(id);
                 showNotification("Delegacja usunięta", "success");
-                fetchDelegations();
+                fetchAllData();
             } catch (error) {
                 showNotification(error.message, "error");
             }
         }
     };
 
+    const getStatusClass = (status) => {
+        switch (status) {
+            case 'Zaakceptowana':
+                return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300';
+            case 'Odrzucona':
+                return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300';
+            default:
+                return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300';
+        }
+    };
+
     return (
         <div className="p-4 md:p-8">
-            <div className="flex justify-between items-center mb-6">
+            <div className="flex flex-wrap gap-4 justify-between items-center mb-6">
                 <h1 className="text-3xl font-bold">Planowanie Delegacji</h1>
                 <button onClick={() => setIsModalOpen(true)} className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
                     <PlusCircle className="w-5 h-5 mr-2"/> Nowa Delegacja
                 </button>
             </div>
-            {/* Tutaj można dodać tabelę z delegacjami */}
-            <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Nowa Delegacja">
+            
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                    <thead className="bg-gray-50 dark:bg-gray-700">
+                        <tr>
+                            <th className="p-2 sm:p-3 cursor-pointer" onClick={() => requestSort('destination')}><div className="flex items-center">Cel {getSortIcon('destination')}</div></th>
+                            <th className="hidden md:table-cell p-2 sm:p-3 cursor-pointer" onClick={() => requestSort('author')}><div className="flex items-center">Autor {getSortIcon('author')}</div></th>
+                            <th className="p-2 sm:p-3 cursor-pointer" onClick={() => requestSort('dateFrom')}><div className="flex items-center">Daty {getSortIcon('dateFrom')}</div></th>
+                            <th className="p-2 sm:p-3 text-center">Status</th>
+                            <th className="p-2 sm:p-3 text-center">Akcje</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                        {isLoading ? (<tr><td colSpan="5" className="p-8 text-center text-gray-500">Ładowanie...</td></tr>) : sortedDelegations.map(d => (
+                            <tr key={d._id}>
+                                <td className="p-2 sm:p-3 font-medium">{d.destination}</td>
+                                <td className="hidden md:table-cell p-2 sm:p-3">{d.author}</td>
+                                <td className="p-2 sm:p-3">{format(parseISO(d.dateFrom), 'd.MM.yy')} - {format(parseISO(d.dateTo), 'd.MM.yy')}</td>
+                                <td className="p-2 sm:p-3 text-center">
+                                    <span className={`px-2 py-1 text-xs font-semibold rounded-full ${getStatusClass(d.status)}`}>{d.status}</span>
+                                </td>
+                                <td className="p-2 sm:p-3 text-center whitespace-nowrap">
+                                    {user.role === 'administrator' && d.status === 'Oczekująca' && (
+                                        <>
+                                            <Tooltip text="Akceptuj"><button onClick={() => handleStatusUpdate(d._id, 'Zaakceptowana')} className="p-2 text-green-500 hover:text-green-700"><CheckCircle className="w-5 h-5"/></button></Tooltip>
+                                            <Tooltip text="Odrzuć"><button onClick={() => handleStatusUpdate(d._id, 'Odrzucona')} className="p-2 text-red-500 hover:text-red-700"><XCircle className="w-5 h-5"/></button></Tooltip>
+                                        </>
+                                    )}
+                                    {(user.id === d.authorId || user.role === 'administrator') && d.status === 'Oczekująca' && (
+                                        <Tooltip text="Usuń"><button onClick={() => handleDelete(d._id)} className="p-2 text-gray-500 hover:text-red-500"><Trash2 className="w-5 h-5"/></button></Tooltip>
+                                    )}
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+
+            <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Nowa Delegacja" maxWidth="2xl">
                 <DelegationForm onSubmit={handleAddDelegation} />
             </Modal>
         </div>
@@ -2281,9 +2436,80 @@ const DelegationsView = ({ user }) => {
 };
 
 const DelegationForm = ({ onSubmit }) => {
-    // ... (kod formularza delegacji)
-    return <div>Formularz delegacji (w budowie)</div>
+    const [formData, setFormData] = useState({
+        destination: '',
+        purpose: '',
+        dateFrom: '',
+        dateTo: '',
+        transport: '',
+        kms: 0,
+        advancePayment: 0,
+        clients: [{ name: '', note: '' }]
+    });
+
+    const handleChange = (e) => {
+        const { name, value } = e.target;
+        setFormData(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleClientChange = (index, e) => {
+        const { name, value } = e.target;
+        const newClients = [...formData.clients];
+        newClients[index][name] = value;
+        setFormData(prev => ({ ...prev, clients: newClients }));
+    };
+
+    const addClient = () => {
+        setFormData(prev => ({ ...prev, clients: [...prev.clients, { name: '', note: '' }] }));
+    };
+
+    const removeClient = (index) => {
+        const newClients = [...formData.clients];
+        newClients.splice(index, 1);
+        setFormData(prev => ({ ...prev, clients: newClients }));
+    };
+
+    const handleSubmit = (e) => {
+        e.preventDefault();
+        // Prosta walidacja
+        if (!formData.destination || !formData.purpose || !formData.dateFrom || !formData.dateTo) {
+            alert('Proszę wypełnić wszystkie wymagane pola.');
+            return;
+        }
+        onSubmit(formData);
+    };
+
+    return (
+        <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div><label className="block text-sm font-medium">Cel Delegacji</label><input type="text" name="destination" value={formData.destination} onChange={handleChange} className="w-full p-2 border rounded-md" required /></div>
+                <div><label className="block text-sm font-medium">Środek Transportu</label><input type="text" name="transport" value={formData.transport} onChange={handleChange} className="w-full p-2 border rounded-md" /></div>
+                <div><label className="block text-sm font-medium">Data od</label><input type="date" name="dateFrom" value={formData.dateFrom} onChange={handleChange} className="w-full p-2 border rounded-md" required /></div>
+                <div><label className="block text-sm font-medium">Data do</label><input type="date" name="dateTo" value={formData.dateTo} onChange={handleChange} className="w-full p-2 border rounded-md" required /></div>
+                <div><label className="block text-sm font-medium">Przewidywana ilość km</label><input type="number" name="kms" value={formData.kms} onChange={handleChange} className="w-full p-2 border rounded-md" /></div>
+                <div><label className="block text-sm font-medium">Kwota zaliczki (PLN)</label><input type="number" name="advancePayment" value={formData.advancePayment} onChange={handleChange} className="w-full p-2 border rounded-md" /></div>
+            </div>
+            <div><label className="block text-sm font-medium">Cel Podróży (opis)</label><textarea name="purpose" value={formData.purpose} onChange={handleChange} className="w-full p-2 border rounded-md" required /></div>
+            
+            <div>
+                <h3 className="text-lg font-semibold mt-4">Planowani Kontrahenci</h3>
+                {formData.clients.map((client, index) => (
+                    <div key={index} className="grid grid-cols-1 md:grid-cols-3 gap-2 p-2 border-b">
+                        <input type="text" name="name" value={client.name} onChange={(e) => handleClientChange(index, e)} placeholder="Nazwa kontrahenta" className="w-full p-2 border rounded-md"/>
+                        <input type="text" name="note" value={client.note} onChange={(e) => handleClientChange(index, e)} placeholder="Notatka" className="w-full p-2 border rounded-md"/>
+                        <button type="button" onClick={() => removeClient(index)} className="p-2 text-red-500 hover:text-red-700"><Trash2 className="w-5 h-5"/></button>
+                    </div>
+                ))}
+                <button type="button" onClick={addClient} className="mt-2 flex items-center px-3 py-1 bg-gray-200 dark:bg-gray-600 text-sm rounded-lg"><PlusCircle className="w-4 h-4 mr-1"/> Dodaj kontrahenta</button>
+            </div>
+
+            <div className="flex justify-end gap-4 pt-4">
+                <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg">Wyślij do akceptacji</button>
+            </div>
+        </form>
+    );
 };
+
 
 export default function AppWrapper() {
     return (
