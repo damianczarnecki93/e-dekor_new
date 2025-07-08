@@ -2174,6 +2174,15 @@ const KanbanView = ({ user }) => {
             setTasks(originalTasks);
         }
     };
+
+    const onDragStart = (e, taskId) => {
+        e.dataTransfer.setData("taskId", taskId);
+    };
+
+    const onDrop = (e, newStatus) => {
+        const taskId = e.dataTransfer.getData("taskId");
+        handleTaskMove(taskId, newStatus);
+    };
     
     return (
         <div className="p-4 md:p-8">
@@ -2181,11 +2190,19 @@ const KanbanView = ({ user }) => {
             {/* Tutaj można dodać formularz do tworzenia zadań, jeśli jest potrzebny */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {['todo', 'inprogress', 'done'].map(status => (
-                    <div key={status} className="bg-gray-100 dark:bg-gray-800 rounded-lg p-4">
+                    <div key={status} 
+                         className="bg-gray-100 dark:bg-gray-800 rounded-lg p-4"
+                         onDragOver={(e) => e.preventDefault()}
+                         onDrop={(e) => onDrop(e, status)}
+                    >
                         <h2 className="font-bold text-lg mb-4 capitalize">{status === 'todo' ? 'Do zrobienia' : status === 'inprogress' ? 'W trakcie' : 'Gotowe'}</h2>
                         <div className="space-y-4">
                             {tasks.filter(t => t.status === status).map(task => (
-                                <div key={task._id} className="bg-white dark:bg-gray-700 p-4 rounded-md shadow">
+                                <div key={task._id} 
+                                     draggable 
+                                     onDragStart={(e) => onDragStart(e, task._id)}
+                                     className="bg-white dark:bg-gray-700 p-4 rounded-md shadow cursor-move"
+                                >
                                     <p>{task.content}</p>
                                     <p className="text-sm text-gray-500 mt-2">Dla: {task.assignedTo}</p>
                                 </div>
@@ -2231,6 +2248,16 @@ const DelegationsView = ({ user }) => {
         }
     };
 
+    const handleStatusUpdate = async (id, status) => {
+        try {
+            await api.updateDelegationStatus(id, status);
+            showNotification('Status delegacji został zaktualizowany.', 'success');
+            fetchDelegations();
+        } catch (error) {
+            showNotification(error.message, 'error');
+        }
+    };
+    
     return (
         <div className="p-4 md:p-8">
             <div className="flex justify-between items-center mb-6">
@@ -2246,7 +2273,6 @@ const DelegationsView = ({ user }) => {
         </div>
     );
 };
-
 
 export default function AppWrapper() {
     return (
