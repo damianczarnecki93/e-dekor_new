@@ -897,60 +897,6 @@ app.delete('/api/notes/:id', authMiddleware, async (req, res) => {
 });
 
 // --- NOWE ENDPOINTY - KANBAN ---
-app.get('/api/kanban/tasks', authMiddleware, async (req, res) => {
-    try {
-        let tasks;
-        if (req.user.role === 'administrator') {
-            tasks = await KanbanTask.find().sort({ date: -1 });
-        } else {
-            tasks = await KanbanTask.find({ assignedToId: req.user.userId }).sort({ date: -1 });
-        }
-        res.json(tasks);
-    } catch (error) {
-        res.status(500).json({ message: 'Błąd pobierania zadań' });
-    }
-});
-
-app.post('/api/kanban/tasks', authMiddleware, async (req, res) => {
-    try {
-        const { content, assignedToId, assignedTo } = req.body;
-        const newTask = new KanbanTask({
-            content,
-            assignedTo,
-            assignedToId,
-            author: req.user.username,
-            authorId: req.user.userId,
-            status: 'todo'
-        });
-        await newTask.save();
-        res.status(201).json(newTask);
-    } catch (error) {
-        res.status(500).json({ message: 'Błąd tworzenia zadania' });
-    }
-});
-
-app.put('/api/kanban/tasks/:id', authMiddleware, async (req, res) => {
-    try {
-        const { status } = req.body;
-        const task = await KanbanTask.findByIdAndUpdate(req.params.id, { status }, { new: true });
-        if (!task) return res.status(404).json({ message: 'Nie znaleziono zadania' });
-        res.json(task);
-    } catch (error) {
-        res.status(500).json({ message: 'Błąd aktualizacji zadania' });
-    }
-});
-
-app.delete('/api/kanban/tasks/:id', authMiddleware, async (req, res) => {
-    try {
-        const task = await KanbanTask.findByIdAndDelete(req.params.id);
-        if (!task) return res.status(404).json({ message: 'Nie znaleziono zadania' });
-        res.json({ message: 'Zadanie usunięte' });
-    } catch (error) {
-        res.status(500).json({ message: 'Błąd usuwania zadania' });
-    }
-});
-
-// --- NOWE ENDPOINTY - DELEGACJE ---
 app.get('/api/delegations', authMiddleware, async (req, res) => {
     try {
         let delegations;
@@ -967,16 +913,11 @@ app.get('/api/delegations', authMiddleware, async (req, res) => {
 
 app.post('/api/delegations', authMiddleware, async (req, res) => {
     try {
-        const { destination, purpose, dateFrom, dateTo, notes } = req.body;
+        const { destination, purpose, dateFrom, dateTo, notes, kms, advancePayment, transport, clients } = req.body;
         const newDelegation = new Delegation({
-            destination,
-            purpose,
-            dateFrom,
-            dateTo,
-            notes,
+            destination, purpose, dateFrom, dateTo, notes, kms, advancePayment, transport, clients,
             author: req.user.username,
             authorId: req.user.userId,
-            status: 'Oczekująca'
         });
         await newDelegation.save();
         res.status(201).json(newDelegation);
@@ -1003,9 +944,8 @@ app.delete('/api/delegations/:id', authMiddleware, async (req, res) => {
     try {
         const delegation = await Delegation.findById(req.params.id);
         if (!delegation) return res.status(404).json({ message: 'Nie znaleziono delegacji' });
-        
-        // Tylko autor lub admin może usunąć
-        if (delegation.authorId.toString() !== req.user.userId && req.user.role !== 'administrator') {
+
+        if (req.user.role !== 'administrator' && delegation.authorId.toString() !== req.user.userId) {
             return res.status(403).json({ message: 'Brak uprawnień do usunięcia tej delegacji' });
         }
         
@@ -1016,6 +956,36 @@ app.delete('/api/delegations/:id', authMiddleware, async (req, res) => {
     }
 });
 
+app.post('/api/delegations/:id/start', authMiddleware, async (req, res) => {
+    try {
+        const delegation = await Delegation.findByIdAndUpdate(req.params.id, { startTime: new Date(), status: 'W trakcie' }, { new: true });
+        if (!delegation) return res.status(404).json({ message: 'Nie znaleziono delegacji' });
+        res.json(delegation);
+    } catch (error) {
+        res.status(500).json({ message: 'Błąd rozpoczęcia delegacji' });
+    }
+});
+
+app.post('/api/delegations/:id/visits', authMiddleware, async (req, res) => {
+    try {
+        const { visitData, clientIndex } = req.body;
+        const delegation = await Delegation.findById(req.params.id);
+        if (!delegation) return res.status(404).json({ message: 'Nie znaleziono delegacji' });
+
+        const client = delegation.clients[clientIndex];
+        if (visitData.startTime) client.startTime = new Date();
+        if (visitData.endTime) {
+            client.endTime = new Date();
+            client.visitNotes = visitData.visitNotes;
+            client.ordered = visitData.ordered;
+        }
+
+        await delegation.save();
+        res.json(delegation);
+    } catch (error) {
+        res.status(500).json({ message: 'Błąd aktualizacji wizyty' });
+    }
+});
 
 // --- Start serwera ---
 const PORT = process.env.PORT || 3001;
