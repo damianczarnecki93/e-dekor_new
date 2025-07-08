@@ -273,6 +273,11 @@ const api = {
         if (!response.ok) throw new Error('Błąd ustawiania celu');
         return await response.json();
     },
+    addManualSales: async (sales) => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/api/user/manual-sales`, { method: 'POST', body: JSON.stringify({ sales }) });
+        if (!response.ok) throw new Error('Błąd dodawania sprzedaży');
+        return await response.json();
+    },
     getNotes: async () => {
         const response = await fetchWithAuth(`${API_BASE_URL}/api/notes`);
         if (!response.ok) throw new Error('Błąd pobierania notatek');
@@ -554,6 +559,19 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty }) => {
         }
         event.target.value = null;
     };
+    
+    const handleExportOrder = () => {
+        const csvData = order.items.map(item => `${item.barcodes[0] || ''},${item.quantity || 0}`).join('\n');
+        const blob = new Blob([`\uFEFF${csvData}`], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a");
+        const url = URL.createObjectURL(blob);
+        link.setAttribute("href", url);
+        link.setAttribute("download", `zamowienie_${order.customerName.replace(/\s/g, '_') || 'nowe'}.csv`);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
 
     return (
         <div className="h-full flex flex-col">
@@ -561,9 +579,12 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty }) => {
                 <div className="flex flex-wrap gap-4 justify-between items-center mb-4">
                     <h1 className="text-3xl font-bold text-gray-800 dark:text-white">{order._id ? `Edycja Zamówienia` : 'Nowe Zamówienie'}</h1>
                     <div className="flex gap-2">
+                        <button onClick={handleExportOrder} className="flex items-center justify-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
+                            <FileDown className="w-5 h-5 mr-2"/> Eksportuj
+                        </button>
                         <input type="file" ref={importFileRef} onChange={handleFileImport} className="hidden" accept=".csv" />
                         <button onClick={() => importFileRef.current.click()} className="flex items-center justify-center px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors">
-                            <FileUp className="w-5 h-5 mr-2"/> Importuj z CSV
+                            <FileUp className="w-5 h-5 mr-2"/> Importuj
                         </button>
                     </div>
                 </div>
@@ -681,29 +702,13 @@ const OrdersListView = ({ onEdit }) => {
         }
         event.target.value = null;
     };
-
-    const handleExportOrders = () => {
-        const csvData = orders.flatMap(order => 
-            order.items.map(item => `${item.barcodes[0] || ''},${item.quantity || 0}`)
-        ).join('\n');
-        const blob = new Blob([`\uFEFF${csvData}`], { type: 'text/csv;charset=utf-8;' });
-        const link = document.createElement("a");
-        const url = URL.createObjectURL(blob);
-        link.setAttribute("href", url);
-        link.setAttribute("download", `zamowienia_${view}_${new Date().toISOString().split('T')[0]}.csv`);
-        link.style.visibility = 'hidden';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-    };
-
+    
     return (
         <>
             <div className="p-4 md:p-8">
                 <div className="flex flex-wrap gap-4 items-center justify-between mb-4">
                     <h1 className="text-3xl font-bold text-gray-800 dark:text-white">Zamówienia</h1>
                     <div className="flex items-center gap-2">
-                        <button onClick={handleExportOrders} className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"><FileDown className="w-5 h-5 mr-2"/> Eksportuj listę</button>
                         <input type="file" ref={importMultipleRef} onChange={handleMultipleFileImport} className="hidden" accept=".csv" multiple />
                         <button onClick={() => importMultipleRef.current.click()} className="flex items-center px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600"><FileUp className="w-5 h-5 mr-2"/> Importuj wiele</button>
                         <button onClick={() => setShowFilters(!showFilters)} className="flex items-center px-4 py-2 bg-gray-200 dark:bg-gray-700 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600"><Filter className="w-5 h-5 mr-2"/> Filtry</button>
@@ -832,6 +837,10 @@ const PickingView = () => {
     };
 
     const handleShowSummary = () => {
+        if (pickedItems.length === 0) {
+            showNotification("Nie skompletowano żadnych produktów.", "error");
+            return;
+        }
         const discrepancies = pickedItems
             .filter(item => item.pickedQuantity !== item.originalQuantity)
             .map(item => ({
@@ -846,10 +855,11 @@ const PickingView = () => {
             await api.completeOrder(selectedOrder._id, pickedItems);
             showNotification('Zamówienie zostało skompletowane!', 'success');
             setSummaryModal({ isOpen: false, discrepancies: [] });
+            const updatedOrders = orders.map(o => o._id === selectedOrder._id ? {...o, status: 'Skompletowane'} : o);
+            setOrders(updatedOrders);
             setSelectedOrder(null);
             setToPickItems([]);
             setPickedItems([]);
-            fetchOrders();
         } catch (error) { showNotification(error.message, 'error'); }
     };
 
@@ -872,16 +882,19 @@ const PickingView = () => {
     };
 
     if (isLoading) { return <div className="p-4 text-center">Ładowanie zamówień...</div> }
+    
     if (!selectedOrder) {
         return (
             <div className="p-4 md:p-8">
                 <h1 className="text-3xl font-bold mb-6 text-gray-800 dark:text-white">Kompletacja Zamówień</h1>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     {orders.map(order => (
-                        <div key={order._id} onClick={() => handleSelectOrder(order)} className="p-4 bg-white dark:bg-gray-800 rounded-lg shadow-md cursor-pointer hover:shadow-lg hover:scale-105 transition-all">
+                        <div key={order._id} onClick={() => order.status === 'Zapisane' && handleSelectOrder(order)} 
+                             className={`p-4 rounded-lg shadow-md transition-all ${order.status === 'Zapisane' ? 'bg-white dark:bg-gray-800 cursor-pointer hover:shadow-lg hover:scale-105' : 'bg-green-100 dark:bg-green-900/30 cursor-not-allowed'}`}>
                             <p className="font-bold text-lg text-indigo-600 dark:text-indigo-400">{order.customerName}</p>
                             <p className="text-sm text-gray-500 dark:text-gray-400">Autor: {order.author}</p>
                             <p className="text-sm text-gray-500 dark:text-gray-400">{new Date(order.date).toLocaleDateString()}</p>
+                            {order.status === 'Skompletowane' && <div className="mt-2 text-green-600 font-bold flex items-center"><CheckCircle className="w-4 h-4 mr-1"/> Zatwierdzona kompletacja</div>}
                         </div>
                     ))}
                 </div>
@@ -1562,21 +1575,25 @@ const DashboardView = ({ user, onNavigate }) => {
     const { showNotification } = useNotification();
     const [salesGoal, setSalesGoal] = useState(user.salesGoal || 0);
     const [goalInput, setGoalInput] = useState(user.salesGoal || 0);
+    const [manualSaleInput, setManualSaleInput] = useState('');
+
+    const fetchStats = useCallback(async () => {
+        setIsLoading(true);
+        try {
+            const data = await api.getDashboardStats();
+            setStats(data);
+            setSalesGoal(data.salesGoal);
+            setGoalInput(data.salesGoal);
+        } catch (error) {
+            showNotification(error.message, 'error');
+        } finally {
+            setIsLoading(false);
+        }
+    }, [showNotification]);
 
     useEffect(() => {
-        const fetchStats = async () => {
-            setIsLoading(true);
-            try {
-                const data = await api.getDashboardStats();
-                setStats(data);
-            } catch (error) {
-                showNotification(error.message, 'error');
-            } finally {
-                setIsLoading(false);
-            }
-        };
         fetchStats();
-    }, [showNotification]);
+    }, [fetchStats]);
 
     const handleSetGoal = async (e) => {
         e.preventDefault();
@@ -1589,6 +1606,23 @@ const DashboardView = ({ user, onNavigate }) => {
             await api.setUserGoal(goalValue);
             setSalesGoal(goalValue);
             showNotification('Cel miesięczny został zaktualizowany!', 'success');
+        } catch (error) {
+            showNotification(error.message, 'error');
+        }
+    };
+    
+    const handleAddManualSale = async (e) => {
+        e.preventDefault();
+        const saleValue = parseFloat(manualSaleInput);
+        if (isNaN(saleValue)) {
+            showNotification('Wprowadź poprawną wartość sprzedaży.', 'error');
+            return;
+        }
+        try {
+            await api.addManualSales(saleValue);
+            showNotification('Sprzedaż została dodana!', 'success');
+            setManualSaleInput('');
+            fetchStats(); // Odśwież statystyki
         } catch (error) {
             showNotification(error.message, 'error');
         }
@@ -1624,16 +1658,22 @@ const DashboardView = ({ user, onNavigate }) => {
                         <div className="mb-4">
                             <div className="flex justify-between mb-1">
                                 <span className="text-base font-medium text-indigo-700 dark:text-white">Postęp</span>
-                                <span className="text-sm font-medium text-indigo-700 dark:text-white">{stats?.monthlySales.toFixed(2)} PLN / {salesGoal.toFixed(2)} PLN</span>
+                                <span className="text-sm font-medium text-indigo-700 dark:text-white">{(stats?.monthlySales || 0).toFixed(2)} PLN / {salesGoal.toFixed(2)} PLN</span>
                             </div>
                             <div className="w-full bg-gray-200 rounded-full h-4 dark:bg-gray-700">
                                 <div className="bg-indigo-600 h-4 rounded-full" style={{ width: `${Math.min(goalProgress, 100)}%` }}></div>
                             </div>
                         </div>
-                        <form onSubmit={handleSetGoal} className="flex items-center gap-2">
-                            <input type="number" value={goalInput} onChange={(e) => setGoalInput(e.target.value)} className="p-2 border rounded-md bg-gray-50 dark:bg-gray-700 w-full" placeholder="Ustaw nowy cel..."/>
-                            <button type="submit" className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">Ustaw</button>
-                        </form>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <form onSubmit={handleSetGoal} className="flex items-center gap-2">
+                                <input type="number" value={goalInput} onChange={(e) => setGoalInput(e.target.value)} className="p-2 border rounded-md bg-gray-50 dark:bg-gray-700 w-full" placeholder="Ustaw nowy cel..."/>
+                                <button type="submit" className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">Ustaw</button>
+                            </form>
+                            <form onSubmit={handleAddManualSale} className="flex items-center gap-2">
+                                <input type="number" value={manualSaleInput} onChange={(e) => setManualSaleInput(e.target.value)} className="p-2 border rounded-md bg-gray-50 dark:bg-gray-700 w-full" placeholder="Dodaj sprzedaż ręcznie..."/>
+                                <button type="submit" className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">Dodaj</button>
+                            </form>
+                        </div>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                         <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md">
