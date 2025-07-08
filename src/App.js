@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, createContext, useContext, useCallback } from 'react';
-import { Search, List, Wrench, User, Sun, Moon, LogOut, FileDown, Printer, Save, CheckCircle, AlertTriangle, Upload, Trash2, XCircle, UserPlus, KeyRound, PlusCircle, MessageSquare, Archive, Edit, Home, Menu, Filter, RotateCcw, FileUp, GitMerge, Eye, Target, Trophy, Crown, BarChart2, Users, Package, StickyNote, Settings, ChevronsUpDown, ChevronUp, ChevronDown } from 'lucide-react';
+import { Search, List, Wrench, User, Sun, Moon, LogOut, FileDown, Printer, Save, CheckCircle, AlertTriangle, Upload, Trash2, XCircle, UserPlus, KeyRound, PlusCircle, MessageSquare, Archive, Edit, Home, Menu, Filter, RotateCcw, FileUp, GitMerge, Eye, Target, Trophy, Crown, BarChart2, Users, Package, StickyNote, Settings, ChevronsUpDown, ChevronUp, ChevronDown, ClipboardList, Plane } from 'lucide-react';
 import { format } from 'date-fns';
 import { pl } from 'date-fns/locale';
 
@@ -313,6 +313,48 @@ const api = {
     deleteNote: async (noteId) => {
         const response = await fetchWithAuth(`${API_BASE_URL}/api/notes/${noteId}`, { method: 'DELETE' });
         if (!response.ok) throw new Error('Błąd usuwania notatki');
+        return await response.json();
+    },
+    // Kanban API
+    getKanbanTasks: async () => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/api/kanban/tasks`);
+        if (!response.ok) throw new Error('Błąd pobierania zadań');
+        return await response.json();
+    },
+    addKanbanTask: async (task) => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/api/kanban/tasks`, { method: 'POST', body: JSON.stringify(task) });
+        if (!response.ok) throw new Error('Błąd dodawania zadania');
+        return await response.json();
+    },
+    updateKanbanTask: async (taskId, status) => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/api/kanban/tasks/${taskId}`, { method: 'PUT', body: JSON.stringify({ status }) });
+        if (!response.ok) throw new Error('Błąd aktualizacji zadania');
+        return await response.json();
+    },
+    deleteKanbanTask: async (taskId) => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/api/kanban/tasks/${taskId}`, { method: 'DELETE' });
+        if (!response.ok) throw new Error('Błąd usuwania zadania');
+        return await response.json();
+    },
+    // Delegations API
+    getDelegations: async () => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/api/delegations`);
+        if (!response.ok) throw new Error('Błąd pobierania delegacji');
+        return await response.json();
+    },
+    addDelegation: async (delegation) => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/api/delegations`, { method: 'POST', body: JSON.stringify(delegation) });
+        if (!response.ok) throw new Error('Błąd tworzenia delegacji');
+        return await response.json();
+    },
+    updateDelegationStatus: async (delegationId, status) => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/api/delegations/${delegationId}/status`, { method: 'PUT', body: JSON.stringify({ status }) });
+        if (!response.ok) throw new Error('Błąd aktualizacji statusu delegacji');
+        return await response.json();
+    },
+    deleteDelegation: async (delegationId) => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/api/delegations/${delegationId}`, { method: 'DELETE' });
+        if (!response.ok) throw new Error('Błąd usuwania delegacji');
         return await response.json();
     },
 };
@@ -2002,6 +2044,8 @@ function App() {
         { id: 'orders', label: 'Zamówienia', icon: Archive, roles: ['user', 'administrator'] },
         { id: 'picking', label: 'Kompletacja', icon: List, roles: ['user', 'administrator'] },
         { id: 'inventory', label: 'Inwentaryzacja', icon: Wrench, roles: ['user', 'administrator'] },
+        { id: 'kanban', label: 'Tablica Zadań', icon: ClipboardList, roles: ['user', 'administrator'] },
+        { id: 'delegations', label: 'Delegacje', icon: Plane, roles: ['user', 'administrator'] },
         { id: 'admin', label: 'Panel Admina', icon: Settings, roles: ['administrator'] },
     ];
     
@@ -2017,6 +2061,8 @@ function App() {
             case 'picking': return <PickingView />;
             case 'inventory': return <InventoryView user={user} onNavigate={handleNavigate} isDirty={isDirty} setIsDirty={setIsDirty} />;
             case 'inventory-sheet': return <NewInventorySheet user={user} onSave={() => handleNavigate('inventory')} inventoryId={params.inventoryId} setDirty={setIsDirty} />;
+            case 'kanban': return <KanbanView user={user} />;
+            case 'delegations': return <DelegationsView user={user} />;
             case 'admin': return <AdminView user={user} onNavigate={handleNavigate} />;
             case 'admin-users': return <AdminUsersView user={user} />;
             case 'admin-products': return <AdminProductsView />;
