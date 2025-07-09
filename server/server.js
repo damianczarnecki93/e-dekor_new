@@ -282,7 +282,7 @@ app.put('/api/admin/users/:id/modules', authMiddleware, adminMiddleware, async (
 app.post('/api/admin/users/:id/approve', authMiddleware, adminMiddleware, async (req, res) => {
     try {
         const user = await User.findByIdAndUpdate(req.params.id, { status: 'zaakceptowany' }, { new: true });
-        if (!user) return res.status(404).json({ message: 'Użytkownik zaakceptowany.', user });
+        if (!user) return res.status(404).json({ message: 'Nie znaleziono użytkownika.' });
         res.json({ message: 'Użytkownik zaakceptowany.', user });
     } catch (error) {
         res.status(500).json({ message: 'Błąd podczas akceptacji użytkownika.' });
@@ -1032,7 +1032,7 @@ app.delete('/api/kanban/tasks/:id', authMiddleware, async (req, res) => {
 });
 
 
-// --- Endpointy Delegacji (ZMIANY) ---
+// --- Endpointy Delegacji (bez zmian) ---
 app.get('/api/delegations', authMiddleware, async (req, res) => {
     try {
         let delegations;
