@@ -249,12 +249,14 @@ app.post('/api/user/manual-sales', authMiddleware, async (req, res) => {
 });
 
 // --- API Endpoints - Admin ---
-app.get('/api/admin/users', authMiddleware, adminMiddleware, async (req, res) => {
+app.put('/api/admin/users/:id/modules', authMiddleware, adminMiddleware, async (req, res) => {
     try {
-        const users = await User.find({}, '-password');
-        res.json(users);
+        const { modules } = req.body;
+        const user = await User.findByIdAndUpdate(req.params.id, { visibleModules: modules }, { new: true });
+        if (!user) return res.status(404).json({ message: 'Nie znaleziono użytkownika.' });
+        res.json({ message: 'Moduły zaktualizowane.', user });
     } catch (error) {
-        res.status(500).json({ message: 'Błąd pobierania użytkowników.' });
+        res.status(500).json({ message: 'Błąd aktualizacji modułów.' });
     }
 });
 

@@ -286,6 +286,11 @@ const api = {
         if (!response.ok) throw new Error('Błąd zmiany hasła');
         return await response.json();
     },
+	updateUserModules: async (userId, modules) => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/api/admin/users/${userId}/modules`, { method: 'PUT', body: JSON.stringify({ modules }) });
+        if (!response.ok) throw new Error('Błąd aktualizacji modułów użytkownika');
+        return await response.json();
+    },
     userChangeOwnPassword: async (currentPassword, newPassword) => {
         const response = await fetchWithAuth(`${API_BASE_URL}/api/user/password`, { method: 'POST', body: JSON.stringify({ currentPassword, newPassword }) });
         if (!response.ok) { const errorData = await response.json(); throw new Error(errorData.message || 'Błąd zmiany hasła'); }
