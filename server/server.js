@@ -967,14 +967,17 @@ app.post('/api/kanban/tasks', authMiddleware, async (req, res) => {
 
 app.put('/api/kanban/tasks/:id', authMiddleware, async (req, res) => {
     try {
-        const { content, status, details, subtasks } = req.body;
+        const { content, status, details, subtasks, isAccepted } = req.body;
         const updateData = {};
-        if (content) updateData.content = content;
-        if (status) updateData.status = status;
-        if (details) updateData.details = details;
-        if (subtasks) updateData.subtasks = subtasks;
+        
+        if (content !== undefined) updateData.content = content;
+        if (status !== undefined) updateData.status = status;
+        if (details !== undefined) updateData.details = details;
+        if (subtasks !== undefined) updateData.subtasks = subtasks;
+        if (isAccepted !== undefined) updateData.isAccepted = isAccepted;
 
-        const task = await KanbanTask.findByIdAndUpdate(req.params.id, updateData, { new: true });
+        const task = await KanbanTask.findByIdAndUpdate(req.params.id, { $set: updateData }, { new: true });
+        
         if (!task) return res.status(404).json({ message: 'Nie znaleziono zadania' });
         res.json(task);
     } catch (error) {
