@@ -10,6 +10,7 @@ const csv = require('csv-parser');
 const iconv = require('iconv-lite');
 const fs = require('fs');
 const path = require('path');
+const nodemailer = require('nodemailer');
 
 const app = express();
 app.use(cors());
@@ -124,6 +125,16 @@ const delegationSchema = new mongoose.Schema({
     endTime: Date
 });
 const Delegation = mongoose.models.Delegation || mongoose.model('Delegation', delegationSchema);
+
+// NOWY SCHEMAT KONFIGURACJI POCZTY
+const emailConfigSchema = new mongoose.Schema({
+    host: { type: String, required: true },
+    port: { type: Number, required: true },
+    secure: { type: Boolean, default: true },
+    user: { type: String, required: true },
+    pass: { type: String, required: true },
+});
+const EmailConfig = mongoose.models.EmailConfig || mongoose.model('EmailConfig', emailConfigSchema);
 
 
 // --- Middleware ---
