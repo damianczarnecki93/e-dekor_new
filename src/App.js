@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef, useMemo, createContext, useContext,
 import { Search, List, Wrench, User, Sun, Moon, LogOut, FileDown, Printer, Save, CheckCircle, AlertTriangle, Upload, Trash2, XCircle, UserPlus, KeyRound, PlusCircle, MessageSquare, Archive, Edit, Home, Menu, Filter, RotateCcw, FileUp, GitMerge, Eye, Target, Trophy, Crown, BarChart2, Users, Package, StickyNote, Settings, ChevronsUpDown, ChevronUp, ChevronDown, ClipboardList, Plane } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { pl } from 'date-fns/locale';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
 
 // --- Komponent Granicy Błędu (Error Boundary) ---
 class ErrorBoundary extends React.Component {
@@ -488,22 +490,43 @@ const PinnedInputBar = ({ onProductAdd, onSave, isDirty }) => {
         inputRef.current?.focus();
     };
     
-    const handleKeyDown = (e) => {
+    const handleKeyDown = async (e) => {
         if (e.key === 'Enter' && query.trim() !== '') {
             e.preventDefault();
-            if (suggestions.length > 0) {
-                handleAdd(suggestions[0]);
-            } else {
-                const customItem = {
-                    _id: `custom-${Date.now()}`,
-                    name: `EAN: ${query}`,
-                    product_code: 'SPOZA LISTY',
-                    barcodes: [query],
-                    price: 0,
-                    isCustom: true,
-                };
-                handleAdd(customItem);
+            
+            // Sprawdź, czy istnieje dokładne dopasowanie w sugestiach lub przez API
+            const exactMatch = suggestions.find(s => s.barcodes.includes(query.trim()) || s.product_code === query.trim());
+            if (exactMatch) {
+                handleAdd(exactMatch);
+                return;
             }
+
+            // Jeśli nie ma w sugestiach, spróbuj wyszukać w bazie
+            if (suggestions.length === 0) {
+                try {
+                    const results = await api.searchProducts(query.trim());
+                    if (results.length === 1) {
+                        handleAdd(results[0]);
+                        return;
+                    } else if (results.length > 1) {
+                        setSuggestions(results); // Pokaż użytkownikowi wybór
+                        return;
+                    }
+                } catch (error) {
+                    // Ignoruj błąd i przejdź do dodawania jako produkt niestandardowy
+                }
+            }
+
+            // Jeżeli nadal brak dopasowania - dodaj jako produkt niestandardowy
+            const customItem = {
+                _id: `custom-${Date.now()}`,
+                name: `EAN: ${query}`,
+                product_code: 'SPOZA LISTY',
+                barcodes: [query],
+                price: 0,
+                isCustom: true,
+            };
+            handleAdd(customItem);
         }
     };
 
@@ -533,6 +556,7 @@ const PinnedInputBar = ({ onProductAdd, onSave, isDirty }) => {
                     <input
                         type="number"
                         value={quantity}
+                        onFocus={(e) => e.target.select()}
                         onChange={(e) => setQuantity(e.target.value)}
                         onKeyDown={handleKeyDown}
                         className="w-20 sm:w-24 p-3 text-center bg-gray-100 dark:bg-gray-700 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -592,20 +616,30 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty }) => {
     };
 
     const updateQuantity = (itemIndex, newQuantityStr) => {
-        const newQuantity = parseInt(newQuantityStr, 10);
         const newItems = [...order.items];
-        if (!isNaN(newQuantity) && newQuantity >= 0) {
-            newItems[itemIndex].quantity = newQuantity;
-        } else if (newQuantityStr === '') {
-            newItems[itemIndex].quantity = 0;
+        const newQuantity = parseInt(newQuantityStr, 10);
+        const originalItem = sortedItems[itemIndex];
+        
+        const targetIndex = newItems.findIndex(item => item._id === originalItem._id);
+
+        if (targetIndex !== -1) {
+            if (!isNaN(newQuantity) && newQuantity >= 0) {
+                newItems[targetIndex].quantity = newQuantity;
+            } else if (newQuantityStr === '') {
+                newItems[targetIndex].quantity = 0;
+            }
+            updateOrder({ items: newItems });
         }
-        updateOrder({ items: newItems });
     };
 
     const removeItemFromOrder = (itemIndex) => {
         const newItems = [...order.items];
-        newItems.splice(itemIndex, 1);
-        updateOrder({ items: newItems });
+        const originalItem = sortedItems[itemIndex];
+        const targetIndex = newItems.findIndex(item => item._id === originalItem._id);
+        if (targetIndex !== -1) {
+            newItems.splice(targetIndex, 1);
+            updateOrder({ items: newItems });
+        }
     };
 
     const handleNoteSave = () => {
@@ -643,17 +677,28 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty }) => {
         event.target.value = null;
     };
     
-    const handleExportOrder = () => {
-        const csvData = order.items.map(item => `${item.barcodes[0] || ''},${item.quantity || 0}`).join('\n');
-        const blob = new Blob([`\uFEFF${csvData}`], { type: 'text/csv;charset=utf-8;' });
-        const link = document.createElement("a");
-        const url = URL.createObjectURL(blob);
-        link.setAttribute("href", url);
-        link.setAttribute("download", `zamowienie_${order.customerName.replace(/\s/g, '_') || 'nowe'}.csv`);
-        link.style.visibility = 'hidden';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+    const handleExportPdf = () => {
+        const doc = new jsPDF();
+        doc.text(`Zamówienie dla: ${order.customerName}`, 14, 15);
+        doc.text(`Data: ${new Date().toLocaleDateString()}`, 14, 22);
+
+        doc.autoTable({
+            startY: 30,
+            head: [['Nazwa', 'Kod produktu', 'Ilość', 'Cena', 'Wartość']],
+            body: order.items.map(item => [
+                item.name,
+                item.product_code,
+                item.quantity,
+                `${item.price.toFixed(2)} PLN`,
+                `${(item.price * item.quantity).toFixed(2)} PLN`,
+            ]),
+        });
+        
+        const finalY = doc.lastAutoTable.finalY;
+        doc.setFontSize(14);
+        doc.text(`Suma: ${totalValue.toFixed(2)} PLN`, 14, finalY + 10);
+
+        doc.save(`Zamowienie-${order.customerName.replace(/\s/g, '_') || 'nowe'}.pdf`);
     };
 
     const handlePrint = () => {
@@ -678,8 +723,8 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty }) => {
                         <button onClick={handlePrint} className="flex items-center justify-center p-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors">
                             <Printer className="w-5 h-5"/> <span className="hidden sm:inline ml-2">Drukuj</span>
                         </button>
-                        <button onClick={handleExportOrder} className="flex items-center justify-center p-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
-                            <FileDown className="w-5 h-5"/> <span className="hidden sm:inline ml-2">Eksportuj</span>
+                        <button onClick={handleExportPdf} className="flex items-center justify-center p-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors">
+                            <FileDown className="w-5 h-5"/> <span className="hidden sm:inline ml-2">PDF</span>
                         </button>
                         <input type="file" ref={importFileRef} onChange={handleFileImport} className="hidden" accept=".csv" />
                         <button onClick={() => importFileRef.current.click()} className="flex items-center justify-center p-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors">
@@ -710,7 +755,7 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty }) => {
                                         <td className="hidden md:table-cell p-2">{item.product_code}</td>
                                         <td className="p-2 text-right">{item.price.toFixed(2)}</td>
                                         <td className="p-2 text-center">
-                                            <input type="number" value={item.quantity || ''} onChange={(e) => updateQuantity(index, e.target.value)} className="w-16 text-center bg-transparent border rounded-md p-1 focus:ring-2 focus:ring-indigo-500 outline-none"/>
+                                            <input type="number" value={item.quantity || ''} onChange={(e) => updateQuantity(index, e.target.value)} onFocus={(e) => e.target.select()} className="w-16 text-center bg-transparent border rounded-md p-1 focus:ring-2 focus:ring-indigo-500 outline-none"/>
                                         </td>
                                         <td className="p-2 text-right font-semibold">{(item.price * (item.quantity || 0)).toFixed(2)}</td>
                                         <td className="p-2 text-center whitespace-nowrap">
@@ -740,7 +785,6 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty }) => {
         </div>
     );
 };
-
 const OrdersListView = ({ onEdit }) => {
     const [orders, setOrders] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
