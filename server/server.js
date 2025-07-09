@@ -249,14 +249,12 @@ app.post('/api/user/manual-sales', authMiddleware, async (req, res) => {
 });
 
 // --- API Endpoints - Admin ---
-app.put('/api/admin/users/:id/modules', authMiddleware, adminMiddleware, async (req, res) => {
+app.get('/api/admin/users', authMiddleware, adminMiddleware, async (req, res) => {
     try {
-        const { modules } = req.body;
-        const user = await User.findByIdAndUpdate(req.params.id, { visibleModules: modules }, { new: true });
-        if (!user) return res.status(404).json({ message: 'Nie znaleziono użytkownika.' });
-        res.json({ message: 'Moduły zaktualizowane.', user });
+        const users = await User.find({}, '-password');
+        res.json(users);
     } catch (error) {
-        res.status(500).json({ message: 'Błąd aktualizacji modułów.' });
+        res.status(500).json({ message: 'Błąd pobierania użytkowników.' });
     }
 });
 
@@ -284,7 +282,7 @@ app.put('/api/admin/users/:id/modules', authMiddleware, adminMiddleware, async (
 app.post('/api/admin/users/:id/approve', authMiddleware, adminMiddleware, async (req, res) => {
     try {
         const user = await User.findByIdAndUpdate(req.params.id, { status: 'zaakceptowany' }, { new: true });
-        if (!user) return res.status(404).json({ message: 'Nie znaleziono użytkownika.' });
+        if (!user) return res.status(404).json({ message: 'Użytkownik zaakceptowany.', user });
         res.json({ message: 'Użytkownik zaakceptowany.', user });
     } catch (error) {
         res.status(500).json({ message: 'Błąd podczas akceptacji użytkownika.' });
@@ -944,11 +942,9 @@ app.delete('/api/notes/:id', authMiddleware, async (req, res) => {
 app.get('/api/kanban/tasks', authMiddleware, async (req, res) => {
     try {
         let query = {};
-        // Administrator może pobrać zadania dla konkretnego użytkownika za pomocą query param
         if (req.user.role === 'administrator' && req.query.userId) {
             query = { authorId: req.query.userId };
         } else {
-            // Standardowy użytkownik pobiera tylko swoje własne zadania
             query = { authorId: req.user.userId };
         }
         const tasks = await KanbanTask.find(query).sort({ date: -1 });
@@ -960,17 +956,17 @@ app.get('/api/kanban/tasks', authMiddleware, async (req, res) => {
 
 app.post('/api/kanban/tasks', authMiddleware, async (req, res) => {
     try {
-        const { content, details, subtasks } = req.body;
+        const { content, details, subtasks, authorId, author } = req.body;
         
         const newTask = new KanbanTask({
             content,
             details: details || '',
             subtasks: subtasks || [],
             status: 'todo',
-            author: req.user.username,
-            authorId: req.user.userId,
-            assignedTo: req.user.username, // Zadanie jest zawsze przypisane do autora
-            assignedToId: req.user.userId,
+            author: author,
+            authorId: authorId,
+            assignedTo: author, // Zadanie jest zawsze przypisane do autora
+            assignedToId: authorId,
             isAccepted: true // Zadania są od razu aktywne
         });
         await newTask.save();
