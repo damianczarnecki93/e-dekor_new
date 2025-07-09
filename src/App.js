@@ -494,14 +494,12 @@ const PinnedInputBar = ({ onProductAdd, onSave, isDirty }) => {
         if (e.key === 'Enter' && query.trim() !== '') {
             e.preventDefault();
             
-            // Sprawdź, czy istnieje dokładne dopasowanie w sugestiach lub przez API
             const exactMatch = suggestions.find(s => s.barcodes.includes(query.trim()) || s.product_code === query.trim());
             if (exactMatch) {
                 handleAdd(exactMatch);
                 return;
             }
 
-            // Jeśli nie ma w sugestiach, spróbuj wyszukać w bazie
             if (suggestions.length === 0) {
                 try {
                     const results = await api.searchProducts(query.trim());
@@ -509,15 +507,14 @@ const PinnedInputBar = ({ onProductAdd, onSave, isDirty }) => {
                         handleAdd(results[0]);
                         return;
                     } else if (results.length > 1) {
-                        setSuggestions(results); // Pokaż użytkownikowi wybór
+                        setSuggestions(results);
                         return;
                     }
                 } catch (error) {
-                    // Ignoruj błąd i przejdź do dodawania jako produkt niestandardowy
+                    // Ignoruj błąd
                 }
             }
 
-            // Jeżeli nadal brak dopasowania - dodaj jako produkt niestandardowy
             const customItem = {
                 _id: `custom-${Date.now()}`,
                 name: `EAN: ${query}`,
@@ -785,6 +782,7 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty }) => {
         </div>
     );
 };
+
 const OrdersListView = ({ onEdit }) => {
     const [orders, setOrders] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -2082,8 +2080,8 @@ function App() {
         { id: 'orders', label: 'Zamówienia', icon: Archive, roles: ['user', 'administrator'] },
         { id: 'picking', label: 'Kompletacja', icon: List, roles: ['user', 'administrator'] },
         { id: 'inventory', label: 'Inwentaryzacja', icon: Wrench, roles: ['user', 'administrator'] },
-        { id: 'kanban', label: 'Tablica Zadań - Wersja Testowa', icon: ClipboardList, roles: ['user', 'administrator'] },
-        { id: 'delegations', label: 'Delegacje - Wersja Testowa', icon: Plane, roles: ['user', 'administrator'] },
+        { id: 'kanban', label: 'Tablica Zadań', icon: ClipboardList, roles: ['user', 'administrator'] },
+        { id: 'delegations', label: 'Delegacje', icon: Plane, roles: ['user', 'administrator'] },
         { id: 'admin', label: 'Panel Admina', icon: Settings, roles: ['administrator'] },
     ];
     
@@ -2206,7 +2204,7 @@ const KanbanView = ({ user }) => {
     useEffect(() => {
         fetchAllData();
     }, [fetchAllData]);
-    
+
     const handleTaskMove = async (taskId, newStatus) => {
         const originalTasks = [...tasks];
         const updatedTasks = tasks.map(t => t._id === taskId ? { ...t, status: newStatus } : t);
@@ -2261,7 +2259,7 @@ const KanbanView = ({ user }) => {
     return (
         <div className="p-4 md:p-8">
             <div className="flex flex-wrap justify-between items-center mb-6">
-                <h1 className="text-3xl font-bold">Tablica Zadań - Wersja Testowa</h1>
+                <h1 className="text-3xl font-bold">Tablica Zadań</h1>
                 {user.role === 'administrator' && (
                     <button onClick={() => setIsModalOpen(true)} className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
                         <PlusCircle className="w-5 h-5 mr-2"/> Nowe Zadanie
@@ -2349,7 +2347,6 @@ const KanbanForm = ({ onSubmit, users }) => {
 
 const DelegationsView = ({ user }) => {
     const [delegations, setDelegations] = useState([]);
-    const [users, setUsers] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const { showNotification } = useNotification();
@@ -2361,43 +2358,39 @@ const DelegationsView = ({ user }) => {
         }
         return sortConfig.direction === 'ascending' ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />;
     };
-    
-    const fetchAllData = useCallback(async () => {
+
+    const fetchDelegations = useCallback(async () => {
         setIsLoading(true);
         try {
-            const [delegationsData, usersData] = await Promise.all([
-                api.getDelegations(),
-                user.role === 'administrator' ? api.getUsers() : Promise.resolve([])
-            ]);
-            setDelegations(delegationsData);
-            setUsers(usersData);
+            const data = await api.getDelegations();
+            setDelegations(data);
         } catch (error) {
             showNotification(error.message, 'error');
         } finally {
             setIsLoading(false);
         }
-    }, [user.role, showNotification]);
+    }, [showNotification]);
 
     useEffect(() => {
-        fetchAllData();
-    }, [fetchAllData]);
+        fetchDelegations();
+    }, [fetchDelegations]);
 
     const handleAddDelegation = async (delegationData) => {
         try {
             await api.addDelegation(delegationData);
             showNotification('Delegacja została pomyślnie dodana.', 'success');
             setIsModalOpen(false);
-            fetchAllData();
+            fetchDelegations();
         } catch (error) {
             showNotification(error.message, 'error');
         }
     };
-    
+
     const handleStatusUpdate = async (id, status) => {
         try {
             await api.updateDelegationStatus(id, status);
             showNotification('Status delegacji został zaktualizowany.', 'success');
-            fetchAllData();
+            fetchDelegations();
         } catch (error) {
             showNotification(error.message, 'error');
         }
@@ -2408,7 +2401,7 @@ const DelegationsView = ({ user }) => {
             try {
                 await api.deleteDelegation(id);
                 showNotification("Delegacja usunięta", "success");
-                fetchAllData();
+                fetchDelegations();
             } catch (error) {
                 showNotification(error.message, "error");
             }
@@ -2428,13 +2421,12 @@ const DelegationsView = ({ user }) => {
 
     return (
         <div className="p-4 md:p-8">
-            <div className="flex flex-wrap gap-4 justify-between items-center mb-6">
-                <h1 className="text-3xl font-bold">Planowanie Delegacji - Wersja Testowa</h1>
+            <div className="flex justify-between items-center mb-6">
+                <h1 className="text-3xl font-bold">Planowanie Delegacji</h1>
                 <button onClick={() => setIsModalOpen(true)} className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
                     <PlusCircle className="w-5 h-5 mr-2"/> Nowa Delegacja
                 </button>
             </div>
-            
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-x-auto">
                 <table className="w-full text-left text-sm">
                     <thead className="bg-gray-50 dark:bg-gray-700">
@@ -2462,7 +2454,7 @@ const DelegationsView = ({ user }) => {
                                             <Tooltip text="Odrzuć"><button onClick={() => handleStatusUpdate(d._id, 'Odrzucona')} className="p-2 text-red-500 hover:text-red-700"><XCircle className="w-5 h-5"/></button></Tooltip>
                                         </>
                                     )}
-                                    {(user.id === d.authorId || user.role === 'administrator') && d.status === 'Oczekująca' && (
+                                    {(user.id === d.authorId || user.role === 'administrator') && (
                                         <Tooltip text="Usuń"><button onClick={() => handleDelete(d._id)} className="p-2 text-gray-500 hover:text-red-500"><Trash2 className="w-5 h-5"/></button></Tooltip>
                                     )}
                                 </td>
@@ -2471,7 +2463,6 @@ const DelegationsView = ({ user }) => {
                     </tbody>
                 </table>
             </div>
-
             <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Nowa Delegacja" maxWidth="2xl">
                 <DelegationForm onSubmit={handleAddDelegation} />
             </Modal>
@@ -2515,7 +2506,6 @@ const DelegationForm = ({ onSubmit }) => {
 
     const handleSubmit = (e) => {
         e.preventDefault();
-        // Prosta walidacja
         if (!formData.destination || !formData.purpose || !formData.dateFrom || !formData.dateTo) {
             alert('Proszę wypełnić wszystkie wymagane pola.');
             return;
@@ -2547,7 +2537,7 @@ const DelegationForm = ({ onSubmit }) => {
                 <button type="button" onClick={addClient} className="mt-2 flex items-center px-3 py-1 bg-gray-200 dark:bg-gray-600 text-sm rounded-lg"><PlusCircle className="w-4 h-4 mr-1"/> Dodaj kontrahenta</button>
             </div>
 
-            <div className="flex justify-end gap-4 pt-4">
+            <div className="flex justify-end pt-4">
                 <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg">Wyślij do akceptacji</button>
             </div>
         </form>
