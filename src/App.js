@@ -261,6 +261,11 @@ const api = {
         if (!response.ok) throw new Error('Błąd pobierania użytkowników');
         return await response.json();
     },
+     getUsersList: async () => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/api/users/list`);
+        if (!response.ok) throw new Error('Błąd pobierania listy użytkowników');
+        return await response.json();
+    },
     approveUser: async (userId) => {
         const response = await fetchWithAuth(`${API_BASE_URL}/api/admin/users/${userId}/approve`, { method: 'POST' });
         if (!response.ok) throw new Error('Błąd akceptacji użytkownika');
