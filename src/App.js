@@ -2226,7 +2226,7 @@ const KanbanView = ({ user }) => {
         try {
             const [tasksData, usersData] = await Promise.all([
                 api.getKanbanTasks(),
-                api.getUsers()
+                api.getUsers() // Pobieraj użytkowników zawsze, aby każdy mógł przypisać zadanie
             ]);
             setTasks(tasksData);
             setUsers(usersData.filter(u => u.status === 'zaakceptowany'));
@@ -2295,9 +2295,9 @@ const KanbanView = ({ user }) => {
         }
     };
 
-    const handleUpdateDetails = async (taskId, details, subtasks) => {
+    const handleUpdateDetails = async (taskId, dataToUpdate) => {
         try {
-            const updatedTask = await api.updateKanbanTask(taskId, { details, subtasks });
+            const updatedTask = await api.updateKanbanTask(taskId, dataToUpdate);
             setTasks(tasks.map(t => t._id === taskId ? updatedTask : t));
             setDetailsModal({ isOpen: false, task: null });
             showNotification('Szczegóły zadania zaktualizowane.', 'success');
@@ -2307,7 +2307,7 @@ const KanbanView = ({ user }) => {
     };
 
     const onDragStart = (e, task) => {
-        if (!task.isAccepted && user.role !== 'administrator' && task.assignedToId !== user.id) {
+        if (!task.isAccepted && user.role !== 'administrator' && task.authorId !== user.id) {
             e.preventDefault();
             return;
         }
@@ -2357,7 +2357,7 @@ const KanbanView = ({ user }) => {
                                         <p>{task.content}</p>
                                         <div className="text-xs text-gray-500 mt-2 flex justify-between">
                                             <span>Dla: {task.assignedTo}</span>
-                                            <span className="italic">Od: {task.author}</span>
+                                            {task.authorId !== user.id && <span className="italic">Od: {task.author}</span>}
                                         </div>
                                         <p className="text-xs text-gray-400 mt-1">{format(parseISO(task.date), 'd MMM, HH:mm')}</p>
                                         {!task.isAccepted && task.assignedToId === user.id && (
@@ -2423,6 +2423,7 @@ const KanbanForm = ({ onSubmit, users, currentUser }) => {
 };
 
 const TaskDetails = ({ task, onSave }) => {
+    const [content, setContent] = useState(task.content || '');
     const [details, setDetails] = useState(task.details || '');
     const [subtasks, setSubtasks] = useState(task.subtasks || []);
     const [newSubtask, setNewSubtask] = useState('');
@@ -2444,10 +2445,17 @@ const TaskDetails = ({ task, onSave }) => {
         newSubtasks.splice(index, 1);
         setSubtasks(newSubtasks);
     };
+    
+    const handleSave = () => {
+        onSave(task._id, { content, details, subtasks });
+    };
 
     return (
         <div className="space-y-4">
-            <h3 className="text-lg font-bold">{task.content}</h3>
+             <div>
+                <label className="block text-sm font-medium">Tytuł zadania</label>
+                <input type="text" value={content} onChange={(e) => setContent(e.target.value)} className="w-full p-2 border rounded-md"/>
+            </div>
             <div>
                 <label className="block text-sm font-medium">Szczegóły</label>
                 <textarea value={details} onChange={(e) => setDetails(e.target.value)} className="w-full p-2 border rounded-md min-h-[100px]"/>
@@ -2469,11 +2477,12 @@ const TaskDetails = ({ task, onSave }) => {
                 </div>
             </div>
             <div className="flex justify-end pt-4">
-                <button onClick={() => onSave(task._id, details, subtasks)} className="px-4 py-2 bg-blue-600 text-white rounded-lg">Zapisz szczegóły</button>
+                <button onClick={handleSave} className="px-4 py-2 bg-blue-600 text-white rounded-lg">Zapisz szczegóły</button>
             </div>
         </div>
     );
 };
+
 
 
 const DelegationsView = ({ user }) => {
