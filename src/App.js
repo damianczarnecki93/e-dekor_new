@@ -261,7 +261,7 @@ const api = {
         if (!response.ok) throw new Error('Błąd pobierania użytkowników');
         return await response.json();
     },
-     getUsersList: async () => {
+    getUsersList: async () => {
         const response = await fetchWithAuth(`${API_BASE_URL}/api/users/list`);
         if (!response.ok) throw new Error('Błąd pobierania listy użytkowników');
         return await response.json();
@@ -332,8 +332,8 @@ const api = {
         if (!response.ok) throw new Error('Błąd dodawania zadania');
         return await response.json();
     },
-    updateKanbanTask: async (taskId, status) => {
-        const response = await fetchWithAuth(`${API_BASE_URL}/api/kanban/tasks/${taskId}`, { method: 'PUT', body: JSON.stringify({ status }) });
+    updateKanbanTask: async (taskId, data) => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/api/kanban/tasks/${taskId}`, { method: 'PUT', body: JSON.stringify(data) });
         if (!response.ok) throw new Error('Błąd aktualizacji zadania');
         return await response.json();
     },
@@ -2231,10 +2231,10 @@ const KanbanView = ({ user }) => {
         try {
             const [tasksData, usersData] = await Promise.all([
                 api.getKanbanTasks(),
-                api.getUsersList()
+                api.getUsersList() 
             ]);
             setTasks(tasksData);
-            setUsers(usersData.filter(u => u.status === 'zaakceptowany'));
+            setUsers(usersData);
         } catch (error) {
             showNotification(error.message, 'error');
         } finally {
