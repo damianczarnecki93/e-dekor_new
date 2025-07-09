@@ -2218,6 +2218,7 @@ const KanbanView = ({ user }) => {
     const [users, setUsers] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [detailsModal, setDetailsModal] = useState({ isOpen: false, task: null });
     const { showNotification } = useNotification();
 
     const fetchAllData = useCallback(async () => {
@@ -2225,7 +2226,7 @@ const KanbanView = ({ user }) => {
         try {
             const [tasksData, usersData] = await Promise.all([
                 api.getKanbanTasks(),
-                user.role === 'administrator' ? api.getUsers() : Promise.resolve([])
+                api.getUsers()
             ]);
             setTasks(tasksData);
             setUsers(usersData.filter(u => u.status === 'zaakceptowany'));
@@ -2234,7 +2235,7 @@ const KanbanView = ({ user }) => {
         } finally {
             setIsLoading(false);
         }
-    }, [user.role, showNotification]);
+    }, [showNotification]);
 
     useEffect(() => {
         fetchAllData();
@@ -2242,6 +2243,12 @@ const KanbanView = ({ user }) => {
 
     const handleTaskMove = async (taskId, newStatus) => {
         const originalTasks = [...tasks];
+        const taskToMove = tasks.find(t => t._id === taskId);
+        if (!taskToMove.isAccepted && user.role !== 'administrator') {
+            showNotification("Musisz najpierw zaakceptować to zadanie.", "error");
+            return;
+        }
+
         const updatedTasks = tasks.map(t => t._id === taskId ? { ...t, status: newStatus } : t);
         setTasks(updatedTasks);
 
@@ -2255,10 +2262,10 @@ const KanbanView = ({ user }) => {
     
     const handleAddTask = async (taskData) => {
         try {
-            const newTask = await api.addKanbanTask(taskData);
-            setTasks(prev => [newTask, ...prev]);
+            await api.addKanbanTask(taskData);
             showNotification('Zadanie dodane pomyślnie.', 'success');
             setIsModalOpen(false);
+            fetchAllData();
         } catch(error) {
             showNotification(error.message, 'error');
         }
@@ -2273,6 +2280,27 @@ const KanbanView = ({ user }) => {
             } catch (error) {
                 showNotification(error.message, 'error');
             }
+        }
+    };
+    
+    const handleAcceptTask = async (taskId) => {
+        try {
+            await api.updateKanbanTask(taskId, { isAccepted: true });
+            showNotification('Zadanie zaakceptowane.', 'success');
+            fetchAllData();
+        } catch(error) {
+            showNotification(error.message, 'error');
+        }
+    };
+
+    const handleUpdateDetails = async (taskId, details, subtasks) => {
+        try {
+            const updatedTask = await api.updateKanbanTask(taskId, { details, subtasks });
+            setTasks(tasks.map(t => t._id === taskId ? updatedTask : t));
+            setDetailsModal({ isOpen: false, task: null });
+            showNotification('Szczegóły zadania zaktualizowane.', 'success');
+        } catch (error) {
+            showNotification(error.message, 'error');
         }
     };
 
@@ -2295,18 +2323,16 @@ const KanbanView = ({ user }) => {
         <div className="p-4 md:p-8">
             <div className="flex flex-wrap justify-between items-center mb-6">
                 <h1 className="text-3xl font-bold">Tablica Zadań</h1>
-                {user.role === 'administrator' && (
-                    <button onClick={() => setIsModalOpen(true)} className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
-                        <PlusCircle className="w-5 h-5 mr-2"/> Nowe Zadanie
-                    </button>
-                )}
+                <button onClick={() => setIsModalOpen(true)} className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
+                    <PlusCircle className="w-5 h-5 mr-2"/> Nowe Zadanie
+                </button>
             </div>
             
             {isLoading ? <div className="text-center p-8">Ładowanie...</div> : (
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     {columns.map(column => (
                         <div key={column.id} 
-                             className="bg-gray-100 dark:bg-gray-800 rounded-lg p-4 min-h-[300px]"
+                             className="bg-gray-100 dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700"
                              onDragOver={(e) => e.preventDefault()}
                              onDrop={(e) => onDrop(e, column.id)}
                         >
@@ -2317,16 +2343,21 @@ const KanbanView = ({ user }) => {
                             <div className="space-y-4">
                                 {tasks.filter(t => t.status === column.id).map(task => (
                                     <div key={task._id} 
-                                         draggable 
+                                         draggable={task.isAccepted || user.role === 'administrator'}
                                          onDragStart={(e) => onDragStart(e, task._id)}
-                                         className="bg-white dark:bg-gray-700 p-4 rounded-md shadow cursor-move group relative"
+                                         onClick={() => setDetailsModal({isOpen: true, task: task})}
+                                         className={`bg-white dark:bg-gray-700 p-4 rounded-md shadow group relative ${task.isAccepted ? 'cursor-move' : 'cursor-not-allowed opacity-60'}`}
                                     >
                                         <p>{task.content}</p>
                                         <div className="text-xs text-gray-500 mt-2 flex justify-between">
                                             <span>Dla: {task.assignedTo}</span>
-                                            <span>Od: {task.author}</span>
+                                            <span className="italic">Od: {task.author}</span>
                                         </div>
-                                        <button onClick={() => handleDeleteTask(task._id)} className="absolute top-1 right-1 p-1 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <p className="text-xs text-gray-400 mt-1">{format(parseISO(task.date), 'd MMM, HH:mm')}</p>
+                                        {!task.isAccepted && task.assignedToId === user.id && (
+                                            <button onClick={(e) => { e.stopPropagation(); handleAcceptTask(task._id); }} className="mt-2 w-full px-2 py-1 bg-green-500 text-white text-xs rounded-lg">Zaakceptuj zadanie</button>
+                                        )}
+                                        <button onClick={(e) => { e.stopPropagation(); handleDeleteTask(task._id); }} className="absolute top-1 right-1 p-1 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
                                             <Trash2 className="w-4 h-4"/>
                                         </button>
                                     </div>
@@ -2338,15 +2369,18 @@ const KanbanView = ({ user }) => {
             )}
 
             <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Nowe Zadanie">
-                <KanbanForm onSubmit={handleAddTask} users={users} />
+                <KanbanForm onSubmit={handleAddTask} users={users} currentUser={user} />
+            </Modal>
+            <Modal isOpen={detailsModal.isOpen} onClose={() => setDetailsModal({isOpen: false, task: null})} title="Szczegóły zadania" maxWidth="2xl">
+                {detailsModal.task && <TaskDetails onSave={handleUpdateDetails} task={detailsModal.task} />}
             </Modal>
         </div>
     );
 };
 
-const KanbanForm = ({ onSubmit, users }) => {
+const KanbanForm = ({ onSubmit, users, currentUser }) => {
     const [content, setContent] = useState('');
-    const [assignedToId, setAssignedToId] = useState('');
+    const [assignedToId, setAssignedToId] = useState(currentUser.id);
 
     const handleSubmit = (e) => {
         e.preventDefault();
@@ -2357,7 +2391,7 @@ const KanbanForm = ({ onSubmit, users }) => {
         const selectedUser = users.find(u => u._id === assignedToId);
         onSubmit({ content, assignedToId, assignedTo: selectedUser.username });
         setContent('');
-        setAssignedToId('');
+        setAssignedToId(currentUser.id);
     };
 
     return (
@@ -2369,7 +2403,6 @@ const KanbanForm = ({ onSubmit, users }) => {
             <div>
                 <label className="block text-sm font-medium">Przypisz do</label>
                 <select value={assignedToId} onChange={(e) => setAssignedToId(e.target.value)} className="w-full p-2 border rounded-md" required>
-                    <option value="">Wybierz użytkownika</option>
                     {users.map(u => <option key={u._id} value={u._id}>{u.username}</option>)}
                 </select>
             </div>
@@ -2380,10 +2413,57 @@ const KanbanForm = ({ onSubmit, users }) => {
     );
 };
 
+const TaskDetails = ({ task, onSave }) => {
+    const [details, setDetails] = useState(task.details || '');
+    const [subtasks, setSubtasks] = useState(task.subtasks || []);
+    const [newSubtask, setNewSubtask] = useState('');
+
+    const handleAddSubtask = () => {
+        if (!newSubtask.trim()) return;
+        setSubtasks([...subtasks, { content: newSubtask, isDone: false }]);
+        setNewSubtask('');
+    };
+
+    const toggleSubtask = (index) => {
+        const newSubtasks = [...subtasks];
+        newSubtasks[index].isDone = !newSubtasks[index].isDone;
+        setSubtasks(newSubtasks);
+    };
+
+    return (
+        <div className="space-y-4">
+            <h3 className="text-lg font-bold">{task.content}</h3>
+            <div>
+                <label className="block text-sm font-medium">Szczegóły</label>
+                <textarea value={details} onChange={(e) => setDetails(e.target.value)} className="w-full p-2 border rounded-md min-h-[100px]"/>
+            </div>
+            <div>
+                <h4 className="font-semibold">Podzadania</h4>
+                <div className="space-y-2 mt-2">
+                    {subtasks.map((st, index) => (
+                        <div key={index} className="flex items-center gap-2">
+                            <input type="checkbox" checked={st.isDone} onChange={() => toggleSubtask(index)} />
+                            <span className={st.isDone ? 'line-through text-gray-500' : ''}>{st.content}</span>
+                        </div>
+                    ))}
+                </div>
+                <div className="flex gap-2 mt-2">
+                    <input type="text" value={newSubtask} onChange={(e) => setNewSubtask(e.target.value)} placeholder="Dodaj podzadanie..." className="w-full p-2 border rounded-md"/>
+                    <button type="button" onClick={handleAddSubtask} className="px-3 py-1 bg-gray-200 rounded-md">Dodaj</button>
+                </div>
+            </div>
+            <div className="flex justify-end pt-4">
+                <button onClick={() => onSave(task._id, details, subtasks)} className="px-4 py-2 bg-blue-600 text-white rounded-lg">Zapisz szczegóły</button>
+            </div>
+        </div>
+    );
+};
+
 const DelegationsView = ({ user }) => {
     const [delegations, setDelegations] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [detailsModal, setDetailsModal] = useState({ isOpen: false, delegation: null });
     const { showNotification } = useNotification();
     const { items: sortedDelegations, requestSort, sortConfig } = useSortableData(delegations);
 
@@ -2449,6 +2529,8 @@ const DelegationsView = ({ user }) => {
                 return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300';
             case 'Odrzucona':
                 return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300';
+            case 'W trakcie':
+                return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300';
             default:
                 return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300';
         }
@@ -2483,6 +2565,7 @@ const DelegationsView = ({ user }) => {
                                     <span className={`px-2 py-1 text-xs font-semibold rounded-full ${getStatusClass(d.status)}`}>{d.status}</span>
                                 </td>
                                 <td className="p-2 sm:p-3 text-center whitespace-nowrap">
+                                    <Tooltip text="Podgląd"><button onClick={() => setDetailsModal({isOpen: true, delegation: d})} className="p-2 text-blue-500 hover:text-blue-700"><Eye className="w-5 h-5"/></button></Tooltip>
                                     {user.role === 'administrator' && d.status === 'Oczekująca' && (
                                         <>
                                             <Tooltip text="Akceptuj"><button onClick={() => handleStatusUpdate(d._id, 'Zaakceptowana')} className="p-2 text-green-500 hover:text-green-700"><CheckCircle className="w-5 h-5"/></button></Tooltip>
@@ -2500,6 +2583,9 @@ const DelegationsView = ({ user }) => {
             </div>
             <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Nowa Delegacja" maxWidth="2xl">
                 <DelegationForm onSubmit={handleAddDelegation} />
+            </Modal>
+            <Modal isOpen={detailsModal.isOpen} onClose={() => setDetailsModal({isOpen: false, delegation: null})} title="Szczegóły Delegacji" maxWidth="4xl">
+                {/* Komponent szczegółów delegacji */}
             </Modal>
         </div>
     );
