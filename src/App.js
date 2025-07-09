@@ -2224,9 +2224,10 @@ const KanbanView = ({ user }) => {
     const fetchAllData = useCallback(async () => {
         setIsLoading(true);
         try {
+            // Poprawka: Pobieraj użytkowników zawsze, aby każdy mógł przypisać zadanie
             const [tasksData, usersData] = await Promise.all([
                 api.getKanbanTasks(),
-                api.getUsers()
+                api.getUsers() 
             ]);
             setTasks(tasksData);
             setUsers(usersData.filter(u => u.status === 'zaakceptowany'));
@@ -2240,20 +2241,22 @@ const KanbanView = ({ user }) => {
     useEffect(() => {
         fetchAllData();
     }, [fetchAllData]);
-
+    
     const handleTaskMove = async (taskId, newStatus) => {
-        const originalTasks = [...tasks];
         const taskToMove = tasks.find(t => t._id === taskId);
-        if (!taskToMove.isAccepted && user.role !== 'administrator') {
-            showNotification("Musisz najpierw zaakceptować to zadanie.", "error");
+        if (!taskToMove) return;
+
+        if (!taskToMove.isAccepted && user.role !== 'administrator' && taskToMove.assignedToId === user.id) {
+            showNotification("Musisz najpierw zaakceptować to zadanie, aby zmienić jego status.", "error");
             return;
         }
 
+        const originalTasks = [...tasks];
         const updatedTasks = tasks.map(t => t._id === taskId ? { ...t, status: newStatus } : t);
         setTasks(updatedTasks);
 
         try {
-            await api.updateKanbanTask(taskId, newStatus);
+            await api.updateKanbanTask(taskId, { status: newStatus });
         } catch (error) {
             showNotification('Błąd podczas aktualizacji zadania.', 'error');
             setTasks(originalTasks);
@@ -2262,10 +2265,10 @@ const KanbanView = ({ user }) => {
     
     const handleAddTask = async (taskData) => {
         try {
-            await api.addKanbanTask(taskData);
+            const newTask = await api.addKanbanTask(taskData);
+            setTasks(prev => [newTask, ...prev]);
             showNotification('Zadanie dodane pomyślnie.', 'success');
             setIsModalOpen(false);
-            fetchAllData();
         } catch(error) {
             showNotification(error.message, 'error');
         }
@@ -2285,9 +2288,9 @@ const KanbanView = ({ user }) => {
     
     const handleAcceptTask = async (taskId) => {
         try {
-            await api.updateKanbanTask(taskId, { isAccepted: true });
+            const updatedTask = await api.updateKanbanTask(taskId, { isAccepted: true });
+            setTasks(tasks.map(t => t._id === taskId ? updatedTask : t));
             showNotification('Zadanie zaakceptowane.', 'success');
-            fetchAllData();
         } catch(error) {
             showNotification(error.message, 'error');
         }
@@ -2304,8 +2307,12 @@ const KanbanView = ({ user }) => {
         }
     };
 
-    const onDragStart = (e, taskId) => {
-        e.dataTransfer.setData("taskId", taskId);
+    const onDragStart = (e, task) => {
+        if (!task.isAccepted && user.role !== 'administrator') {
+            e.preventDefault();
+            return;
+        }
+        e.dataTransfer.setData("taskId", task._id);
     };
 
     const onDrop = (e, newStatus) => {
@@ -2344,9 +2351,9 @@ const KanbanView = ({ user }) => {
                                 {tasks.filter(t => t.status === column.id).map(task => (
                                     <div key={task._id} 
                                          draggable={task.isAccepted || user.role === 'administrator'}
-                                         onDragStart={(e) => onDragStart(e, task._id)}
+                                         onDragStart={(e) => onDragStart(e, task)}
                                          onClick={() => setDetailsModal({isOpen: true, task: task})}
-                                         className={`bg-white dark:bg-gray-700 p-4 rounded-md shadow group relative ${task.isAccepted ? 'cursor-move' : 'cursor-not-allowed opacity-60'}`}
+                                         className={`bg-white dark:bg-gray-700 p-4 rounded-md shadow group relative ${task.isAccepted || task.authorId === user.id ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`}
                                     >
                                         <p>{task.content}</p>
                                         <div className="text-xs text-gray-500 mt-2 flex justify-between">
@@ -2357,9 +2364,11 @@ const KanbanView = ({ user }) => {
                                         {!task.isAccepted && task.assignedToId === user.id && (
                                             <button onClick={(e) => { e.stopPropagation(); handleAcceptTask(task._id); }} className="mt-2 w-full px-2 py-1 bg-green-500 text-white text-xs rounded-lg">Zaakceptuj zadanie</button>
                                         )}
-                                        <button onClick={(e) => { e.stopPropagation(); handleDeleteTask(task._id); }} className="absolute top-1 right-1 p-1 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
-                                            <Trash2 className="w-4 h-4"/>
-                                        </button>
+                                        {(task.authorId === user.id || user.role === 'administrator') && (
+                                            <button onClick={(e) => { e.stopPropagation(); handleDeleteTask(task._id); }} className="absolute top-1 right-1 p-1 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <Trash2 className="w-4 h-4"/>
+                                            </button>
+                                        )}
                                     </div>
                                 ))}
                             </div>
@@ -2403,6 +2412,7 @@ const KanbanForm = ({ onSubmit, users, currentUser }) => {
             <div>
                 <label className="block text-sm font-medium">Przypisz do</label>
                 <select value={assignedToId} onChange={(e) => setAssignedToId(e.target.value)} className="w-full p-2 border rounded-md" required>
+                    <option value="">Wybierz użytkownika</option>
                     {users.map(u => <option key={u._id} value={u._id}>{u.username}</option>)}
                 </select>
             </div>
@@ -2458,6 +2468,7 @@ const TaskDetails = ({ task, onSave }) => {
         </div>
     );
 };
+
 
 const DelegationsView = ({ user }) => {
     const [delegations, setDelegations] = useState([]);
