@@ -36,7 +36,8 @@ const userSchema = new mongoose.Schema({
     role: { type: String, default: 'user', enum: ['user', 'administrator'] },
     status: { type: String, enum: ['oczekujący', 'zaakceptowany'], default: 'oczekujący' },
     salesGoal: { type: Number, default: 0 },
-    manualSales: { type: Number, default: 0 } 
+    manualSales: { type: Number, default: 0 },
+    visibleModules: { type: [String], default: [] }
 });
 const User = mongoose.models.User || mongoose.model('User', userSchema);
 
@@ -82,7 +83,6 @@ const noteSchema = new mongoose.Schema({
 });
 const Note = mongoose.models.Note || mongoose.model('Note', noteSchema);
 
-// Zaktualizowany schemat Kanban
 const kanbanTaskSchema = new mongoose.Schema({
     content: { type: String, required: true },
     status: { type: String, required: true, enum: ['todo', 'inprogress', 'done'], default: 'todo' },
@@ -177,7 +177,7 @@ const parseCsv = (buffer) => {
 };
 
 
-// --- API Endpoints - Uwierzytelnianie (bez zmian) ---
+// --- API Endpoints - Uwierzytelnianie ---
 app.post('/api/register', async (req, res) => {
     try {
         const { username, password } = req.body;
@@ -207,7 +207,7 @@ app.post('/api/login', async (req, res) => {
         const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) return res.status(401).json({ message: 'Nieprawidłowe dane logowania.' });
         const token = jwt.sign({ userId: user._id, role: user.role, username: user.username }, jwtSecret, { expiresIn: '1d' });
-        res.json({ token, user: { id: user._id, username: user.username, role: user.role, salesGoal: user.salesGoal, manualSales: user.manualSales } });
+        res.json({ token, user: { id: user._id, username: user.username, role: user.role, salesGoal: user.salesGoal, manualSales: user.manualSales, visibleModules: user.visibleModules } });
     } catch (error) {
         res.status(500).json({ message: 'Błąd serwera podczas logowania.', error: error.message });
     }
@@ -248,15 +248,6 @@ app.post('/api/user/manual-sales', authMiddleware, async (req, res) => {
     }
 });
 
-app.get('/api/users/list', authMiddleware, async (req, res) => {
-    try {
-        const users = await User.find({ status: 'zaakceptowany' }).select('_id username');
-        res.json(users);
-    } catch (error) {
-        res.status(500).json({ message: 'Błąd pobierania listy użytkowników.' });
-    }
-});
-
 // --- API Endpoints - Admin ---
 app.get('/api/admin/users', authMiddleware, adminMiddleware, async (req, res) => {
     try {
@@ -267,10 +258,31 @@ app.get('/api/admin/users', authMiddleware, adminMiddleware, async (req, res) =>
     }
 });
 
+app.get('/api/users/list', authMiddleware, async (req, res) => {
+    try {
+        const users = await User.find({ status: 'zaakceptowany' }).select('_id username');
+        res.json(users);
+    } catch (error) {
+        res.status(500).json({ message: 'Błąd pobierania listy użytkowników.' });
+    }
+});
+
+app.put('/api/admin/users/:id/modules', authMiddleware, adminMiddleware, async (req, res) => {
+    try {
+        const { modules } = req.body;
+        const user = await User.findByIdAndUpdate(req.params.id, { visibleModules: modules }, { new: true });
+        if (!user) return res.status(404).json({ message: 'Nie znaleziono użytkownika.' });
+        res.json({ message: 'Moduły zaktualizowane.', user });
+    } catch (error) {
+        res.status(500).json({ message: 'Błąd aktualizacji modułów.' });
+    }
+});
+
+
 app.post('/api/admin/users/:id/approve', authMiddleware, adminMiddleware, async (req, res) => {
     try {
         const user = await User.findByIdAndUpdate(req.params.id, { status: 'zaakceptowany' }, { new: true });
-        if (!user) return res.status(404).json({ message: 'Nie znaleziono użytkownika.' });
+        if (!user) return res.status(404).json({ message: 'Użytkownik zaakceptowany.', user });
         res.json({ message: 'Użytkownik zaakceptowany.', user });
     } catch (error) {
         res.status(500).json({ message: 'Błąd podczas akceptacji użytkownika.' });
@@ -925,7 +937,8 @@ app.delete('/api/notes/:id', authMiddleware, async (req, res) => {
     }
 });
 
-// --- NOWE ENDPOINTY - KANBAN ---
+// --- NOWE I ZAKTUALIZOWANE ENDPOINTY KANBAN ---
+
 app.get('/api/kanban/tasks', authMiddleware, async (req, res) => {
     try {
         let query = {};
@@ -1016,7 +1029,8 @@ app.delete('/api/kanban/tasks/:id', authMiddleware, async (req, res) => {
     }
 });
 
-// --- NOWE ENDPOINTY - DELEGACJE ---
+
+// --- Endpointy Delegacji (ZMIANY) ---
 app.get('/api/delegations', authMiddleware, async (req, res) => {
     try {
         let delegations;
@@ -1033,16 +1047,11 @@ app.get('/api/delegations', authMiddleware, async (req, res) => {
 
 app.post('/api/delegations', authMiddleware, async (req, res) => {
     try {
-        const { destination, purpose, dateFrom, dateTo, notes } = req.body;
+        const { destination, purpose, dateFrom, dateTo, notes, kms, advancePayment, transport, clients } = req.body;
         const newDelegation = new Delegation({
-            destination,
-            purpose,
-            dateFrom,
-            dateTo,
-            notes,
+            destination, purpose, dateFrom, dateTo, notes, kms, advancePayment, transport, clients,
             author: req.user.username,
             authorId: req.user.userId,
-            status: 'Oczekująca'
         });
         await newDelegation.save();
         res.status(201).json(newDelegation);
@@ -1069,9 +1078,8 @@ app.delete('/api/delegations/:id', authMiddleware, async (req, res) => {
     try {
         const delegation = await Delegation.findById(req.params.id);
         if (!delegation) return res.status(404).json({ message: 'Nie znaleziono delegacji' });
-        
-        // Tylko autor lub admin może usunąć
-        if (delegation.authorId.toString() !== req.user.userId && req.user.role !== 'administrator') {
+
+        if (req.user.role !== 'administrator' && delegation.authorId.toString() !== req.user.userId) {
             return res.status(403).json({ message: 'Brak uprawnień do usunięcia tej delegacji' });
         }
         
@@ -1079,6 +1087,37 @@ app.delete('/api/delegations/:id', authMiddleware, async (req, res) => {
         res.json({ message: 'Delegacja usunięta' });
     } catch (error) {
         res.status(500).json({ message: 'Błąd usuwania delegacji' });
+    }
+});
+
+app.post('/api/delegations/:id/start', authMiddleware, async (req, res) => {
+    try {
+        const delegation = await Delegation.findByIdAndUpdate(req.params.id, { startTime: new Date(), status: 'W trakcie' }, { new: true });
+        if (!delegation) return res.status(404).json({ message: 'Nie znaleziono delegacji' });
+        res.json(delegation);
+    } catch (error) {
+        res.status(500).json({ message: 'Błąd rozpoczęcia delegacji' });
+    }
+});
+
+app.post('/api/delegations/:id/visits', authMiddleware, async (req, res) => {
+    try {
+        const { visitData, clientIndex } = req.body;
+        const delegation = await Delegation.findById(req.params.id);
+        if (!delegation) return res.status(404).json({ message: 'Nie znaleziono delegacji' });
+
+        const client = delegation.clients[clientIndex];
+        if (visitData.startTime) client.startTime = new Date();
+        if (visitData.endTime) {
+            client.endTime = new Date();
+            client.visitNotes = visitData.visitNotes;
+            client.ordered = visitData.ordered;
+        }
+
+        await delegation.save();
+        res.json(delegation);
+    } catch (error) {
+        res.status(500).json({ message: 'Błąd aktualizacji wizyty' });
     }
 });
 
