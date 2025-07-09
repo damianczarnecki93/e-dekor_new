@@ -2224,12 +2224,13 @@ const KanbanView = ({ user }) => {
     const fetchAllData = useCallback(async () => {
         setIsLoading(true);
         try {
+            // Poprawka: Użyj nowego, ogólnodostępnego endpointu
             const [tasksData, usersData] = await Promise.all([
                 api.getKanbanTasks(),
-                api.getUsers() // Pobieraj użytkowników zawsze, aby każdy mógł przypisać zadanie
+                api.getUsersList() 
             ]);
             setTasks(tasksData);
-            setUsers(usersData.filter(u => u.status === 'zaakceptowany'));
+            setUsers(usersData);
         } catch (error) {
             showNotification(error.message, 'error');
         } finally {
@@ -2338,7 +2339,7 @@ const KanbanView = ({ user }) => {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     {columns.map(column => (
                         <div key={column.id} 
-                             className="bg-gray-100 dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700"
+                             className="bg-gray-100 dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700 min-h-[50vh]"
                              onDragOver={(e) => e.preventDefault()}
                              onDrop={(e) => onDrop(e, column.id)}
                         >
@@ -2352,7 +2353,7 @@ const KanbanView = ({ user }) => {
                                          draggable={task.isAccepted || user.role === 'administrator' || task.authorId === user.id}
                                          onDragStart={(e) => onDragStart(e, task)}
                                          onClick={() => setDetailsModal({isOpen: true, task: task})}
-                                         className={`bg-white dark:bg-gray-700 p-4 rounded-md shadow group relative ${task.isAccepted || task.authorId === user.id ? 'cursor-move' : 'cursor-not-allowed opacity-60'}`}
+                                         className={`bg-white dark:bg-gray-700 p-4 rounded-md shadow group relative ${task.isAccepted || task.authorId === user.id ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`}
                                     >
                                         <p>{task.content}</p>
                                         <div className="text-xs text-gray-500 mt-2 flex justify-between">
