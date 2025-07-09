@@ -2225,16 +2225,17 @@ const KanbanView = ({ user }) => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [detailsModal, setDetailsModal] = useState({ isOpen: false, task: null });
     const { showNotification } = useNotification();
+    const [expandedTasks, setExpandedTasks] = useState({});
 
     const fetchAllData = useCallback(async () => {
         setIsLoading(true);
         try {
             const [tasksData, usersData] = await Promise.all([
                 api.getKanbanTasks(),
-                api.getUsersList() 
+                api.getUsersList()
             ]);
             setTasks(tasksData);
-            setUsers(usersData);
+            setUsers(usersData.filter(u => u.status === 'zaakceptowany'));
         } catch (error) {
             showNotification(error.message, 'error');
         } finally {
@@ -2310,6 +2311,10 @@ const KanbanView = ({ user }) => {
             showNotification(error.message, 'error');
         }
     };
+    
+    const toggleExpandTask = (taskId) => {
+        setExpandedTasks(prev => ({...prev, [taskId]: !prev[taskId]}));
+    };
 
     const onDragStart = (e, task) => {
         if (!task.isAccepted && user.role !== 'administrator' && task.authorId !== user.id) {
@@ -2366,8 +2371,7 @@ const KanbanView = ({ user }) => {
                                     <div key={task._id} 
                                          draggable={task.isAccepted || user.role === 'administrator' || isMyTask}
                                          onDragStart={(e) => onDragStart(e, task)}
-                                         onClick={() => setDetailsModal({isOpen: true, task: task})}
-                                         className={`${taskColor} p-4 rounded-md shadow group relative ${task.isAccepted || user.role === 'administrator' || isMyTask ? 'cursor-move' : 'cursor-not-allowed opacity-60'}`}
+                                         className={`${taskColor} p-4 rounded-md shadow group relative ${task.isAccepted || user.role === 'administrator' || isMyTask ? 'cursor-move' : 'cursor-default'}`}
                                     >
                                         <p>{task.content}</p>
                                         <div className="text-xs text-gray-500 mt-2 flex justify-between">
@@ -2383,6 +2387,24 @@ const KanbanView = ({ user }) => {
                                                 <Trash2 className="w-4 h-4"/>
                                             </button>
                                         )}
+                                         <div className="mt-2">
+                                            <button onClick={(e) => { e.stopPropagation(); toggleExpandTask(task._id); }} className="text-xs text-indigo-500">
+                                                {expandedTasks[task._id] ? 'Zwiń' : 'Pokaż szczegóły'}
+                                            </button>
+                                            {expandedTasks[task._id] && (
+                                                <div className="mt-2 text-sm space-y-2">
+                                                    {task.details && <p className="p-2 bg-gray-50 dark:bg-gray-600 rounded-md">{task.details}</p>}
+                                                    {task.subtasks?.length > 0 && (
+                                                        <ul className="list-disc list-inside">
+                                                            {task.subtasks.map((st, i) => (
+                                                                <li key={i} className={st.isDone ? 'line-through text-gray-500' : ''}>{st.content}</li>
+                                                            ))}
+                                                        </ul>
+                                                    )}
+                                                    <button onClick={(e) => {e.stopPropagation(); setDetailsModal({isOpen: true, task})}} className="text-xs font-bold text-blue-600 hover:underline">Edytuj</button>
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
                                 )})}
                             </div>
