@@ -939,16 +939,14 @@ app.delete('/api/notes/:id', authMiddleware, async (req, res) => {
 
 // --- NOWE I ZAKTUALIZOWANE ENDPOINTY KANBAN ---
 
-// --- NOWE I ZAKTUALIZOWANE ENDPOINTY KANBAN ---
-
 app.get('/api/kanban/tasks', authMiddleware, async (req, res) => {
     try {
         let query = {};
-        // Administrator może pobrać zadania dla konkretnego użytkownika
+        // Administrator może pobrać zadania dla konkretnego użytkownika za pomocą query param
         if (req.user.role === 'administrator' && req.query.userId) {
             query = { authorId: req.query.userId };
         } else {
-            // Każdy użytkownik pobiera swoje własne zadania
+            // Standardowy użytkownik pobiera tylko swoje własne zadania
             query = { authorId: req.user.userId };
         }
         const tasks = await KanbanTask.find(query).sort({ date: -1 });
@@ -960,17 +958,17 @@ app.get('/api/kanban/tasks', authMiddleware, async (req, res) => {
 
 app.post('/api/kanban/tasks', authMiddleware, async (req, res) => {
     try {
-        const { content, details, subtasks, authorId, author } = req.body;
+        const { content, details, subtasks } = req.body;
         
         const newTask = new KanbanTask({
             content,
             details: details || '',
             subtasks: subtasks || [],
             status: 'todo',
-            author: author,
-            authorId: authorId,
-            assignedTo: author, // Zadanie jest zawsze przypisane do autora
-            assignedToId: authorId,
+            author: req.user.username,
+            authorId: req.user.userId,
+            assignedTo: req.user.username, // Zadanie jest zawsze przypisane do autora
+            assignedToId: req.user.userId,
             isAccepted: true // Zadania są od razu aktywne
         });
         await newTask.save();
@@ -1023,7 +1021,6 @@ app.delete('/api/kanban/tasks/:id', authMiddleware, async (req, res) => {
         res.status(500).json({ message: 'Błąd usuwania zadania' });
     }
 });
-
 
 
 // --- Endpointy Delegacji (bez zmian) ---
