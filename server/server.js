@@ -959,7 +959,7 @@ app.get('/api/kanban/tasks', authMiddleware, async (req, res) => {
 
 app.post('/api/kanban/tasks', authMiddleware, async (req, res) => {
     try {
-        const { content, assignedToId, assignedTo } = req.body;
+        const { content, assignedToId, assignedTo, details, subtasks } = req.body;
         const isSelfAssigned = req.user.userId === assignedToId;
 
         const newTask = new KanbanTask({
@@ -970,6 +970,8 @@ app.post('/api/kanban/tasks', authMiddleware, async (req, res) => {
             authorId: req.user.userId,
             status: 'todo',
             isAccepted: isSelfAssigned || req.user.role === 'administrator',
+            details: details || '',
+            subtasks: subtasks || []
         });
         await newTask.save();
         res.status(201).json(newTask);
