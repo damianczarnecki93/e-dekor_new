@@ -2224,10 +2224,9 @@ const KanbanView = ({ user }) => {
     const fetchAllData = useCallback(async () => {
         setIsLoading(true);
         try {
-            // Poprawka: Pobieraj użytkowników zawsze, aby każdy mógł przypisać zadanie
             const [tasksData, usersData] = await Promise.all([
                 api.getKanbanTasks(),
-                api.getUsers() 
+                api.getUsers()
             ]);
             setTasks(tasksData);
             setUsers(usersData.filter(u => u.status === 'zaakceptowany'));
@@ -2241,8 +2240,9 @@ const KanbanView = ({ user }) => {
     useEffect(() => {
         fetchAllData();
     }, [fetchAllData]);
-    
+
     const handleTaskMove = async (taskId, newStatus) => {
+        const originalTasks = [...tasks];
         const taskToMove = tasks.find(t => t._id === taskId);
         if (!taskToMove) return;
 
@@ -2251,7 +2251,6 @@ const KanbanView = ({ user }) => {
             return;
         }
 
-        const originalTasks = [...tasks];
         const updatedTasks = tasks.map(t => t._id === taskId ? { ...t, status: newStatus } : t);
         setTasks(updatedTasks);
 
@@ -2308,7 +2307,7 @@ const KanbanView = ({ user }) => {
     };
 
     const onDragStart = (e, task) => {
-        if (!task.isAccepted && user.role !== 'administrator') {
+        if (!task.isAccepted && user.role !== 'administrator' && task.assignedToId !== user.id) {
             e.preventDefault();
             return;
         }
@@ -2350,10 +2349,10 @@ const KanbanView = ({ user }) => {
                             <div className="space-y-4">
                                 {tasks.filter(t => t.status === column.id).map(task => (
                                     <div key={task._id} 
-                                         draggable={task.isAccepted || user.role === 'administrator'}
+                                         draggable={task.isAccepted || user.role === 'administrator' || task.authorId === user.id}
                                          onDragStart={(e) => onDragStart(e, task)}
                                          onClick={() => setDetailsModal({isOpen: true, task: task})}
-                                         className={`bg-white dark:bg-gray-700 p-4 rounded-md shadow group relative ${task.isAccepted || task.authorId === user.id ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`}
+                                         className={`bg-white dark:bg-gray-700 p-4 rounded-md shadow group relative ${task.isAccepted || task.authorId === user.id ? 'cursor-move' : 'cursor-not-allowed opacity-60'}`}
                                     >
                                         <p>{task.content}</p>
                                         <div className="text-xs text-gray-500 mt-2 flex justify-between">
@@ -2430,13 +2429,19 @@ const TaskDetails = ({ task, onSave }) => {
 
     const handleAddSubtask = () => {
         if (!newSubtask.trim()) return;
-        setSubtasks([...subtasks, { content: newSubtask, isDone: false }]);
+        setSubtasks([...subtasks, { content: newSubtask, isDone: false, _id: `new-${Date.now()}` }]);
         setNewSubtask('');
     };
 
     const toggleSubtask = (index) => {
         const newSubtasks = [...subtasks];
         newSubtasks[index].isDone = !newSubtasks[index].isDone;
+        setSubtasks(newSubtasks);
+    };
+
+    const removeSubtask = (index) => {
+        const newSubtasks = [...subtasks];
+        newSubtasks.splice(index, 1);
         setSubtasks(newSubtasks);
     };
 
@@ -2451,9 +2456,10 @@ const TaskDetails = ({ task, onSave }) => {
                 <h4 className="font-semibold">Podzadania</h4>
                 <div className="space-y-2 mt-2">
                     {subtasks.map((st, index) => (
-                        <div key={index} className="flex items-center gap-2">
+                        <div key={st._id || index} className="flex items-center gap-2">
                             <input type="checkbox" checked={st.isDone} onChange={() => toggleSubtask(index)} />
                             <span className={st.isDone ? 'line-through text-gray-500' : ''}>{st.content}</span>
+                            <button onClick={() => removeSubtask(index)} className="ml-auto p-1 text-red-500 hover:text-red-700"><Trash2 className="w-4 h-4"/></button>
                         </div>
                     ))}
                 </div>
