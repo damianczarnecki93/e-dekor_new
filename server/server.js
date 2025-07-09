@@ -939,16 +939,17 @@ app.delete('/api/notes/:id', authMiddleware, async (req, res) => {
 
 // --- NOWE I ZAKTUALIZOWANE ENDPOINTY KANBAN ---
 
+// --- NOWE I ZAKTUALIZOWANE ENDPOINTY KANBAN ---
+
 app.get('/api/kanban/tasks', authMiddleware, async (req, res) => {
     try {
         let query = {};
-        if (req.user.role !== 'administrator') {
-            query = {
-                $or: [
-                    { assignedToId: req.user.userId },
-                    { authorId: req.user.userId }
-                ]
-            };
+        // Administrator może pobrać zadania dla konkretnego użytkownika
+        if (req.user.role === 'administrator' && req.query.userId) {
+            query = { authorId: req.query.userId };
+        } else {
+            // Każdy użytkownik pobiera swoje własne zadania
+            query = { authorId: req.user.userId };
         }
         const tasks = await KanbanTask.find(query).sort({ date: -1 });
         res.json(tasks);
@@ -959,19 +960,18 @@ app.get('/api/kanban/tasks', authMiddleware, async (req, res) => {
 
 app.post('/api/kanban/tasks', authMiddleware, async (req, res) => {
     try {
-        const { content, assignedToId, assignedTo, details, subtasks } = req.body;
-        const isSelfAssigned = req.user.userId === assignedToId;
-
+        const { content, details, subtasks, authorId, author } = req.body;
+        
         const newTask = new KanbanTask({
             content,
-            assignedTo,
-            assignedToId,
-            author: req.user.username,
-            authorId: req.user.userId,
-            status: 'todo',
-            isAccepted: isSelfAssigned || req.user.role === 'administrator',
             details: details || '',
-            subtasks: subtasks || []
+            subtasks: subtasks || [],
+            status: 'todo',
+            author: author,
+            authorId: authorId,
+            assignedTo: author, // Zadanie jest zawsze przypisane do autora
+            assignedToId: authorId,
+            isAccepted: true // Zadania są od razu aktywne
         });
         await newTask.save();
         res.status(201).json(newTask);
@@ -983,35 +983,28 @@ app.post('/api/kanban/tasks', authMiddleware, async (req, res) => {
 app.put('/api/kanban/tasks/:id', authMiddleware, async (req, res) => {
     try {
         const { content, status, details, subtasks, isAccepted } = req.body;
+        const task = await KanbanTask.findById(req.params.id);
+
+        if (!task) {
+            return res.status(404).json({ message: 'Nie znaleziono zadania' });
+        }
+        // Sprawdzenie uprawnień
+        if (task.authorId.toString() !== req.user.userId && req.user.role !== 'administrator') {
+            return res.status(403).json({ message: 'Brak uprawnień do edycji tego zadania' });
+        }
+
         const updateData = {};
-        
         if (content !== undefined) updateData.content = content;
         if (status !== undefined) updateData.status = status;
         if (details !== undefined) updateData.details = details;
         if (subtasks !== undefined) updateData.subtasks = subtasks;
         if (isAccepted !== undefined) updateData.isAccepted = isAccepted;
 
-        const task = await KanbanTask.findByIdAndUpdate(req.params.id, { $set: updateData }, { new: true });
+        const updatedTask = await KanbanTask.findByIdAndUpdate(req.params.id, { $set: updateData }, { new: true });
         
-        if (!task) return res.status(404).json({ message: 'Nie znaleziono zadania' });
-        res.json(task);
+        res.json(updatedTask);
     } catch (error) {
         res.status(500).json({ message: 'Błąd aktualizacji zadania' });
-    }
-});
-
-app.put('/api/kanban/tasks/:id/accept', authMiddleware, async (req, res) => {
-    try {
-        const task = await KanbanTask.findById(req.params.id);
-        if (!task) return res.status(404).json({ message: 'Nie znaleziono zadania' });
-        if (task.assignedToId.toString() !== req.user.userId) {
-            return res.status(403).json({ message: 'Nie możesz zaakceptować tego zadania' });
-        }
-        task.isAccepted = true;
-        await task.save();
-        res.json(task);
-    } catch (error) {
-        res.status(500).json({ message: 'Błąd akceptacji zadania' });
     }
 });
 
@@ -1030,6 +1023,7 @@ app.delete('/api/kanban/tasks/:id', authMiddleware, async (req, res) => {
         res.status(500).json({ message: 'Błąd usuwania zadania' });
     }
 });
+
 
 
 // --- Endpointy Delegacji (bez zmian) ---
