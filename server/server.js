@@ -248,6 +248,15 @@ app.post('/api/user/manual-sales', authMiddleware, async (req, res) => {
     }
 });
 
+app.get('/api/users/list', authMiddleware, async (req, res) => {
+    try {
+        const users = await User.find({ status: 'zaakceptowany' }).select('_id username');
+        res.json(users);
+    } catch (error) {
+        res.status(500).json({ message: 'Błąd pobierania listy użytkowników.' });
+    }
+});
+
 // --- API Endpoints - Admin ---
 app.get('/api/admin/users', authMiddleware, adminMiddleware, async (req, res) => {
     try {
