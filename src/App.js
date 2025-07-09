@@ -2234,7 +2234,7 @@ const KanbanView = ({ user }) => {
                 api.getUsersList()
             ]);
             setTasks(tasksData);
-            setUsers(usersData);
+            setUsers(usersData.filter(u => u.status === 'zaakceptowany'));
         } catch (error) {
             showNotification(error.message, 'error');
         } finally {
@@ -2352,36 +2352,46 @@ const KanbanView = ({ user }) => {
                                 {column.title}
                             </h2>
                             <div className="space-y-4">
-                                {tasks.filter(t => t.status === column.id).map(task => (
+                                {tasks.filter(t => t.status === column.id).map(task => {
+                                    const isAssignedToMe = task.assignedToId === user.id;
+                                    const isMyTask = task.authorId === user.id;
+                                    let taskColor = 'bg-white dark:bg-gray-700';
+                                    if (isMyTask && !isAssignedToMe) {
+                                        taskColor = 'bg-blue-50 dark:bg-blue-900/30';
+                                    } else if (!isMyTask && isAssignedToMe) {
+                                        taskColor = 'bg-purple-50 dark:bg-purple-900/30';
+                                    }
+
+                                    return (
                                     <div key={task._id} 
-                                         draggable={task.isAccepted || user.role === 'administrator' || task.authorId === user.id}
+                                         draggable={task.isAccepted || user.role === 'administrator' || isMyTask}
                                          onDragStart={(e) => onDragStart(e, task)}
                                          onClick={() => setDetailsModal({isOpen: true, task: task})}
-                                         className={`bg-white dark:bg-gray-700 p-4 rounded-md shadow group relative ${task.isAccepted || task.authorId === user.id ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`}
+                                         className={`${taskColor} p-4 rounded-md shadow group relative ${task.isAccepted || user.role === 'administrator' || isMyTask ? 'cursor-move' : 'cursor-not-allowed opacity-60'}`}
                                     >
                                         <p>{task.content}</p>
                                         <div className="text-xs text-gray-500 mt-2 flex justify-between">
                                             <span>Dla: {task.assignedTo}</span>
-                                            {task.authorId !== user.id && <span className="italic">Od: {task.author}</span>}
+                                            {!isMyTask && <span className="italic">Od: {task.author}</span>}
                                         </div>
                                         <p className="text-xs text-gray-400 mt-1">{format(parseISO(task.date), 'd MMM, HH:mm')}</p>
-                                        {!task.isAccepted && task.assignedToId === user.id && (
+                                        {!task.isAccepted && isAssignedToMe && (
                                             <button onClick={(e) => { e.stopPropagation(); handleAcceptTask(task._id); }} className="mt-2 w-full px-2 py-1 bg-green-500 text-white text-xs rounded-lg">Zaakceptuj zadanie</button>
                                         )}
-                                        {(task.authorId === user.id || user.role === 'administrator') && (
+                                        {(isMyTask || user.role === 'administrator') && (
                                             <button onClick={(e) => { e.stopPropagation(); handleDeleteTask(task._id); }} className="absolute top-1 right-1 p-1 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
                                                 <Trash2 className="w-4 h-4"/>
                                             </button>
                                         )}
                                     </div>
-                                ))}
+                                )})}
                             </div>
                         </div>
                     ))}
                 </div>
             )}
 
-            <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Nowe Zadanie">
+            <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Nowe Zadanie" maxWidth="2xl">
                 <KanbanForm onSubmit={handleAddTask} users={users} currentUser={user} />
             </Modal>
             <Modal isOpen={detailsModal.isOpen} onClose={() => setDetailsModal({isOpen: false, task: null})} title="Szczegóły zadania" maxWidth="2xl">
@@ -2394,6 +2404,21 @@ const KanbanView = ({ user }) => {
 const KanbanForm = ({ onSubmit, users, currentUser }) => {
     const [content, setContent] = useState('');
     const [assignedToId, setAssignedToId] = useState(currentUser.id);
+    const [details, setDetails] = useState('');
+    const [subtasks, setSubtasks] = useState([]);
+    const [newSubtask, setNewSubtask] = useState('');
+
+    const handleAddSubtask = () => {
+        if (!newSubtask.trim()) return;
+        setSubtasks([...subtasks, { content: newSubtask, isDone: false, _id: `new-${Date.now()}` }]);
+        setNewSubtask('');
+    };
+    
+    const removeSubtask = (index) => {
+        const newSubtasks = [...subtasks];
+        newSubtasks.splice(index, 1);
+        setSubtasks(newSubtasks);
+    };
 
     const handleSubmit = (e) => {
         e.preventDefault();
@@ -2402,9 +2427,11 @@ const KanbanForm = ({ onSubmit, users, currentUser }) => {
             return;
         }
         const selectedUser = users.find(u => u._id === assignedToId);
-        onSubmit({ content, assignedToId, assignedTo: selectedUser.username });
+        onSubmit({ content, assignedToId, assignedTo: selectedUser.username, details, subtasks });
         setContent('');
         setAssignedToId(currentUser.id);
+        setDetails('');
+        setSubtasks([]);
     };
 
     return (
@@ -2416,9 +2443,27 @@ const KanbanForm = ({ onSubmit, users, currentUser }) => {
             <div>
                 <label className="block text-sm font-medium">Przypisz do</label>
                 <select value={assignedToId} onChange={(e) => setAssignedToId(e.target.value)} className="w-full p-2 border rounded-md" required>
-                    <option value="">Wybierz użytkownika</option>
                     {users.map(u => <option key={u._id} value={u._id}>{u.username}</option>)}
                 </select>
+            </div>
+             <div>
+                <label className="block text-sm font-medium">Szczegóły (opcjonalnie)</label>
+                <textarea value={details} onChange={(e) => setDetails(e.target.value)} className="w-full p-2 border rounded-md min-h-[100px]"/>
+            </div>
+             <div>
+                <h4 className="font-semibold">Podzadania (opcjonalnie)</h4>
+                <div className="space-y-2 mt-2">
+                    {subtasks.map((st, index) => (
+                        <div key={st._id || index} className="flex items-center gap-2">
+                            <span>{st.content}</span>
+                            <button type="button" onClick={() => removeSubtask(index)} className="ml-auto p-1 text-red-500 hover:text-red-700"><Trash2 className="w-4 h-4"/></button>
+                        </div>
+                    ))}
+                </div>
+                <div className="flex gap-2 mt-2">
+                    <input type="text" value={newSubtask} onChange={(e) => setNewSubtask(e.target.value)} placeholder="Dodaj podzadanie..." className="w-full p-2 border rounded-md"/>
+                    <button type="button" onClick={handleAddSubtask} className="px-3 py-1 bg-gray-200 rounded-md">Dodaj</button>
+                </div>
             </div>
             <div className="flex justify-end pt-4">
                 <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg">Dodaj zadanie</button>
@@ -2487,6 +2532,7 @@ const TaskDetails = ({ task, onSave }) => {
         </div>
     );
 };
+
 
 const DelegationsView = ({ user }) => {
     const [delegations, setDelegations] = useState([]);
