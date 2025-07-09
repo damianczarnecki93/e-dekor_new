@@ -406,14 +406,20 @@ const SearchView = ({ onProductSelect, showFilter = true, inputRef }) => {
     const { showNotification } = useNotification();
 
     useEffect(() => {
-        if (query.length < 2) { setSuggestions([]); return; }
+        if (query.length < 3) {
+            setSuggestions([]);
+            return;
+        }
         const handler = setTimeout(async () => {
             setIsLoading(true);
             try {
                 const results = await api.searchProducts(query, filterByQuantity);
                 setSuggestions(results);
-            } catch (error) { showNotification(error.message, 'error'); }
-            finally { setIsLoading(false); }
+            } catch (error) {
+                showNotification(error.message, 'error');
+            } finally {
+                setIsLoading(false);
+            }
         }, 300);
         return () => clearTimeout(handler);
     }, [query, filterByQuantity, showNotification]);
@@ -424,11 +430,39 @@ const SearchView = ({ onProductSelect, showFilter = true, inputRef }) => {
         setQuery('');
     };
 
+    const handleKeyDown = async (e) => {
+        if (e.key === 'Enter' && query.trim() !== '') {
+            e.preventDefault();
+            setIsLoading(true);
+            setSuggestions([]);
+            try {
+                const results = await api.searchProducts(query.trim());
+                if (results.length > 0) {
+                    handleSelect(results[0]);
+                } else {
+                    showNotification('Nie znaleziono produktu o podanym kodzie.', 'error');
+                }
+            } catch (error) {
+                showNotification(error.message, 'error');
+            } finally {
+                setIsLoading(false);
+            }
+        }
+    };
+
     return (
         <div className="relative max-w-2xl mx-auto">
             <div className="flex items-center bg-white dark:bg-gray-700 rounded-full shadow-lg">
                 <Search className="h-6 w-6 ml-4 text-gray-400" />
-                <input ref={inputRef} type="text" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Wpisz kod EAN, kod produktu lub nazwę..." className="w-full p-4 bg-transparent focus:outline-none text-gray-900 dark:text-white" />
+                <input
+                    ref={inputRef}
+                    type="text"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    placeholder="Wpisz kod EAN, kod produktu lub nazwę..."
+                    className="w-full p-4 bg-transparent focus:outline-none text-gray-900 dark:text-white"
+                />
             </div>
             {showFilter && (
                 <div className="flex items-center justify-center mt-4">
@@ -449,6 +483,7 @@ const SearchView = ({ onProductSelect, showFilter = true, inputRef }) => {
         </div>
     );
 };
+
 
 const PinnedInputBar = ({ onProductAdd, onSave, isDirty }) => {
     const [query, setQuery] = useState('');
