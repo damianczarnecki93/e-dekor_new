@@ -958,8 +958,9 @@ app.post('/api/kanban/tasks', authMiddleware, async (req, res) => {
 
 app.put('/api/kanban/tasks/:id', authMiddleware, async (req, res) => {
     try {
-        const { status, details, subtasks } = req.body;
+        const { content, status, details, subtasks } = req.body;
         const updateData = {};
+        if (content) updateData.content = content;
         if (status) updateData.status = status;
         if (details) updateData.details = details;
         if (subtasks) updateData.subtasks = subtasks;
