@@ -2224,13 +2224,13 @@ const KanbanView = ({ user }) => {
     const fetchAllData = useCallback(async () => {
         setIsLoading(true);
         try {
-            // Poprawka: Użyj nowego, ogólnodostępnego endpointu
+            // Poprawka: Użyj poprawnej nazwy funkcji `api.getUsers()`
             const [tasksData, usersData] = await Promise.all([
                 api.getKanbanTasks(),
-                api.getUsersList() 
+                api.getUsers() 
             ]);
             setTasks(tasksData);
-            setUsers(usersData);
+            setUsers(usersData.filter(u => u.status === 'zaakceptowany'));
         } catch (error) {
             showNotification(error.message, 'error');
         } finally {
@@ -2483,6 +2483,7 @@ const TaskDetails = ({ task, onSave }) => {
         </div>
     );
 };
+
 
 
 
