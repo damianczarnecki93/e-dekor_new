@@ -191,6 +191,7 @@ const parseCsv = (buffer) => {
     });
 };
 async function geocodeAddress(address) {
+    if (!address) return null;
     try {
         const response = await axios.get('https://maps.googleapis.com/maps/api/geocode/json', {
             params: {
@@ -205,7 +206,7 @@ async function geocodeAddress(address) {
         }
         return null;
     } catch (error) {
-        console.error('Błąd geokodowania:', error);
+        console.error('Błąd geokodowania dla adresu:', address, error.message);
         return null;
     }
 }
@@ -1075,8 +1076,21 @@ app.get('/api/delegations', authMiddleware, async (req, res) => {
 app.post('/api/delegations', authMiddleware, async (req, res) => {
     try {
         const { destination, purpose, dateFrom, dateTo, notes, kms, advancePayment, transport, clients } = req.body;
+        
+        const geocodedClients = await Promise.all(
+            (clients || []).map(async (client) => {
+                const location = await geocodeAddress(client.address);
+                return {
+                    ...client,
+                    lat: location ? location.lat : null,
+                    lng: location ? location.lng : null,
+                };
+            })
+        );
+
         const newDelegation = new Delegation({
-            destination, purpose, dateFrom, dateTo, notes, kms, advancePayment, transport, clients,
+            destination, purpose, dateFrom, dateTo, notes, kms, advancePayment, transport, 
+            clients: geocodedClients,
             author: req.user.username,
             authorId: req.user.userId,
         });
