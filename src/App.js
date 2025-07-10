@@ -4,7 +4,7 @@ import { format, parseISO } from 'date-fns';
 import { pl } from 'date-fns/locale';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
-
+import { GoogleMap, useLoadScript, Marker, Polyline } from '@react-google-maps/api';
 
 // --- Komponent Granicy Błędu (Error Boundary) ---
 class ErrorBoundary extends React.Component {
@@ -2649,7 +2649,7 @@ const TaskCard = ({ task, user, onDelete, onEdit }) => {
         </div>
     );
 };
-import { GoogleMap, useLoadScript, Marker, Polyline } from '@react-google-maps/api';
+
 
 const LIBRARIES = ["places"];
 const MAP_CONTAINER_STYLE = {
