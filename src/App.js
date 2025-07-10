@@ -2652,7 +2652,7 @@ const TaskCard = ({ task, user, onDelete, onEdit }) => {
 const DelegationsView = ({ user, onNavigate, setCurrentOrder }) => {
     const [delegations, setDelegations] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isFormModalOpen, setIsFormModalOpen] = useState(false);
     const [detailsModal, setDetailsModal] = useState({ isOpen: false, delegation: null });
     const { showNotification } = useNotification();
     const { items: sortedDelegations, requestSort, sortConfig } = useSortableData(delegations);
@@ -2684,7 +2684,7 @@ const DelegationsView = ({ user, onNavigate, setCurrentOrder }) => {
         try {
             await api.addDelegation(delegationData);
             showNotification('Delegacja została pomyślnie dodana.', 'success');
-            setIsModalOpen(false);
+            setIsFormModalOpen(false);
             fetchDelegations();
         } catch (error) {
             showNotification(error.message, 'error');
@@ -2731,8 +2731,8 @@ const DelegationsView = ({ user, onNavigate, setCurrentOrder }) => {
     return (
         <div className="p-4 md:p-8">
             <div className="flex justify-between items-center mb-6">
-                <h1 className="text-3xl font-bold">Planowanie Delegacji</h1>
-                <button onClick={() => setIsModalOpen(true)} className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
+                <h1 className="text-3xl font-bold">Planer Wizyt i Tras</h1>
+                <button onClick={() => setIsFormModalOpen(true)} className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
                     <PlusCircle className="w-5 h-5 mr-2"/> Nowa Delegacja
                 </button>
             </div>
@@ -2771,7 +2771,7 @@ const DelegationsView = ({ user, onNavigate, setCurrentOrder }) => {
                     </tbody>
                 </table>
             </div>
-            <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Nowa Delegacja" maxWidth="2xl">
+            <Modal isOpen={isFormModalOpen} onClose={() => setIsFormModalOpen(false)} title="Nowa Delegacja" maxWidth="2xl">
                 <DelegationForm onSubmit={handleAddDelegation} />
             </Modal>
              <Modal isOpen={detailsModal.isOpen} onClose={() => setDetailsModal({isOpen: false, delegation: null})} title="Szczegóły Delegacji" maxWidth="4xl">
@@ -2897,7 +2897,55 @@ const DelegationDetails = ({ delegation, onUpdate, onNavigate, setCurrentOrder }
 
     return (
         <div>
-            {/* Tutaj widok szczegółów delegacji i lista klientów */}
+            <div className="flex justify-between items-center mb-4">
+                <h2 className="text-2xl font-bold">{delegation.destination}</h2>
+                <div>
+                    {delegation.status === 'Zaakceptowana' && !delegation.startTime && (
+                        <button onClick={handleStartDelegation} className="px-4 py-2 bg-blue-600 text-white rounded-lg">Rozpocznij Delegację</button>
+                    )}
+                    {delegation.status === 'W trakcie' && (
+                        <button onClick={handleEndDelegation} className="px-4 py-2 bg-red-600 text-white rounded-lg">Zakończ Delegację</button>
+                    )}
+                </div>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm mb-6">
+                <p><strong>Cel:</strong> {delegation.purpose}</p>
+                <p><strong>Autor:</strong> {delegation.author}</p>
+                <p><strong>Data:</strong> {format(parseISO(delegation.dateFrom), 'd MMM yyyy')} - {format(parseISO(delegation.dateTo), 'd MMM yyyy')}</p>
+                <p><strong>Status:</strong> {delegation.status}</p>
+            </div>
+
+            <h3 className="text-xl font-semibold mb-2">Plan Wizyt</h3>
+            <div className="space-y-4">
+                {delegation.clients.map((client, index) => (
+                    <div key={index} className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                        <div className="flex justify-between items-start">
+                            <div>
+                                <h4 className="font-bold">{client.name}</h4>
+                                <p className="text-xs text-gray-500">{client.note}</p>
+                            </div>
+                            <div className="flex gap-2">
+                                {!client.startTime && delegation.status === 'W trakcie' && (
+                                    <button onClick={() => handleStartVisit(index)} className="px-3 py-1 text-xs bg-green-500 text-white rounded-lg">Rozpocznij wizytę</button>
+                                )}
+                                {client.startTime && !client.endTime && (
+                                    <button onClick={() => setVisitRecapModal({isOpen: true, clientIndex: index})} className="px-3 py-1 text-xs bg-red-500 text-white rounded-lg">Zakończ wizytę</button>
+                                )}
+                            </div>
+                        </div>
+                        {client.startTime && (
+                             <div className="mt-2 text-xs border-t pt-2">
+                                <p>Rozpoczęto: {format(parseISO(client.startTime), 'HH:mm:ss')}</p>
+                                {client.endTime && <p>Zakończono: {format(parseISO(client.endTime), 'HH:mm:ss')}</p>}
+                                {client.visitNotes && <p className="mt-1"><strong>Notatki:</strong> {client.visitNotes}</p>}
+                                {client.ordered && <p className="text-green-600 font-bold">Złożono zamówienie</p>}
+                             </div>
+                        )}
+                    </div>
+                ))}
+            </div>
+            
             <Modal isOpen={visitRecapModal.isOpen} onClose={() => setVisitRecapModal({isOpen: false})} title="Podsumowanie wizyty">
                 <VisitRecapForm onSubmit={handleEndVisit} />
             </Modal>
@@ -2930,6 +2978,7 @@ const VisitRecapForm = ({ onSubmit }) => {
         </form>
     );
 };
+
 
 
 export default function AppWrapper() {
