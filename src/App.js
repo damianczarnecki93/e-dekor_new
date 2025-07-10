@@ -2676,8 +2676,6 @@ const DelegationsView = ({ user, onNavigate, setCurrentOrder }) => {
         libraries: LIBRARIES, // ZMIANA: Użycie stałej zdefiniowanej na zewnątrz
     });
 
-    });
-
     const getSortIcon = (name) => {
         if (!sortConfig || sortConfig.key !== name) {
             return <ChevronsUpDown className="w-4 h-4 ml-1 opacity-40" />;
