@@ -3059,7 +3059,7 @@ const DelegationDetails = ({ delegation, onUpdate, onNavigate, setCurrentOrder, 
                             onLoad={map => { mapRef.current = map; }}
                          >
                             {directionsResponse ? (
-                                <DirectionsRenderer directions={directionsResponse} />
+                                <DirectionsResponse directions={directionsResponse} />
                             ) : (
                                 validClients.map((client, index) => (
                                     <Marker key={index} position={{ lat: client.lat, lng: client.lng }} label={`${index + 1}`} />
