@@ -2033,6 +2033,16 @@ const DashboardView = ({ user, onNavigate }) => {
     );
 };
 
+const StatCard = ({ title, value, icon, onClick }) => (
+    <div onClick={onClick} className={`bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md flex items-center text-left transition-all hover:shadow-xl hover:scale-105 ${onClick ? 'cursor-pointer' : ''}`}>
+        <div className="p-4 bg-gray-100 dark:bg-gray-900/30 rounded-full">{React.cloneElement(icon, { className: "h-8 w-8 text-indigo-500" })}</div>
+        <div className="ml-4">
+            <p className="text-3xl font-bold">{value ?? '...'}</p>
+            <p className="text-gray-500 dark:text-gray-400">{title}</p>
+        </div>
+    </div>
+);
+
 const SalesGoalsWidget = ({ stats, user, onUpdate }) => {
     const { showNotification } = useNotification();
     const [goalInput, setGoalInput] = useState(stats?.individualSalesGoal || 0);
@@ -2117,7 +2127,81 @@ const SalesGoalsWidget = ({ stats, user, onUpdate }) => {
     );
 };
 
+const QuickActionsWidget = ({ onNavigate }) => (
+    <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md h-full">
+        <h3 className="font-bold mb-4 flex items-center"><Zap className="w-5 h-5 mr-2 text-yellow-500"/>Szybkie Akcje</h3>
+        <div className="grid grid-cols-2 gap-4">
+            <button onClick={() => onNavigate('order')} className="p-3 bg-blue-500 text-white rounded-lg text-sm">Nowe Zamówienie</button>
+            <button onClick={() => onNavigate('delegations')} className="p-3 bg-green-500 text-white rounded-lg text-sm">Nowa Delegacja</button>
+        </div>
+    </div>
+);
 
+const MyTasksWidget = ({ tasks, onNavigate }) => (
+    <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md h-full">
+        <h3 className="font-bold mb-4 flex items-center"><ListChecks className="w-5 h-5 mr-2 text-red-500"/>Moje Zadania</h3>
+        <div className="space-y-2 text-sm">
+            {tasks.length > 0 ? tasks.slice(0, 3).map(task => (
+                <p key={task._id} className="truncate">{task.content}</p>
+            )) : <p className="text-gray-400">Brak zadań.</p>}
+        </div>
+        <button onClick={() => onNavigate('kanban')} className="text-sm text-indigo-500 mt-4">Zobacz wszystkie</button>
+    </div>
+);
+
+const TopProductsWidget = ({ stats }) => (
+    <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md h-full">
+        <h3 className="font-bold mb-4 flex items-center"><Trophy className="w-5 h-5 mr-2 text-yellow-500"/>Najlepsze Produkty</h3>
+        <ul className="space-y-2 text-sm">
+            {stats?.topProducts.map(p => <li key={p._id} className="flex justify-between"><span>{p._id}</span><strong>{p.totalSold} szt.</strong></li>)}
+        </ul>
+    </div>
+);
+
+const TopCustomersWidget = ({ stats }) => (
+    <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md h-full">
+        <h3 className="font-bold mb-4 flex items-center"><Crown className="w-5 h-5 mr-2 text-blue-500"/>Najlepsi Klienci</h3>
+        <ul className="space-y-2 text-sm">
+            {stats?.topCustomers.map(c => <li key={c._id} className="flex justify-between"><span>{c._id}</span><strong>{c.orderCount} zam.</strong></li>)}
+        </ul>
+    </div>
+);
+
+const CustomizeDashboardModal = ({ isOpen, onClose, availableWidgets, currentLayout, onSave }) => {
+    const [layout, setLayout] = useState(currentLayout);
+
+    useEffect(() => {
+        setLayout(currentLayout);
+    }, [currentLayout, isOpen]);
+
+    const toggleWidget = (widgetId) => {
+        setLayout(prev => 
+            prev.includes(widgetId) ? prev.filter(id => id !== widgetId) : [...prev, widgetId]
+        );
+    };
+    
+    return (
+        <Modal isOpen={isOpen} onClose={onClose} title="Dostosuj Pulpit">
+            <div className="space-y-4">
+                <p className="text-sm text-gray-500">Zaznacz komponenty, które mają być widoczne na Twoim pulpicie.</p>
+                {Object.entries(availableWidgets).map(([id, { name }]) => (
+                    <label key={id} className="flex items-center">
+                        <input
+                            type="checkbox"
+                            className="h-4 w-4 rounded"
+                            checked={layout.includes(id)}
+                            onChange={() => toggleWidget(id)}
+                        />
+                        <span className="ml-3">{name}</span>
+                    </label>
+                ))}
+            </div>
+            <div className="flex justify-end mt-6">
+                <button onClick={() => { onSave(layout); onClose(); }} className="px-4 py-2 bg-blue-600 text-white rounded-lg">Zapisz</button>
+            </div>
+        </Modal>
+    );
+};
 
 
 const NotesWidget = () => {
