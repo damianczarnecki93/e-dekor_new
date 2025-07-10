@@ -283,10 +283,10 @@ const api = {
         return await response.json();
     },
 	updateUserDashboardLayout: async (layout) => {
-        const response = await fetchWithAuth(`${API_BASE_URL}/api/user/dashboard-layout`, { method: 'PUT', body: JSON.stringify({ layout }) });
-        if (!response.ok) throw new Error('Błąd zapisywania układu pulpitu');
-        return await response.json();
-    },
+		const response = await fetchWithAuth(`${API_BASE_URL}/api/user/dashboard-layout`, { method: 'PUT', body: JSON.stringify({ layout }) });
+		if (!response.ok) throw new Error('Błąd zapisywania układu pulpitu');
+		return await response.json();
+},
     deleteUser: async (userId) => {
         const response = await fetchWithAuth(`${API_BASE_URL}/api/admin/users/${userId}`, { method: 'DELETE' });
         if (!response.ok) throw new Error('Błąd usuwania użytkownika');
@@ -2274,7 +2274,12 @@ function App() {
     const [isLoading, setIsLoading] = useState(true);
     const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
     const [isNavOpen, setIsNavOpen] = useState(false);
-    const [expandedCategories, setExpandedCategories] = useState(['Główne']); // Domyślnie rozwinięta
+    const [expandedCategories, setExpandedCategories] = useState(['Główne']);
+
+    const updateUserData = (newUserData) => {
+        setUser(newUserData);
+        localStorage.setItem('userData', JSON.stringify(newUserData));
+    };
 
     useEffect(() => {
         const savedTheme = localStorage.getItem('theme');
@@ -2425,7 +2430,7 @@ function App() {
     const renderView = () => {
         const { view, params } = activeView;
         switch (view) {
-            case 'dashboard': return <DashboardView user={user} onNavigate={handleNavigate} />;
+            case 'dashboard': return <DashboardView user={user} onNavigate={handleNavigate} onUpdateUser={updateUserData}/>;
             case 'search': return <MainSearchView />;
             case 'order': return <OrderView currentOrder={currentOrder} setCurrentOrder={setCurrentOrder} user={user} setDirty={setIsDirty} />;
             case 'orders': return <OrdersListView onEdit={loadOrderForEditing} />;
@@ -2433,11 +2438,11 @@ function App() {
             case 'inventory': return <InventoryView user={user} onNavigate={handleNavigate} isDirty={isDirty} setIsDirty={setIsDirty} />;
             case 'inventory-sheet': return <NewInventorySheet user={user} onSave={() => handleNavigate('inventory')} inventoryId={params.inventoryId} setDirty={setIsDirty} />;
             case 'kanban': return <KanbanView user={user} />;
-            case 'delegations': return <DelegationsView user={user} />;
+            case 'delegations': return <DelegationsView user={user} onNavigate={handleNavigate} setCurrentOrder={setCurrentOrder} />;
             case 'admin': return <AdminView user={user} onNavigate={handleNavigate} />;
             case 'admin-users': return <AdminUsersView user={user} />;
             case 'admin-products': return <AdminProductsView />;
-            default: return <DashboardView user={user} onNavigate={handleNavigate} />;
+            default: return <DashboardView user={user} onNavigate={handleNavigate} onUpdateUser={updateUserData}/>;
         }
     };
 
@@ -2489,6 +2494,7 @@ function App() {
         </>
     );
 }
+
 
 const UserChangePasswordModal = ({ isOpen, onClose }) => {
     const [currentPassword, setCurrentPassword] = useState('');
