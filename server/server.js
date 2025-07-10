@@ -48,7 +48,7 @@ const userSchema = new mongoose.Schema({
     salesGoal: { type: Number, default: 0 },
     manualSales: { type: Number, default: 0 },
     visibleModules: { type: [String], default: [] },
-    dashboardLayout: { type: [String], default: ['stats_products', 'stats_pending_orders', 'stats_completed_orders', 'quick_actions', 'my_tasks'] }
+	dashboardLayout: { type: [String], default: ['stats_products', 'stats_pending_orders', 'stats_completed_orders', 'quick_actions', 'my_tasks'] }
 });
 
 const User = mongoose.models.User || mongoose.model('User', userSchema);
