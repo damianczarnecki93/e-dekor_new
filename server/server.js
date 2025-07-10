@@ -1015,19 +1015,29 @@ app.put('/api/kanban/tasks/:id', authMiddleware, async (req, res) => {
 });
 
 
-app.delete('/api/kanban/tasks/:id', authMiddleware, async (req, res) => {
+app.put('/api/kanban/tasks/:id', authMiddleware, async (req, res) => {
     try {
+        const { content, status, details, subtasks, isAccepted } = req.body;
         const task = await KanbanTask.findById(req.params.id);
-        if (!task) return res.status(404).json({ message: 'Nie znaleziono zadania' });
+
+        if (!task) {
+            return res.status(404).json({ message: 'Nie znaleziono zadania' });
+        }
 
         if (task.authorId.toString() !== req.user.userId && req.user.role !== 'administrator') {
-            return res.status(403).json({ message: 'Brak uprawnień do usunięcia zadania' });
+            return res.status(403).json({ message: 'Brak uprawnień do edycji tego zadania' });
         }
-        
-        await task.deleteOne();
-        res.json({ message: 'Zadanie usunięte' });
+
+        if (content !== undefined) task.content = content;
+        if (status !== undefined) task.status = status;
+        if (details !== undefined) task.details = details;
+        if (subtasks !== undefined) task.subtasks = subtasks;
+        if (isAccepted !== undefined) task.isAccepted = isAccepted;
+
+        const updatedTask = await task.save();
+        res.json(updatedTask);
     } catch (error) {
-        res.status(500).json({ message: 'Błąd usuwania zadania' });
+        res.status(500).json({ message: 'Błąd aktualizacji zadania' });
     }
 });
 
