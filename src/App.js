@@ -1929,18 +1929,6 @@ const DashboardView = ({ user, onNavigate }) => {
     const [layout, setLayout] = useState(user.dashboardLayout || []);
     const [isCustomizeModalOpen, setIsCustomizeModalOpen] = useState(false);
 
-    const availableWidgets = useMemo(() => ({
-        'stats_products': { name: 'Liczba Produktów', component: (props) => <StatCard {...props} title="Produktów w bazie" value={stats?.productCount} icon={<Package />} /> },
-        'stats_pending_orders': { name: 'Zamówienia Oczekujące', component: (props) => <StatCard {...props} title="Zamówień do skompletowania" value={stats?.pendingOrders} icon={<List />} onClick={() => onNavigate('picking')} /> },
-        'stats_completed_orders': { name: 'Zamówienia Zrealizowane', component: (props) => <StatCard {...props} title="Zamówień skompletowanych" value={stats?.completedOrders} icon={<CheckCircle />} onClick={() => onNavigate('orders')} /> },
-        'sales_goals': { name: 'Cele Sprzedażowe', component: (props) => <SalesGoalsWidget {...props} stats={stats} user={user} /> },
-        'quick_actions': { name: 'Szybkie Akcje', component: (props) => <QuickActionsWidget {...props} onNavigate={onNavigate} /> },
-        'my_tasks': { name: 'Moje Zadania', component: (props) => <MyTasksWidget {...props} tasks={tasks} onNavigate={onNavigate} /> },
-        'top_products': { name: 'Najlepsze Produkty', component: (props) => <TopProductsWidget {...props} stats={stats} /> },
-        'top_customers': { name: 'Najlepsi Klienci', component: (props) => <TopCustomersWidget {...props} stats={stats} /> },
-        'notes_widget': { name: 'Notatki', component: (props) => <NotesWidget {...props} /> },
-    }), [stats, tasks, onNavigate, user]);
-
     const fetchDashboardData = useCallback(async () => {
         setIsLoading(true);
         try {
@@ -1960,6 +1948,18 @@ const DashboardView = ({ user, onNavigate }) => {
     useEffect(() => {
         fetchDashboardData();
     }, [fetchDashboardData]);
+
+    const availableWidgets = useMemo(() => ({
+        'stats_products': { name: 'Liczba Produktów', component: (props) => <StatCard {...props} title="Produktów w bazie" value={stats?.productCount} icon={<Package />} /> },
+        'stats_pending_orders': { name: 'Zamówienia Oczekujące', component: (props) => <StatCard {...props} title="Zamówień do skompletowania" value={stats?.pendingOrders} icon={<List />} onClick={() => onNavigate('picking')} /> },
+        'stats_completed_orders': { name: 'Zamówienia Zrealizowane', component: (props) => <StatCard {...props} title="Zamówień skompletowanych" value={stats?.completedOrders} icon={<CheckCircle />} onClick={() => onNavigate('orders')} /> },
+        'sales_goals': { name: 'Cele Sprzedażowe', component: (props) => <SalesGoalsWidget {...props} stats={stats} user={user} onUpdate={fetchDashboardData} /> },
+        'quick_actions': { name: 'Szybkie Akcje', component: (props) => <QuickActionsWidget {...props} onNavigate={onNavigate} /> },
+        'my_tasks': { name: 'Moje Zadania', component: (props) => <MyTasksWidget {...props} tasks={tasks} onNavigate={onNavigate} /> },
+        'top_products': { name: 'Najlepsze Produkty', component: (props) => <TopProductsWidget {...props} stats={stats} /> },
+        'top_customers': { name: 'Najlepsi Klienci', component: (props) => <TopCustomersWidget {...props} stats={stats} /> },
+        'notes_widget': { name: 'Notatki', component: (props) => <NotesWidget {...props} /> },
+    }), [stats, tasks, onNavigate, user, fetchDashboardData]);
 
     const handleLayoutChange = async (newLayout) => {
         setLayout(newLayout);
@@ -2033,124 +2033,90 @@ const DashboardView = ({ user, onNavigate }) => {
     );
 };
 
-// Dodaj te nowe komponenty pomocnicze w pliku App.js
-const StatCard = ({ title, value, icon, onClick }) => (
-    <div onClick={onClick} className={`bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md flex items-center text-left transition-all hover:shadow-xl hover:scale-105 ${onClick ? 'cursor-pointer' : ''}`}>
-        <div className="p-4 bg-gray-100 dark:bg-gray-900/30 rounded-full">{React.cloneElement(icon, { className: "h-8 w-8 text-indigo-500" })}</div>
-        <div className="ml-4">
-            <p className="text-3xl font-bold">{value ?? '...'}</p>
-            <p className="text-gray-500 dark:text-gray-400">{title}</p>
-        </div>
-    </div>
-);
+const SalesGoalsWidget = ({ stats, user, onUpdate }) => {
+    const { showNotification } = useNotification();
+    const [goalInput, setGoalInput] = useState(stats?.individualSalesGoal || 0);
+    const [manualSaleInput, setManualSaleInput] = useState('');
 
-const SalesGoalsWidget = ({ stats, user }) => {
+    useEffect(() => {
+        setGoalInput(stats?.individualSalesGoal || 0);
+    }, [stats]);
+
+    const handleSetGoal = async (e) => {
+        e.preventDefault();
+        const goalValue = parseFloat(goalInput);
+        if (isNaN(goalValue) || goalValue < 0) {
+            showNotification('Wprowadź poprawną wartość celu.', 'error');
+            return;
+        }
+        try {
+            await api.setUserGoal(goalValue);
+            showNotification('Cel miesięczny został zaktualizowany!', 'success');
+            onUpdate(); // Odśwież dane pulpitu
+        } catch (error) {
+            showNotification(error.message, 'error');
+        }
+    };
+    
+    const handleAddManualSale = async (e) => {
+        e.preventDefault();
+        const saleValue = parseFloat(manualSaleInput);
+        if (isNaN(saleValue)) {
+            showNotification('Wprowadź poprawną wartość sprzedaży.', 'error');
+            return;
+        }
+        try {
+            await api.addManualSales(saleValue);
+            showNotification('Sprzedaż została dodana!', 'success');
+            setManualSaleInput('');
+            onUpdate(); // Odśwież dane pulpitu
+        } catch (error) {
+            showNotification(error.message, 'error');
+        }
+    };
+
     const individualGoalProgress = stats?.individualSalesGoal > 0 ? ((stats?.individualMonthlySales || 0) / stats.individualSalesGoal) * 100 : 0;
     const totalGoalProgress = stats?.totalSalesGoal > 0 ? ((stats?.totalMonthlySales || 0) / stats.totalSalesGoal) * 100 : 0;
 
     return (
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md h-full">
-            <h3 className="font-bold mb-4 flex items-center"><BarChart2 className="w-5 h-5 mr-2 text-indigo-500"/>Cele Sprzedażowe</h3>
-            <div className="space-y-4">
-                <div>
-                    <h4 className="text-sm font-semibold">Twój cel miesięczny</h4>
-                    <div className="flex justify-between mb-1 text-xs">
-                        <span>{(stats?.individualMonthlySales || 0).toFixed(2)} / {(stats?.individualSalesGoal || 0).toFixed(2)} PLN</span>
+        <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md h-full flex flex-col justify-between">
+            <div>
+                <h3 className="font-bold mb-4 flex items-center"><BarChart2 className="w-5 h-5 mr-2 text-indigo-500"/>Cele Sprzedażowe</h3>
+                <div className="space-y-4">
+                    <div>
+                        <h4 className="text-sm font-semibold">Twój cel miesięczny</h4>
+                        <div className="flex justify-between mb-1 text-xs">
+                            <span>{(stats?.individualMonthlySales || 0).toFixed(2)} / {(stats?.individualSalesGoal || 0).toFixed(2)} PLN</span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700">
+                            <div className="bg-indigo-600 h-2.5 rounded-full" style={{ width: `${Math.min(individualGoalProgress, 100)}%` }}></div>
+                        </div>
                     </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700">
-                        <div className="bg-indigo-600 h-2.5 rounded-full" style={{ width: `${Math.min(individualGoalProgress, 100)}%` }}></div>
+                    <div>
+                        <h4 className="text-sm font-semibold">Cel ogólny</h4>
+                        <div className="flex justify-between mb-1 text-xs">
+                            <span>{(stats?.totalMonthlySales || 0).toFixed(2)} / {(stats?.totalSalesGoal || 0).toFixed(2)} PLN</span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700">
+                            <div className="bg-purple-600 h-2.5 rounded-full" style={{ width: `${Math.min(totalGoalProgress, 100)}%` }}></div>
+                        </div>
                     </div>
                 </div>
-                <div>
-                    <h4 className="text-sm font-semibold">Cel ogólny</h4>
-                    <div className="flex justify-between mb-1 text-xs">
-                        <span>{(stats?.totalMonthlySales || 0).toFixed(2)} / {(stats?.totalSalesGoal || 0).toFixed(2)} PLN</span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700">
-                        <div className="bg-purple-600 h-2.5 rounded-full" style={{ width: `${Math.min(totalGoalProgress, 100)}%` }}></div>
-                    </div>
-                </div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-4">
+                <form onSubmit={handleSetGoal} className="flex items-center gap-2">
+                    <input type="number" value={goalInput} onChange={(e) => setGoalInput(e.target.value)} className="p-2 border rounded-md w-full text-sm bg-gray-50 dark:bg-gray-700" placeholder="Ustaw cel..."/>
+                    <button type="submit" className="px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm"><Save size={16}/></button>
+                </form>
+                <form onSubmit={handleAddManualSale} className="flex items-center gap-2">
+                    <input type="number" value={manualSaleInput} onChange={(e) => setManualSaleInput(e.target.value)} className="p-2 border rounded-md w-full text-sm bg-gray-50 dark:bg-gray-700" placeholder="Dodaj sprzedaż..."/>
+                    <button type="submit" className="px-3 py-2 bg-green-600 text-white rounded-lg text-sm"><PlusCircle size={16}/></button>
+                </form>
             </div>
         </div>
     );
 };
 
-const QuickActionsWidget = ({ onNavigate }) => (
-    <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md h-full">
-        <h3 className="font-bold mb-4 flex items-center"><Zap className="w-5 h-5 mr-2 text-yellow-500"/>Szybkie Akcje</h3>
-        <div className="grid grid-cols-2 gap-4">
-            <button onClick={() => onNavigate('order')} className="p-3 bg-blue-500 text-white rounded-lg text-sm">Nowe Zamówienie</button>
-            <button onClick={() => onNavigate('delegations')} className="p-3 bg-green-500 text-white rounded-lg text-sm">Nowa Delegacja</button>
-        </div>
-    </div>
-);
-
-const MyTasksWidget = ({ tasks, onNavigate }) => (
-    <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md h-full">
-        <h3 className="font-bold mb-4 flex items-center"><ListChecks className="w-5 h-5 mr-2 text-red-500"/>Moje Zadania</h3>
-        <div className="space-y-2 text-sm">
-            {tasks.length > 0 ? tasks.slice(0, 3).map(task => (
-                <p key={task._id} className="truncate">{task.content}</p>
-            )) : <p className="text-gray-400">Brak zadań.</p>}
-        </div>
-        <button onClick={() => onNavigate('kanban')} className="text-sm text-indigo-500 mt-4">Zobacz wszystkie</button>
-    </div>
-);
-
-const TopProductsWidget = ({ stats }) => (
-    <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md h-full">
-        <h3 className="font-bold mb-4 flex items-center"><Trophy className="w-5 h-5 mr-2 text-yellow-500"/>Najlepsze Produkty</h3>
-        <ul className="space-y-2 text-sm">
-            {stats?.topProducts.map(p => <li key={p._id} className="flex justify-between"><span>{p._id}</span><strong>{p.totalSold} szt.</strong></li>)}
-        </ul>
-    </div>
-);
-
-const TopCustomersWidget = ({ stats }) => (
-    <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md h-full">
-        <h3 className="font-bold mb-4 flex items-center"><Crown className="w-5 h-5 mr-2 text-blue-500"/>Najlepsi Klienci</h3>
-        <ul className="space-y-2 text-sm">
-            {stats?.topCustomers.map(c => <li key={c._id} className="flex justify-between"><span>{c._id}</span><strong>{c.orderCount} zam.</strong></li>)}
-        </ul>
-    </div>
-);
-
-
-const CustomizeDashboardModal = ({ isOpen, onClose, availableWidgets, currentLayout, onSave }) => {
-    const [layout, setLayout] = useState(currentLayout);
-
-    useEffect(() => {
-        setLayout(currentLayout);
-    }, [currentLayout, isOpen]);
-
-    const toggleWidget = (widgetId) => {
-        setLayout(prev => 
-            prev.includes(widgetId) ? prev.filter(id => id !== widgetId) : [...prev, widgetId]
-        );
-    };
-    
-    return (
-        <Modal isOpen={isOpen} onClose={onClose} title="Dostosuj Pulpit">
-            <div className="space-y-4">
-                <p className="text-sm text-gray-500">Zaznacz komponenty, które mają być widoczne na Twoim pulpicie.</p>
-                {Object.entries(availableWidgets).map(([id, { name }]) => (
-                    <label key={id} className="flex items-center">
-                        <input
-                            type="checkbox"
-                            className="h-4 w-4 rounded"
-                            checked={layout.includes(id)}
-                            onChange={() => toggleWidget(id)}
-                        />
-                        <span className="ml-3">{name}</span>
-                    </label>
-                ))}
-            </div>
-            <div className="flex justify-end mt-6">
-                <button onClick={() => { onSave(layout); onClose(); }} className="px-4 py-2 bg-blue-600 text-white rounded-lg">Zapisz</button>
-            </div>
-        </Modal>
-    );
-};
 
 
 
