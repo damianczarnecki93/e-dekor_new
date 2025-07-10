@@ -2649,6 +2649,19 @@ const TaskCard = ({ task, user, onDelete, onEdit }) => {
     );
 };
 
+import { GoogleMap, useLoadScript, Marker, Polyline } from '@react-google-maps/api';
+
+const libraries = ["places"];
+const mapContainerStyle = {
+  width: '100%',
+  height: '400px',
+  borderRadius: '0.5rem'
+};
+const center = { // Domyślne centrum mapy (Polska)
+  lat: 52.237049,
+  lng: 21.017532
+};
+
 const DelegationsView = ({ user, onNavigate, setCurrentOrder }) => {
     const [delegations, setDelegations] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -2656,6 +2669,11 @@ const DelegationsView = ({ user, onNavigate, setCurrentOrder }) => {
     const [detailsModal, setDetailsModal] = useState({ isOpen: false, delegation: null });
     const { showNotification } = useNotification();
     const { items: sortedDelegations, requestSort, sortConfig } = useSortableData(delegations);
+
+    const { isLoaded, loadError } = useLoadScript({
+        googleMapsApiKey: "AIzaSyDMr9jJIDp0M52-pvwJjehyXShfHmQ0AYE", // <-- WAŻNE: ZASTĄP SWOIM KLUCZEM
+        libraries,
+    });
 
     const getSortIcon = (name) => {
         if (!sortConfig || sortConfig.key !== name) {
@@ -2728,6 +2746,9 @@ const DelegationsView = ({ user, onNavigate, setCurrentOrder }) => {
         setDetailsModal(prev => ({...prev, delegation: updatedDelegation}));
     };
 
+    if (loadError) return "Błąd ładowania mapy";
+    if (!isLoaded) return "Ładowanie mapy...";
+
     return (
         <div className="p-4 md:p-8">
             <div className="flex justify-between items-center mb-6">
@@ -2783,7 +2804,7 @@ const DelegationsView = ({ user, onNavigate, setCurrentOrder }) => {
 
 const DelegationForm = ({ onSubmit }) => {
     const [formData, setFormData] = useState({
-        destination: '', purpose: '', dateFrom: '', dateTo: '', transport: '', kms: 0, advancePayment: 0, clients: [{ name: '', note: '' }]
+        destination: '', purpose: '', dateFrom: '', dateTo: '', transport: '', kms: 0, advancePayment: 0, clients: [{ name: '', address: '', note: '' }]
     });
 
     const handleChange = (e) => {
@@ -2799,7 +2820,7 @@ const DelegationForm = ({ onSubmit }) => {
     };
 
     const addClient = () => {
-        setFormData(prev => ({ ...prev, clients: [...prev.clients, { name: '', note: '' }] }));
+        setFormData(prev => ({ ...prev, clients: [...prev.clients, { name: '', address: '', note: '' }] }));
     };
 
     const removeClient = (index) => {
@@ -2834,7 +2855,7 @@ const DelegationForm = ({ onSubmit }) => {
                 {formData.clients.map((client, index) => (
                     <div key={index} className="grid grid-cols-1 md:grid-cols-3 gap-2 p-2 border-b">
                         <input type="text" name="name" value={client.name} onChange={(e) => handleClientChange(index, e)} placeholder="Nazwa kontrahenta" className="w-full p-2 border rounded-md"/>
-                        <input type="text" name="note" value={client.note} onChange={(e) => handleClientChange(index, e)} placeholder="Notatka" className="w-full p-2 border rounded-md"/>
+                        <input type="text" name="address" value={client.address} onChange={(e) => handleClientChange(index, e)} placeholder="Adres" className="w-full p-2 border rounded-md"/>
                         <button type="button" onClick={() => removeClient(index)} className="p-2 text-red-500 hover:text-red-700"><Trash2 className="w-5 h-5"/></button>
                     </div>
                 ))}
@@ -2978,6 +2999,7 @@ const VisitRecapForm = ({ onSubmit }) => {
         </form>
     );
 };
+
 
 
 

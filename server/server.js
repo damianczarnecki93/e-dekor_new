@@ -115,6 +115,9 @@ const delegationSchema = new mongoose.Schema({
     transport: String,
     clients: [{
         name: String,
+        address: String, // Nowe pole na adres
+        lat: Number,      // Nowe pole na szerokość geograficzną
+        lng: Number,      // Nowe pole na długość geograficzną
         note: String,
         startTime: Date,
         endTime: Date,
