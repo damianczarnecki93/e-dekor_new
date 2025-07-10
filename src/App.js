@@ -2122,7 +2122,7 @@ function App() {
                 return;
             }
         }
-        setIsDirty(false); // Resetuj flagę po nawigacji
+        setIsDirty(false);
         setActiveView({ view, params });
         setIsNavOpen(false);
     };
@@ -2166,22 +2166,64 @@ function App() {
         handleNavigate('order');
     };
 
+    const navConfig = useMemo(() => [
+        {
+            category: 'Główne',
+            items: [
+                { id: 'dashboard', label: 'Panel Główny', icon: Home, roles: ['user', 'administrator'], alwaysVisible: true },
+                { id: 'search', label: 'Wyszukiwarka', icon: Search, roles: ['user', 'administrator'] },
+            ]
+        },
+        {
+            category: 'Sprzedaż',
+            items: [
+                { id: 'order', label: 'Nowe Zamówienie', icon: PlusCircle, roles: ['user', 'administrator'], action: handleNewOrder },
+                { id: 'orders', label: 'Zamówienia', icon: Archive, roles: ['user', 'administrator'] },
+            ]
+        },
+        {
+            category: 'Magazyn',
+            items: [
+                { id: 'picking', label: 'Kompletacja', icon: List, roles: ['user', 'administrator'] },
+                { id: 'inventory', label: 'Inwentaryzacja', icon: Wrench, roles: ['user', 'administrator'] },
+            ]
+        },
+        {
+            category: 'Organizacyjne',
+            items: [
+                { id: 'kanban', label: 'Tablica Zadań', icon: ClipboardList, roles: ['user', 'administrator'] },
+                { id: 'delegations', label: 'Delegacje', icon: Plane, roles: ['user', 'administrator'] },
+            ]
+        },
+        {
+            category: 'Administracja',
+            items: [
+                 { id: 'admin', label: 'Panel Admina', icon: Settings, roles: ['administrator'] },
+            ]
+        }
+    ], [handleNewOrder]);
+
+    const availableNav = useMemo(() => {
+        if (!user) return [];
+        return navConfig
+            .map(category => {
+                const visibleItems = category.items.filter(item => {
+                    if (!item.roles.includes(user.role)) {
+                        return false;
+                    }
+                    if (user.role === 'administrator') {
+                        return true;
+                    }
+                    return item.alwaysVisible || user.visibleModules?.includes(item.id);
+                });
+                return { ...category, items: visibleItems };
+            })
+            .filter(category => category.items.length > 0);
+    }, [user, navConfig]);
+    
+
     if (isLoading) { return <div className="flex items-center justify-center h-screen bg-gray-100 dark:bg-gray-900">Ładowanie...</div> }
     if (!user) { return <AuthPage onLogin={handleLogin} />; }
-
-    const navItems = [
-        { id: 'dashboard', label: 'Panel Główny', icon: Home, roles: ['user', 'administrator'] },
-        { id: 'search', label: 'Wyszukiwarka', icon: Search, roles: ['user', 'administrator'] },
-        { id: 'order', label: 'Nowe Zamówienie', icon: PlusCircle, roles: ['user', 'administrator'], action: handleNewOrder },
-        { id: 'orders', label: 'Zamówienia', icon: Archive, roles: ['user', 'administrator'] },
-        { id: 'picking', label: 'Kompletacja', icon: List, roles: ['user', 'administrator'] },
-        { id: 'inventory', label: 'Inwentaryzacja', icon: Wrench, roles: ['user', 'administrator'] },
-        { id: 'kanban', label: 'Tablica Zadań', icon: ClipboardList, roles: ['user', 'administrator'] },
-        { id: 'delegations', label: 'Delegacje', icon: Plane, roles: ['user', 'administrator'] },
-        { id: 'admin', label: 'Panel Admina', icon: Settings, roles: ['administrator'] },
-    ];
-    
-    const availableNavItems = navItems.filter(item => item.roles.includes(user.role));
 
     const renderView = () => {
         const { view, params } = activeView;
@@ -2209,14 +2251,19 @@ function App() {
                     <div className="flex items-center justify-center h-20 border-b border-gray-200 dark:border-gray-700">
                          <img src={isDarkMode ? "/logo-dark.png" : "/logo.png"} onError={(e) => { e.currentTarget.src = 'https://placehold.co/120x40/4f46e5/ffffff?text=Logo'; }} alt="Logo" className="h-10" />
                     </div>
-                    <ul className="flex-grow">
-                        {availableNavItems.map(item => (
-                            <li key={item.id}>
-                                <button onClick={() => { item.action ? item.action() : handleNavigate(item.id); }} className={`w-full flex items-center justify-start h-14 px-6 text-lg transition-colors duration-200 text-left ${activeView.view.startsWith(item.id) ? 'bg-indigo-50 dark:bg-gray-700 text-indigo-600 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'}`}>
-                                    <item.icon className="h-6 w-6" />
-                                    <span className="ml-4">{item.label}</span>
-                                </button>
-                            </li>
+                    <ul className="flex-grow overflow-y-auto">
+                        {availableNav.map(category => (
+                            <div key={category.category} className="my-2">
+                                <h3 className="px-6 mt-4 mb-2 text-xs font-semibold text-gray-400 uppercase">{category.category}</h3>
+                                {category.items.map(item => (
+                                     <li key={item.id}>
+                                        <button onClick={() => { item.action ? item.action() : handleNavigate(item.id); }} className={`w-full flex items-center justify-start h-12 px-6 text-base transition-colors duration-200 text-left ${activeView.view.startsWith(item.id) ? 'bg-indigo-50 dark:bg-gray-700 text-indigo-600 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'}`}>
+                                            <item.icon className="h-5 w-5" />
+                                            <span className="ml-4">{item.label}</span>
+                                        </button>
+                                    </li>
+                                ))}
+                            </div>
                         ))}
                     </ul>
                     <div className="p-4 border-t border-gray-200 dark:border-gray-700">
@@ -2233,7 +2280,7 @@ function App() {
                 <main className="flex-1 flex flex-col overflow-hidden">
                     <div className="lg:hidden p-2 bg-white dark:bg-gray-800 border-b dark:border-gray-700 flex justify-between items-center">
                         <button onClick={() => setIsNavOpen(!isNavOpen)} className="p-2 rounded-md"><Menu className="w-6 w-6" /></button>
-                        <span className="font-semibold">{navItems.find(item => item.id === activeView.view)?.label}</span>
+                        <span className="font-semibold">{navConfig.flatMap(c => c.items).find(item => item.id === activeView.view)?.label}</span>
                     </div>
                     <div className="flex-1 overflow-x-hidden overflow-y-auto">{renderView()}</div>
                 </main>
@@ -2242,6 +2289,7 @@ function App() {
         </>
     );
 }
+
 
 const UserChangePasswordModal = ({ isOpen, onClose }) => {
     const [currentPassword, setCurrentPassword] = useState('');
