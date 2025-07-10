@@ -368,7 +368,7 @@ const api = {
         if (!response.ok) throw new Error('Błąd usuwania delegacji');
         return await response.json();
     },
-	startDelegation: async (delegationId) => {
+	 startDelegation: async (delegationId) => {
         const response = await fetchWithAuth(`${API_BASE_URL}/api/delegations/${delegationId}/start`, { method: 'POST' });
         if (!response.ok) throw new Error('Błąd rozpoczęcia delegacji');
         return await response.json();
@@ -2649,14 +2649,6 @@ const TaskCard = ({ task, user, onDelete, onEdit }) => {
     );
 };
 
-
-
-
-
-
-
-
-
 const DelegationsView = ({ user, onNavigate, setCurrentOrder }) => {
     const [delegations, setDelegations] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -2905,7 +2897,6 @@ const DelegationDetails = ({ delegation, onUpdate, onNavigate, setCurrentOrder }
 
     return (
         <div>
-            {/* Tutaj widok szczegółów delegacji i lista klientów */}
             <Modal isOpen={visitRecapModal.isOpen} onClose={() => setVisitRecapModal({isOpen: false})} title="Podsumowanie wizyty">
                 <VisitRecapForm onSubmit={handleEndVisit} />
             </Modal>
