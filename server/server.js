@@ -951,14 +951,14 @@ app.delete('/api/notes/:id', authMiddleware, async (req, res) => {
 
 // --- NOWE I ZAKTUALIZOWANE ENDPOINTY KANBAN ---
 
+// --- NOWE I ZAKTUALIZOWANE ENDPOINTY KANBAN ---
+
 app.get('/api/kanban/tasks', authMiddleware, async (req, res) => {
     try {
         let query = {};
-        // Administrator może pobrać zadania dla konkretnego użytkownika za pomocą query param
         if (req.user.role === 'administrator' && req.query.userId) {
             query = { authorId: req.query.userId };
         } else {
-            // Standardowy użytkownik pobiera tylko swoje własne zadania
             query = { authorId: req.user.userId };
         }
         const tasks = await KanbanTask.find(query).sort({ date: -1 });
@@ -980,9 +980,9 @@ app.post('/api/kanban/tasks', authMiddleware, async (req, res) => {
             status: 'todo',
             author: author,
             authorId: authorId,
-            assignedTo: author, // Zadanie jest zawsze przypisane do autora
+            assignedTo: author, 
             assignedToId: authorId,
-            isAccepted: true // Zadania są od razu aktywne
+            isAccepted: true 
         });
         await newTask.save();
         res.status(201).json(newTask);

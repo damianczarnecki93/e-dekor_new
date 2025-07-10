@@ -2346,12 +2346,10 @@ const KanbanView = ({ user }) => {
             const userIdToFetch = user.role === 'administrator' ? selectedUserId : user.id;
             const [tasksData, usersData] = await Promise.all([
                 api.getKanbanTasks(userIdToFetch),
-                user.role === 'administrator' ? api.getUsersList() : Promise.resolve([])
+                api.getUsersList()
             ]);
             setTasks(tasksData);
-            if (user.role === 'administrator') {
-                setUsers(usersData);
-            }
+            setUsers(usersData);
         } catch (error) {
             showNotification(error.message, 'error');
         } finally {
@@ -2377,7 +2375,7 @@ const KanbanView = ({ user }) => {
     
     const handleAddTask = async (taskData) => {
         try {
-            const authorData = user.role === 'administrator' ? users.find(u => u._id === selectedUserId) : user;
+            const authorData = user.role === 'administrator' ? users.find(u => u._id === selectedUserId) || user : user;
             const fullTaskData = {
                 ...taskData,
                 authorId: authorData._id || authorData.id,
@@ -2487,7 +2485,7 @@ const KanbanForm = ({ onSubmit }) => {
 
     const handleAddSubtask = () => {
         if (!newSubtask.trim()) return;
-        setSubtasks([...subtasks, { content: newSubtask, isDone: false, _id: `new-${Date.now()}` }]);
+        setSubtasks([...subtasks, { content: newSubtask, isDone: false }]);
         setNewSubtask('');
     };
     
@@ -2527,7 +2525,9 @@ const KanbanForm = ({ onSubmit }) => {
                     <button type="button" onClick={handleAddSubtask} className="px-3 py-1 bg-gray-200 rounded-md">Dodaj</button>
                 </div>
             </div>
-            <div className="flex justify-end pt-4"><button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg">Dodaj zadanie</button></div>
+            <div className="flex justify-end pt-4">
+                <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg">Dodaj zadanie</button>
+            </div>
         </form>
     );
 };
@@ -2582,7 +2582,9 @@ const TaskDetails = ({ task, onSave }) => {
                     <button type="button" onClick={handleAddSubtask} className="px-3 py-1 bg-gray-200 rounded-md">Dodaj</button>
                 </div>
             </div>
-            <div className="flex justify-end pt-4"><button onClick={handleSave} className="px-4 py-2 bg-blue-600 text-white rounded-lg">Zapisz szczegóły</button></div>
+            <div className="flex justify-end pt-4">
+                <button onClick={handleSave} className="px-4 py-2 bg-blue-600 text-white rounded-lg">Zapisz szczegóły</button>
+            </div>
         </div>
     );
 };
@@ -2600,8 +2602,8 @@ const TaskCard = ({ task, user, onDelete, onEdit }) => {
         <div 
             draggable 
             onDragStart={(e) => e.dataTransfer.setData("taskId", task._id)}
-            className={`${priorityClass[task.priority]} p-4 rounded-md shadow group relative cursor-pointer`}
             onClick={() => setIsExpanded(!isExpanded)}
+            className={`${priorityClass[task.priority]} p-4 rounded-md shadow group relative cursor-pointer`}
         >
             <p>{task.content}</p>
             <p className="text-xs text-gray-400 mt-1">{format(parseISO(task.date), 'd MMM, HH:mm')}</p>
@@ -2626,6 +2628,7 @@ const TaskCard = ({ task, user, onDelete, onEdit }) => {
         </div>
     );
 };
+
 
 
 
