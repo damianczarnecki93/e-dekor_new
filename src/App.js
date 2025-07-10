@@ -368,6 +368,26 @@ const api = {
         if (!response.ok) throw new Error('Błąd usuwania delegacji');
         return await response.json();
     },
+	startDelegation: async (delegationId) => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/api/delegations/${delegationId}/start`, { method: 'POST' });
+        if (!response.ok) throw new Error('Błąd rozpoczęcia delegacji');
+        return await response.json();
+    },
+    endDelegation: async (delegationId) => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/api/delegations/${delegationId}/end`, { method: 'POST' });
+        if (!response.ok) throw new Error('Błąd zakończenia delegacji');
+        return await response.json();
+    },
+    startClientVisit: async (delegationId, clientIndex) => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/api/delegations/${delegationId}/visits/${clientIndex}/start`, { method: 'POST' });
+        if (!response.ok) throw new Error('Błąd rozpoczęcia wizyty');
+        return await response.json();
+    },
+    endClientVisit: async (delegationId, clientIndex, visitData) => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/api/delegations/${delegationId}/visits/${clientIndex}/end`, { method: 'POST', body: JSON.stringify(visitData) });
+        if (!response.ok) throw new Error('Błąd zakończenia wizyty');
+        return await response.json();
+    },
 };
 
 // --- Komponenty UI ---

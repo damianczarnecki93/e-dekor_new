@@ -1106,24 +1106,44 @@ app.post('/api/delegations/:id/start', authMiddleware, async (req, res) => {
     }
 });
 
-app.post('/api/delegations/:id/visits', authMiddleware, async (req, res) => {
+app.post('/api/delegations/:id/end', authMiddleware, async (req, res) => {
     try {
-        const { visitData, clientIndex } = req.body;
+        const delegation = await Delegation.findByIdAndUpdate(req.params.id, { endTime: new Date(), status: 'Zakończona' }, { new: true });
+        if (!delegation) return res.status(404).json({ message: 'Nie znaleziono delegacji' });
+        res.json(delegation);
+    } catch (error) {
+        res.status(500).json({ message: 'Błąd zakończenia delegacji' });
+    }
+});
+
+app.post('/api/delegations/:id/visits/:clientIndex/start', authMiddleware, async (req, res) => {
+    try {
         const delegation = await Delegation.findById(req.params.id);
         if (!delegation) return res.status(404).json({ message: 'Nie znaleziono delegacji' });
-
-        const client = delegation.clients[clientIndex];
-        if (visitData.startTime) client.startTime = new Date();
-        if (visitData.endTime) {
-            client.endTime = new Date();
-            client.visitNotes = visitData.visitNotes;
-            client.ordered = visitData.ordered;
-        }
-
+        
+        delegation.clients[req.params.clientIndex].startTime = new Date();
         await delegation.save();
         res.json(delegation);
     } catch (error) {
-        res.status(500).json({ message: 'Błąd aktualizacji wizyty' });
+        res.status(500).json({ message: 'Błąd rozpoczęcia wizyty' });
+    }
+});
+
+app.post('/api/delegations/:id/visits/:clientIndex/end', authMiddleware, async (req, res) => {
+    try {
+        const { visitNotes, ordered } = req.body;
+        const delegation = await Delegation.findById(req.params.id);
+        if (!delegation) return res.status(404).json({ message: 'Nie znaleziono delegacji' });
+
+        const client = delegation.clients[req.params.clientIndex];
+        client.endTime = new Date();
+        client.visitNotes = visitNotes;
+        client.ordered = ordered;
+        
+        await delegation.save();
+        res.json(delegation);
+    } catch (error) {
+        res.status(500).json({ message: 'Błąd zakończenia wizyty' });
     }
 });
 
