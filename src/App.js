@@ -2683,7 +2683,7 @@ const DelegationsView = ({ user, onNavigate, setCurrentOrder }) => {
     const { items: sortedDelegations, requestSort, sortConfig } = useSortableData(delegations);
 
     const { isLoaded, loadError } = useLoadScript({
-        googleMapsApiKey: "AIzaSyDMr9jJIDp0M52-pvwJjehyXShfHmQ0AYE", // <-- WAŻNE: ZASTĄP SWOIM KLUCZEM
+        googleMapsApiKey: "AIzaSyDMr9jJIDp0M52-pvwJjehyXShfHmQ0AYE", // <-- Pamiętaj o wstawieniu swojego klucza API
         libraries: LIBRARIES,
     });
 
@@ -2790,7 +2790,13 @@ const DelegationsView = ({ user, onNavigate, setCurrentOrder }) => {
                                 <td className="p-2 sm:p-3 text-center whitespace-nowrap">
                                     <Tooltip text="Podgląd"><button onClick={() => setDetailsModal({isOpen: true, delegation: d})} className="p-2 text-blue-500 hover:text-blue-700"><Eye className="w-5 h-5"/></button></Tooltip>
                                     <Tooltip text="Edytuj"><button onClick={() => setIsFormModalOpen(d)} className="p-2 text-yellow-500 hover:text-yellow-700"><Edit className="w-5 h-5"/></button></Tooltip>
-                                    {user.role === 'administrator' && (
+                                    {user.role === 'administrator' && d.status === 'Oczekująca' && (
+                                        <>
+                                            <Tooltip text="Akceptuj"><button onClick={() => handleStatusUpdate(d._id, 'Zaakceptowana')} className="p-2 text-green-500 hover:text-green-700"><CheckCircle className="w-5 h-5"/></button></Tooltip>
+                                            <Tooltip text="Odrzuć"><button onClick={() => handleStatusUpdate(d._id, 'Odrzucona')} className="p-2 text-red-500 hover:text-red-700"><XCircle className="w-5 h-5"/></button></Tooltip>
+                                        </>
+                                    )}
+                                    {(user.id === d.authorId || user.role === 'administrator') && (
                                         <Tooltip text="Usuń"><button onClick={() => handleDelete(d._id)} className="p-2 text-gray-500 hover:text-red-500"><Trash2 className="w-5 h-5"/></button></Tooltip>
                                     )}
                                 </td>
@@ -2808,6 +2814,7 @@ const DelegationsView = ({ user, onNavigate, setCurrentOrder }) => {
         </div>
     );
 };
+
 
 
 const DelegationForm = ({ onSubmit }) => {

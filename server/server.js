@@ -34,7 +34,7 @@ if (!dbUrl) {
     process.exit(1);
 }
 
-mongoose.connect(dbUrl, { useNewUrlParser: true, useUnifiedTopology: true })
+mongoose.connect(dbUrl)
     .then(() => console.log('Połączono z MongoDB Atlas!'))
     .catch(err => console.error('Błąd połączenia z MongoDB:', err));
 
