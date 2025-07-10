@@ -996,7 +996,7 @@ app.put('/api/kanban/tasks/:id', authMiddleware, async (req, res) => {
         if (!task) {
             return res.status(404).json({ message: 'Nie znaleziono zadania' });
         }
-        // Sprawdzenie uprawnień
+        
         if (task.authorId.toString() !== req.user.userId && req.user.role !== 'administrator') {
             return res.status(403).json({ message: 'Brak uprawnień do edycji tego zadania' });
         }

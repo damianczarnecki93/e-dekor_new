@@ -2385,13 +2385,11 @@ const KanbanView = ({ user }) => {
     
     const handleAddTask = async (taskData) => {
         try {
-            const authorData = user;
-            const assignedToUser = users.find(u => u._id === taskData.assignedToId);
+            const authorData = user.role === 'administrator' ? users.find(u => u._id === selectedUserId) : user;
             const fullTaskData = {
                 ...taskData,
-                authorId: authorData.id,
+                authorId: authorData.id || authorData._id,
                 author: authorData.username,
-                assignedTo: assignedToUser.username,
             };
             const newTask = await api.addKanbanTask(fullTaskData);
             setTasks(prev => [newTask, ...prev]);
@@ -2465,7 +2463,8 @@ const KanbanView = ({ user }) => {
                 <div className="flex items-center gap-4">
                     {user.role === 'administrator' && (
                          <select value={selectedUserId} onChange={(e) => setSelectedUserId(e.target.value)} className="p-2 border rounded-md bg-white dark:bg-gray-700">
-                             {users.map(u => <option key={u._id} value={u._id}>{u.username}</option>)}
+                             <option value={user.id}>Moja tablica</option>
+                             {users.filter(u => u._id !== user.id).map(u => <option key={u._id} value={u._id}>{u.username}</option>)}
                          </select>
                     )}
                     <button onClick={() => setIsModalOpen(true)} className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
@@ -2506,7 +2505,7 @@ const KanbanView = ({ user }) => {
                                     >
                                         <p>{task.content}</p>
                                         <div className="text-xs text-gray-500 mt-2 flex justify-between">
-                                            <span>Dla: {task.assignedTo}</span>
+                                            {user.role === 'administrator' && <span>Dla: {task.author}</span>}
                                             {!isMyTask && <span className="italic">Od: {task.author}</span>}
                                         </div>
                                         <p className="text-xs text-gray-400 mt-1">{format(parseISO(task.date), 'd MMM, HH:mm')}</p>
@@ -2570,12 +2569,11 @@ const KanbanForm = ({ onSubmit, users, currentUser }) => {
 
     const handleSubmit = (e) => {
         e.preventDefault();
-        if (!content || !assignedToId) {
-            alert('Proszę wypełnić wszystkie pola.');
+        if (!content) {
+            alert('Treść zadania jest wymagana.');
             return;
         }
-        const selectedUser = users.find(u => u._id === assignedToId);
-        onSubmit({ content, assignedToId, assignedTo: selectedUser.username, details, subtasks });
+        onSubmit({ content, assignedToId, details, subtasks });
         setContent('');
         setAssignedToId(currentUser.id);
         setDetails('');
@@ -2588,12 +2586,14 @@ const KanbanForm = ({ onSubmit, users, currentUser }) => {
                 <label className="block text-sm font-medium">Treść zadania</label>
                 <textarea value={content} onChange={(e) => setContent(e.target.value)} className="w-full p-2 border rounded-md" required />
             </div>
-            <div>
-                <label className="block text-sm font-medium">Przypisz do</label>
-                <select value={assignedToId} onChange={(e) => setAssignedToId(e.target.value)} className="w-full p-2 border rounded-md" required>
-                    {users.map(u => <option key={u._id} value={u._id}>{u.username}</option>)}
-                </select>
-            </div>
+            {currentUser.role === 'administrator' && (
+                <div>
+                    <label className="block text-sm font-medium">Przypisz do</label>
+                    <select value={assignedToId} onChange={(e) => setAssignedToId(e.target.value)} className="w-full p-2 border rounded-md" required>
+                        {users.map(u => <option key={u._id} value={u._id}>{u.username}</option>)}
+                    </select>
+                </div>
+            )}
              <div>
                 <label className="block text-sm font-medium">Szczegóły (opcjonalnie)</label>
                 <textarea value={details} onChange={(e) => setDetails(e.target.value)} className="w-full p-2 border rounded-md min-h-[100px]"/>
@@ -2680,6 +2680,7 @@ const TaskDetails = ({ task, onSave }) => {
         </div>
     );
 };
+
 
 
 
