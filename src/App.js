@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, createContext, useContext, useCallback } from 'react';
-import { Search, List, Wrench, Sun, Moon, LogOut, FileDown, Printer, Save, CheckCircle, AlertTriangle, Upload, Trash2, XCircle, UserPlus, KeyRound, PlusCircle, MessageSquare, Archive, Edit, Home, Menu, Filter, RotateCcw, FileUp, GitMerge, Eye, Trophy, Crown, BarChart2, Users, Package, StickyNote, Settings, ChevronsUpDown, ChevronUp, ChevronDown, ClipboardList, Plane } from 'lucide-react';
+import { Search, List, Wrench, Sun, Moon, LogOut, FileDown, Printer, Save, CheckCircle, AlertTriangle, Upload, Trash2, XCircle, UserPlus, KeyRound, PlusCircle, MessageSquare, Archive, Edit, Home, Menu, Filter, RotateCcw, FileUp, GitMerge, Eye, Trophy, Crown, BarChart2, Users, Package, StickyNote, Settings, ChevronsUpDown, ChevronUp, ChevronDown, ClipboardList, Plane, ListChecks, Zap } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { pl } from 'date-fns/locale';
 import jsPDF from 'jspdf';
@@ -1918,146 +1918,182 @@ const RegisterView = ({ showLogin }) => {
 
 const DashboardView = ({ user, onNavigate }) => {
     const [stats, setStats] = useState(null);
+    const [tasks, setTasks] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const { showNotification } = useNotification();
-    const [goalInput, setGoalInput] = useState(user.salesGoal || 0);
-    const [manualSaleInput, setManualSaleInput] = useState('');
+    const [layout, setLayout] = useState(user.dashboardLayout || []);
+    const [isCustomizeModalOpen, setIsCustomizeModalOpen] = useState(false);
 
-    const fetchStats = useCallback(async () => {
+    const availableWidgets = useMemo(() => ({
+        'stats_products': { name: 'Liczba Produktów', component: (props) => <StatCard {...props} title="Produktów w bazie" value={stats?.productCount} icon={<Package />} /> },
+        'stats_pending_orders': { name: 'Zamówienia Oczekujące', component: (props) => <StatCard {...props} title="Zamówień do skompletowania" value={stats?.pendingOrders} icon={<List />} onClick={() => onNavigate('picking')} /> },
+        'stats_completed_orders': { name: 'Zamówienia Zrealizowane', component: (props) => <StatCard {...props} title="Zamówień skompletowanych" value={stats?.completedOrders} icon={<CheckCircle />} onClick={() => onNavigate('orders')} /> },
+        'quick_actions': { name: 'Szybkie Akcje', component: (props) => <QuickActionsWidget {...props} onNavigate={onNavigate} /> },
+        'my_tasks': { name: 'Moje Zadania', component: (props) => <MyTasksWidget {...props} tasks={tasks} onNavigate={onNavigate} /> },
+        'recent_activity': { name: 'Ostatnia Aktywność', component: (props) => <RecentActivityWidget {...props} /> },
+    }), [stats, tasks, onNavigate]);
+
+    const fetchDashboardData = useCallback(async () => {
         setIsLoading(true);
         try {
-            const data = await api.getDashboardStats();
-            setStats(data);
-            setGoalInput(data.individualSalesGoal);
+            const [statsData, tasksData] = await Promise.all([
+                api.getDashboardStats(),
+                api.getKanbanTasks(user.id)
+            ]);
+            setStats(statsData);
+            setTasks(tasksData.filter(t => t.status !== 'done'));
         } catch (error) {
             showNotification(error.message, 'error');
         } finally {
             setIsLoading(false);
         }
-    }, [showNotification]);
+    }, [user.id, showNotification]);
 
     useEffect(() => {
-        fetchStats();
-    }, [fetchStats]);
+        fetchDashboardData();
+    }, [fetchDashboardData]);
 
-    const handleSetGoal = async (e) => {
-        e.preventDefault();
-        const goalValue = parseFloat(goalInput);
-        if (isNaN(goalValue) || goalValue < 0) {
-            showNotification('Wprowadź poprawną wartość celu.', 'error');
-            return;
-        }
+    const handleLayoutChange = async (newLayout) => {
+        setLayout(newLayout);
         try {
-            await api.setUserGoal(goalValue);
-            showNotification('Cel miesięczny został zaktualizowany!', 'success');
-            fetchStats();
+            await api.updateUserDashboardLayout(newLayout);
+            showNotification('Układ pulpitu został zapisany.', 'success');
         } catch (error) {
             showNotification(error.message, 'error');
         }
     };
     
-    const handleAddManualSale = async (e) => {
+    // Prosta implementacja drag-and-drop
+    const draggedItem = useRef(null);
+    const onDragStart = (e, index) => {
+        draggedItem.current = index;
+        e.dataTransfer.effectAllowed = 'move';
+    };
+    const onDragOver = (e, index) => {
         e.preventDefault();
-        const saleValue = parseFloat(manualSaleInput);
-        if (isNaN(saleValue)) {
-            showNotification('Wprowadź poprawną wartość sprzedaży.', 'error');
+        const draggedOverItem = index;
+        if (draggedItem.current === draggedOverItem) {
             return;
         }
-        try {
-            await api.addManualSales(saleValue);
-            showNotification('Sprzedaż została dodana!', 'success');
-            setManualSaleInput('');
-            fetchStats(); // Odśwież statystyki
-        } catch (error) {
-            showNotification(error.message, 'error');
-        }
+        const items = [...layout];
+        const item = items.splice(draggedItem.current, 1)[0];
+        items.splice(draggedOverItem, 0, item);
+        draggedItem.current = draggedOverItem;
+        setLayout(items);
+    };
+    const onDragEnd = () => {
+        handleLayoutChange(layout);
+        draggedItem.current = null;
     };
 
-    const individualGoalProgress = stats?.individualSalesGoal > 0 ? ((stats?.individualMonthlySales || 0) / stats.individualSalesGoal) * 100 : 0;
-    const totalGoalProgress = stats?.totalSalesGoal > 0 ? ((stats?.totalMonthlySales || 0) / stats.totalSalesGoal) * 100 : 0;
-
-    const StatCard = ({ title, value, icon, color, onClick }) => (
-        <div onClick={onClick} className={`bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md flex items-center text-left transition-all hover:shadow-xl hover:scale-105 ${onClick ? 'cursor-pointer' : ''}`}>
-            <div className={`p-4 ${color} rounded-full`}>{icon}</div>
-            <div className="ml-4">
-                <p className="text-3xl font-bold">{isLoading ? '...' : value}</p>
-                <p className="text-gray-500 dark:text-gray-400">{title}</p>
-            </div>
-        </div>
-    );
+    if (isLoading) return <div className="text-center p-8">Ładowanie pulpitu...</div>;
 
     return (
         <div className="p-4 md:p-8">
-            <h1 className="text-3xl md:text-4xl font-bold">Witaj, {user.username}!</h1>
-            <p className="mt-2 text-lg text-gray-500 dark:text-gray-400">{format(new Date(), 'eeee, PPPP', { locale: pl })}</p>
-            
-            <div className="mt-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                <StatCard title="Produktów w bazie" value={stats?.productCount} icon={<Package className="h-8 w-8 text-blue-600" />} color="bg-blue-100 dark:bg-blue-900/30" />
-                <StatCard title="Zamówień do skompletowania" value={stats?.pendingOrders} icon={<List className="h-8 w-8 text-orange-600" />} color="bg-orange-100 dark:bg-orange-900/30" onClick={() => onNavigate('picking')} />
-                <StatCard title="Zamówień skompletowanych" value={stats?.completedOrders} icon={<CheckCircle className="h-8 w-8 text-green-600" />} color="bg-green-100 dark:bg-green-900/30" onClick={() => onNavigate('orders')} />
+            <div className="flex justify-between items-center mb-6">
+                <h1 className="text-3xl font-bold">Panel Główny</h1>
+                <button onClick={() => setIsCustomizeModalOpen(true)} className="flex items-center px-4 py-2 bg-gray-200 dark:bg-gray-700 text-sm rounded-lg">
+                    <Settings className="w-4 h-4 mr-2"/>Dostosuj
+                </button>
             </div>
-
-            <div className="mt-8 grid grid-cols-1 lg:grid-cols-3 gap-8">
-                <div className="lg:col-span-2 space-y-8">
-                    <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md">
-                        <h2 className="text-2xl font-bold mb-4">Cele Sprzedażowe</h2>
-                        <div className="space-y-4">
-                            <div>
-                                <h3 className="text-lg font-semibold">Twój cel miesięczny</h3>
-                                <div className="flex justify-between mb-1 text-sm">
-                                    <span className="font-medium text-indigo-700 dark:text-white">Postęp</span>
-                                    <span>{(stats?.individualMonthlySales || 0).toFixed(2)} / {(stats?.individualSalesGoal || 0).toFixed(2)} PLN</span>
-                                </div>
-                                <div className="w-full bg-gray-200 rounded-full h-4 dark:bg-gray-700">
-                                    <div className="bg-indigo-600 h-4 rounded-full" style={{ width: `${Math.min(individualGoalProgress, 100)}%` }}></div>
-                                </div>
-                            </div>
-                            <div>
-                                <h3 className="text-lg font-semibold">Cel ogólny</h3>
-                                <div className="flex justify-between mb-1 text-sm">
-                                    <span className="font-medium text-purple-700 dark:text-white">Postęp</span>
-                                    <span>{(stats?.totalMonthlySales || 0).toFixed(2)} / {(stats?.totalSalesGoal || 0).toFixed(2)} PLN</span>
-                                </div>
-                                <div className="w-full bg-gray-200 rounded-full h-4 dark:bg-gray-700">
-                                    <div className="bg-purple-600 h-4 rounded-full" style={{ width: `${Math.min(totalGoalProgress, 100)}%` }}></div>
-                                </div>
-                            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+                {layout.map((widgetId, index) => {
+                    const Widget = availableWidgets[widgetId];
+                    if (!Widget) return null;
+                    const Component = Widget.component;
+                    return (
+                        <div
+                            key={widgetId}
+                            draggable
+                            onDragStart={(e) => onDragStart(e, index)}
+                            onDragOver={(e) => onDragOver(e, index)}
+                            onDragEnd={onDragEnd}
+                            className="cursor-move"
+                        >
+                           <Component />
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
-                            <form onSubmit={handleSetGoal} className="flex items-center gap-2">
-                                <input type="number" value={goalInput} onChange={(e) => setGoalInput(e.target.value)} className="p-2 border rounded-md bg-gray-50 dark:bg-gray-700 w-full" placeholder="Ustaw swój cel..."/>
-                                <button type="submit" className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">Ustaw</button>
-                            </form>
-                            <form onSubmit={handleAddManualSale} className="flex items-center gap-2">
-                                <input type="number" value={manualSaleInput} onChange={(e) => setManualSaleInput(e.target.value)} className="p-2 border rounded-md bg-gray-50 dark:bg-gray-700 w-full" placeholder="Dodaj sprzedaż ręcznie..."/>
-                                <button type="submit" className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">Dodaj</button>
-                            </form>
-                        </div>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md">
-                            <h2 className="text-2xl font-bold mb-4 flex items-center"><Trophy className="mr-2 text-yellow-500"/> Najczęściej kupowane</h2>
-                            {isLoading ? <p>Ładowanie...</p> : (
-                                <ul className="space-y-3">
-                                    {stats?.topProducts.map(p => <li key={p._id} className="flex justify-between items-center text-sm"><span>{p._id}</span><span className="font-bold">{p.totalSold} szt.</span></li>)}
-                                </ul>
-                            )}
-                        </div>
-                        <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md">
-                            <h2 className="text-2xl font-bold mb-4 flex items-center"><Crown className="mr-2 text-blue-500"/> Najlepsi klienci</h2>
-                            {isLoading ? <p>Ładowanie...</p> : (
-                                <ul className="space-y-3">
-                                    {stats?.topCustomers.map(c => <li key={c._id} className="flex justify-between items-center text-sm"><span>{c._id}</span><span className="font-bold">{c.orderCount} zam.</span></li>)}
-                                </ul>
-                            )}
-                        </div>
-                    </div>
-                </div>
-                <div className="lg:col-span-1">
-                     <NotesWidget />
-                </div>
+                    );
+                })}
             </div>
+            <CustomizeDashboardModal 
+                isOpen={isCustomizeModalOpen}
+                onClose={() => setIsCustomizeModalOpen(false)}
+                availableWidgets={availableWidgets}
+                currentLayout={layout}
+                onSave={handleLayoutChange}
+            />
         </div>
+    );
+};
+
+const StatCard = ({ title, value, icon, onClick }) => (
+    <div onClick={onClick} className={`bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md flex items-center text-left transition-all hover:shadow-xl hover:scale-105 ${onClick ? 'cursor-pointer' : ''}`}>
+        <div className="p-4 bg-gray-100 dark:bg-gray-900/30 rounded-full">{React.cloneElement(icon, { className: "h-8 w-8 text-indigo-500" })}</div>
+        <div className="ml-4">
+            <p className="text-3xl font-bold">{value ?? '...'}</p>
+            <p className="text-gray-500 dark:text-gray-400">{title}</p>
+        </div>
+    </div>
+);
+
+const QuickActionsWidget = ({ onNavigate }) => (
+    <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md h-full">
+        <h3 className="font-bold mb-4 flex items-center"><Zap className="w-5 h-5 mr-2 text-yellow-500"/>Szybkie Akcje</h3>
+        <div className="grid grid-cols-2 gap-4">
+            <button onClick={() => onNavigate('order')} className="p-3 bg-blue-500 text-white rounded-lg text-sm">Nowe Zamówienie</button>
+            <button onClick={() => onNavigate('delegations')} className="p-3 bg-green-500 text-white rounded-lg text-sm">Nowa Delegacja</button>
+        </div>
+    </div>
+);
+
+const MyTasksWidget = ({ tasks, onNavigate }) => (
+    <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md h-full">
+        <h3 className="font-bold mb-4 flex items-center"><ListChecks className="w-5 h-5 mr-2 text-red-500"/>Moje Zadania</h3>
+        <div className="space-y-2 text-sm">
+            {tasks.length > 0 ? tasks.slice(0, 3).map(task => (
+                <p key={task._id} className="truncate">{task.content}</p>
+            )) : <p className="text-gray-400">Brak zadań.</p>}
+        </div>
+        <button onClick={() => onNavigate('kanban')} className="text-sm text-indigo-500 mt-4">Zobacz wszystkie</button>
+    </div>
+);
+
+const RecentActivityWidget = () => (
+    <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md h-full">
+         <h3 className="font-bold mb-4">Ostatnia Aktywność</h3>
+         <p className="text-sm text-gray-400">Moduł w przygotowaniu.</p>
+    </div>
+);
+
+const CustomizeDashboardModal = ({ isOpen, onClose, availableWidgets, currentLayout, onSave }) => {
+    const [layout, setLayout] = useState(currentLayout);
+
+    const toggleWidget = (widgetId) => {
+        setLayout(prev => 
+            prev.includes(widgetId) ? prev.filter(id => id !== widgetId) : [...prev, widgetId]
+        );
+    };
+    
+    return (
+        <Modal isOpen={isOpen} onClose={onClose} title="Dostosuj Pulpit">
+            <div className="space-y-4">
+                <p className="text-sm text-gray-500">Zaznacz komponenty, które mają być widoczne na Twoim pulpicie.</p>
+                {Object.entries(availableWidgets).map(([id, { name }]) => (
+                    <label key={id} className="flex items-center">
+                        <input
+                            type="checkbox"
+                            className="h-4 w-4 rounded"
+                            checked={layout.includes(id)}
+                            onChange={() => toggleWidget(id)}
+                        />
+                        <span className="ml-3">{name}</span>
+                    </label>
+                ))}
+            </div>
+            <div className="flex justify-end mt-6">
+                <button onClick={() => onSave(layout)} className="px-4 py-2 bg-blue-600 text-white rounded-lg">Zapisz</button>
+            </div>
+        </Modal>
     );
 };
 

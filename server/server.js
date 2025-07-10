@@ -48,6 +48,7 @@ const userSchema = new mongoose.Schema({
     salesGoal: { type: Number, default: 0 },
     manualSales: { type: Number, default: 0 },
     visibleModules: { type: [String], default: [] }
+	dashboardLayout: { type: [String], default: ['stats_products', 'stats_pending_orders', 'stats_completed_orders', 'quick_actions', 'my_tasks'] }
 });
 const User = mongoose.models.User || mongoose.model('User', userSchema);
 
@@ -250,7 +251,7 @@ app.post('/api/login', async (req, res) => {
         if (!isMatch) return res.status(401).json({ message: 'Nieprawidłowe dane logowania.' });
         const token = jwt.sign({ userId: user._id, role: user.role, username: user.username }, jwtSecret, { expiresIn: '1d' });
         // UPEWNIJ SIĘ, ŻE ZWRACASZ TUTAJ `visibleModules`
-        res.json({ token, user: { id: user._id, username: user.username, role: user.role, salesGoal: user.salesGoal, manualSales: user.manualSales, visibleModules: user.visibleModules } });
+        res.json({ token, user: { id: user._id, username: user.username, role: user.role, salesGoal: user.salesGoal, manualSales: user.manualSales, visibleModules: user.visibleModules, dashboardLayout: user.dashboardLayout } });
     } catch (error) {
         res.status(500).json({ message: 'Błąd serwera podczas logowania.', error: error.message });
     }
@@ -288,6 +289,17 @@ app.post('/api/user/manual-sales', authMiddleware, async (req, res) => {
         res.json({ manualSales: user.manualSales });
     } catch (error) {
         res.status(500).json({ message: 'Błąd podczas dodawania sprzedaży.' });
+    }
+});
+
+app.put('/api/user/dashboard-layout', authMiddleware, async (req, res) => {
+    try {
+        const { layout } = req.body;
+        const user = await User.findByIdAndUpdate(req.user.userId, { dashboardLayout: layout }, { new: true });
+        if (!user) return res.status(404).json({ message: 'Nie znaleziono użytkownika.' });
+        res.json({ message: 'Układ pulpitu zapisany.', layout: user.dashboardLayout });
+    } catch (error) {
+        res.status(500).json({ message: 'Błąd zapisywania układu pulpitu.' });
     }
 });
 
