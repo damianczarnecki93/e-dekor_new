@@ -2673,7 +2673,7 @@ const DelegationsView = ({ user, onNavigate, setCurrentOrder }) => {
 
     const { isLoaded, loadError } = useLoadScript({
         googleMapsApiKey: "AIzaSyDMr9jJIDp0M52-pvwJjehyXShfHmQ0AYE", // <-- WAŻNE: ZASTĄP SWOIM KLUCZEM
-        libraries,
+        libraries: ["places"],
     });
 
     const getSortIcon = (name) => {
@@ -2746,9 +2746,8 @@ const DelegationsView = ({ user, onNavigate, setCurrentOrder }) => {
         setDelegations(prev => prev.map(d => d._id === updatedDelegation._id ? updatedDelegation : d));
         setDetailsModal(prev => ({...prev, delegation: updatedDelegation}));
     };
-    
+
     if (loadError) return <div className="p-8 text-red-500">Błąd ładowania mapy. Sprawdź klucz API i ustawienia w Google Cloud Console.</div>;
-    if (!isLoaded) return <div className="p-8 text-center">Ładowanie mapy...</div>;
 
     return (
         <div className="p-4 md:p-8">
@@ -2797,7 +2796,7 @@ const DelegationsView = ({ user, onNavigate, setCurrentOrder }) => {
                 <DelegationForm onSubmit={handleAddDelegation} />
             </Modal>
              <Modal isOpen={detailsModal.isOpen} onClose={() => setDetailsModal({isOpen: false, delegation: null})} title="Szczegóły Delegacji" maxWidth="4xl">
-                {detailsModal.delegation && <DelegationDetails delegation={detailsModal.delegation} onUpdate={handleDelegationUpdate} onNavigate={onNavigate} setCurrentOrder={setCurrentOrder}/>}
+                {detailsModal.delegation && <DelegationDetails delegation={detailsModal.delegation} onUpdate={handleDelegationUpdate} onNavigate={onNavigate} setCurrentOrder={setCurrentOrder} isMapLoaded={isLoaded}/>}
             </Modal>
         </div>
     );
@@ -2836,7 +2835,14 @@ const DelegationForm = ({ onSubmit }) => {
             alert('Proszę wypełnić wszystkie wymagane pola.');
             return;
         }
-        onSubmit(formData);
+        // Symulacja Geokodowania - Zastąp to w przyszłości prawdziwym API
+        const geocodedClients = formData.clients.map(client => ({
+            ...client,
+            lat: 52.237049 + (Math.random() - 0.5) * 2, // Losowe współrzędne wokół Warszawy
+            lng: 21.017532 + (Math.random() - 0.5) * 2,
+        }));
+        
+        onSubmit({ ...formData, clients: geocodedClients });
     };
 
     return (
@@ -2870,7 +2876,7 @@ const DelegationForm = ({ onSubmit }) => {
     );
 };
 
-const DelegationDetails = ({ delegation, onUpdate, onNavigate, setCurrentOrder }) => {
+const DelegationDetails = ({ delegation, onUpdate, onNavigate, setCurrentOrder, isMapLoaded }) => {
     const { showNotification } = useNotification();
     const [visitRecapModal, setVisitRecapModal] = useState({ isOpen: false, clientIndex: null });
 
@@ -2916,6 +2922,8 @@ const DelegationDetails = ({ delegation, onUpdate, onNavigate, setCurrentOrder }
             showNotification(error.message, 'error');
         }
     };
+    
+    const validClients = delegation.clients.filter(c => c.lat && c.lng);
 
     return (
         <div>
@@ -2972,23 +2980,25 @@ const DelegationDetails = ({ delegation, onUpdate, onNavigate, setCurrentOrder }
                 </div>
                 <div>
                      <h3 className="text-xl font-semibold mb-2">Mapa Trasy</h3>
-                     <GoogleMap
-                        mapContainerStyle={mapContainerStyle}
-                        center={delegation.clients.length > 0 ? { lat: delegation.clients[0].lat, lng: delegation.clients[0].lng } : center}
-                        zoom={8}
-                     >
-                         {delegation.clients.map((client, index) => (
-                             <Marker key={index} position={{ lat: client.lat, lng: client.lng }} label={`${index + 1}`} />
-                         ))}
-                         <Polyline
-                             path={delegation.clients.map(c => ({lat: c.lat, lng: c.lng}))}
-                             options={{
-                                 strokeColor: "#FF0000",
-                                 strokeOpacity: 0.8,
-                                 strokeWeight: 2,
-                             }}
-                         />
-                     </GoogleMap>
+                     {isMapLoaded ? (
+                         <GoogleMap
+                            mapContainerStyle={mapContainerStyle}
+                            center={validClients.length > 0 ? { lat: validClients[0].lat, lng: validClients[0].lng } : center}
+                            zoom={8}
+                         >
+                             {validClients.map((client, index) => (
+                                 <Marker key={index} position={{ lat: client.lat, lng: client.lng }} label={`${index + 1}`} />
+                             ))}
+                             <Polyline
+                                 path={validClients.map(c => ({lat: c.lat, lng: c.lng}))}
+                                 options={{
+                                     strokeColor: "#FF0000",
+                                     strokeOpacity: 0.8,
+                                     strokeWeight: 2,
+                                 }}
+                             />
+                         </GoogleMap>
+                     ) : <div>Ładowanie mapy...</div>}
                 </div>
             </div>
 
@@ -3024,6 +3034,7 @@ const VisitRecapForm = ({ onSubmit }) => {
         </form>
     );
 };
+
 
 
 export default function AppWrapper() {
