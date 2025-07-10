@@ -218,6 +218,7 @@ app.post('/api/login', async (req, res) => {
         const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) return res.status(401).json({ message: 'Nieprawidłowe dane logowania.' });
         const token = jwt.sign({ userId: user._id, role: user.role, username: user.username }, jwtSecret, { expiresIn: '1d' });
+        // UPEWNIJ SIĘ, ŻE ZWRACASZ TUTAJ `visibleModules`
         res.json({ token, user: { id: user._id, username: user.username, role: user.role, salesGoal: user.salesGoal, manualSales: user.manualSales, visibleModules: user.visibleModules } });
     } catch (error) {
         res.status(500).json({ message: 'Błąd serwera podczas logowania.', error: error.message });

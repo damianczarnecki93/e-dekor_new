@@ -276,7 +276,7 @@ const api = {
         if (!response.ok) throw new Error('Błąd zmiany roli użytkownika');
         return await response.json();
     },
-    updateUserModules: async (userId, modules) => {
+       updateUserModules: async (userId, modules) => {
         const response = await fetchWithAuth(`${API_BASE_URL}/api/admin/users/${userId}/modules`, { method: 'PUT', body: JSON.stringify({ modules }) });
         if (!response.ok) throw new Error('Błąd aktualizacji modułów użytkownika');
         return await response.json();
@@ -1559,6 +1559,16 @@ const AdminUsersView = ({ user }) => {
     const [modalState, setModalState] = useState({ isOpen: false, user: null, type: '' });
     const [newPassword, setNewPassword] = useState('');
 
+    const allModules = [
+        { id: 'search', label: 'Wyszukiwarka' },
+        { id: 'order', label: 'Nowe Zamówienie' },
+        { id: 'orders', label: 'Zamówienia' },
+        { id: 'picking', label: 'Kompletacja' },
+        { id: 'inventory', label: 'Inwentaryzacja' },
+        { id: 'kanban', label: 'Tablica Zadań' },
+        { id: 'delegations', label: 'Delegacje' }
+    ];
+
     const fetchUsers = useCallback(async () => {
         try {
             const userList = await api.getUsers();
@@ -1567,7 +1577,31 @@ const AdminUsersView = ({ user }) => {
             showNotification(error.message, 'error');
         }
     }, [showNotification]);
+    
     useEffect(() => { fetchUsers(); }, [fetchUsers]);
+
+    const handleModuleChange = async (userId, moduleId, isVisible) => {
+        const targetUser = users.find(u => u._id === userId);
+        if (!targetUser) return;
+
+        let updatedModules;
+        const currentModules = targetUser.visibleModules || [];
+
+        if (isVisible) {
+            updatedModules = [...currentModules, moduleId];
+        } else {
+            updatedModules = currentModules.filter(m => m !== moduleId);
+        }
+        
+        try {
+            await api.updateUserModules(userId, updatedModules);
+            showNotification('Uprawnienia zaktualizowane', 'success');
+            // Aktualizuj stan lokalnie, aby uniknąć ponownego pobierania danych
+            setUsers(users.map(u => u._id === userId ? {...u, visibleModules: updatedModules} : u));
+        } catch (error) {
+            showNotification(error.message, 'error');
+        }
+    };
 
     const handleApproveUser = async (userId) => {
         try { await api.approveUser(userId); showNotification('Użytkownik został zaakceptowany!', 'success'); fetchUsers(); }
@@ -1595,14 +1629,29 @@ const AdminUsersView = ({ user }) => {
             <h2 className="text-2xl font-semibold mb-4">Zarządzanie Użytkownikami</h2>
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-x-auto">
                 <table className="w-full text-left">
-                    <thead className="bg-gray-50 dark:bg-gray-700"><tr><th className="p-4 font-semibold">Użytkownik</th><th className="p-4 font-semibold">Status</th><th className="p-4 font-semibold">Rola</th><th className="p-4 font-semibold text-right">Akcje</th></tr></thead>
+                    <thead className="bg-gray-50 dark:bg-gray-700"><tr><th className="p-4 font-semibold">Użytkownik</th><th className="p-4 font-semibold">Rola</th><th className="p-4 font-semibold">Dostępne moduły</th><th className="p-4 font-semibold text-right">Akcje</th></tr></thead>
                     <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                         {users.map(u => (
                             <tr key={u._id}>
-                                <td className="p-4 font-medium">{u.username}</td>
-                                <td className="p-4"><span className={`px-2 py-1 text-xs font-semibold rounded-full capitalize ${u.status === 'oczekujący' ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}`}>{u.status}</span></td>
+                                <td className="p-4 font-medium">{u.username}<br/><span className={`text-xs font-semibold rounded-full capitalize ${u.status === 'oczekujący' ? 'text-yellow-500' : 'text-green-500'}`}>{u.status}</span></td>
                                 <td className="p-4">
                                     <select value={u.role} onChange={(e) => handleRoleChange(u._id, e.target.value)} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-600 dark:border-gray-500 dark:placeholder-gray-400 dark:text-white" disabled={user.id === u._id}><option value="user">Użytkownik</option><option value="administrator">Administrator</option></select>
+                                </td>
+                                <td className="p-4">
+                                    <div className="flex flex-wrap gap-2">
+                                        {allModules.map(module => (
+                                            <label key={module.id} className="flex items-center text-sm">
+                                                <input
+                                                    type="checkbox"
+                                                    className="form-checkbox h-4 w-4 text-indigo-600 rounded"
+                                                    checked={u.visibleModules?.includes(module.id) || false}
+                                                    onChange={(e) => handleModuleChange(u._id, module.id, e.target.checked)}
+                                                    disabled={u.role === 'administrator'}
+                                                />
+                                                <span className="ml-2">{module.label}</span>
+                                            </label>
+                                        ))}
+                                    </div>
                                 </td>
                                 <td className="p-4 text-right whitespace-nowrap">
                                     {u.status === 'oczekujący' && (<button onClick={() => handleApproveUser(u._id)} className="px-3 py-1 bg-green-500 text-white text-sm font-semibold rounded-lg hover:bg-green-600 mr-2">Akceptuj</button>)}
@@ -1619,6 +1668,7 @@ const AdminUsersView = ({ user }) => {
         </div>
     );
 };
+
 
 const AdminProductsView = () => {
     const [products, setProducts] = useState([]);
@@ -2573,6 +2623,7 @@ const TaskDetails = ({ task, onSave }) => {
         </div>
     );
 };
+
 
 
 const DelegationsView = ({ user }) => {
