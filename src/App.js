@@ -2084,6 +2084,7 @@ function App() {
     const [isLoading, setIsLoading] = useState(true);
     const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
     const [isNavOpen, setIsNavOpen] = useState(false);
+    const [expandedCategories, setExpandedCategories] = useState(['Główne']); // Domyślnie rozwinięta
 
     useEffect(() => {
         const savedTheme = localStorage.getItem('theme');
@@ -2164,6 +2165,12 @@ function App() {
         setIsDirty(false);
         setCurrentOrder({ customerName: '', items: [], isDirty: false });
         handleNavigate('order');
+    };
+    
+    const toggleCategory = (category) => {
+        setExpandedCategories(prev => 
+            prev.includes(category) ? prev.filter(c => c !== category) : [...prev, category]
+        );
     };
 
     const navConfig = useMemo(() => [
@@ -2254,8 +2261,11 @@ function App() {
                     <ul className="flex-grow overflow-y-auto">
                         {availableNav.map(category => (
                             <div key={category.category} className="my-2">
-                                <h3 className="px-6 mt-4 mb-2 text-xs font-semibold text-gray-400 uppercase">{category.category}</h3>
-                                {category.items.map(item => (
+                                <h3 onClick={() => toggleCategory(category.category)} className="px-6 mt-4 mb-2 text-xs font-semibold text-gray-400 uppercase flex justify-between items-center cursor-pointer">
+                                    {category.category}
+                                    {expandedCategories.includes(category.category) ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                                </h3>
+                                {expandedCategories.includes(category.category) && category.items.map(item => (
                                      <li key={item.id}>
                                         <button onClick={() => { item.action ? item.action() : handleNavigate(item.id); }} className={`w-full flex items-center justify-start h-12 px-6 text-base transition-colors duration-200 text-left ${activeView.view.startsWith(item.id) ? 'bg-indigo-50 dark:bg-gray-700 text-indigo-600 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'}`}>
                                             <item.icon className="h-5 w-5" />
@@ -2289,7 +2299,6 @@ function App() {
         </>
     );
 }
-
 
 const UserChangePasswordModal = ({ isOpen, onClose }) => {
     const [currentPassword, setCurrentPassword] = useState('');
