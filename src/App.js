@@ -4,7 +4,7 @@ import { format, parseISO } from 'date-fns';
 import { pl } from 'date-fns/locale';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
-import { GoogleMap, useLoadScript, Marker, Polyline } from '@react-google-maps/api';
+import { GoogleMap, useLoadScript, Marker, Polyline, DirectionsRenderer } from '@react-google-maps/api';
 
 // --- Komponent Granicy Błędu (Error Boundary) ---
 class ErrorBoundary extends React.Component {
@@ -3059,7 +3059,7 @@ const DelegationDetails = ({ delegation, onUpdate, onNavigate, setCurrentOrder, 
                             onLoad={map => { mapRef.current = map; }}
                          >
                             {directionsResponse ? (
-                                <DirectionsResponse directions={directionsResponse} />
+                                <DirectionsRenderer directions={directionsResponse} />
                             ) : (
                                 validClients.map((client, index) => (
                                     <Marker key={index} position={{ lat: client.lat, lng: client.lng }} label={`${index + 1}`} />
