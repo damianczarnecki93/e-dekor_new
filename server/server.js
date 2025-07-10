@@ -124,6 +124,7 @@ const delegationSchema = new mongoose.Schema({
     startTime: Date,
     endTime: Date
 });
+
 const Delegation = mongoose.models.Delegation || mongoose.model('Delegation', delegationSchema);
 
 // NOWY SCHEMAT KONFIGURACJI POCZTY
@@ -1146,6 +1147,7 @@ app.post('/api/delegations/:id/visits/:clientIndex/end', authMiddleware, async (
         res.status(500).json({ message: 'Błąd zakończenia wizyty' });
     }
 });
+
 
 
 // --- Start serwera ---

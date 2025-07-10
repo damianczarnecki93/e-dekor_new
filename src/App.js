@@ -2897,6 +2897,7 @@ const DelegationDetails = ({ delegation, onUpdate, onNavigate, setCurrentOrder }
 
     return (
         <div>
+            {/* Tutaj widok szczegółów delegacji i lista klientów */}
             <Modal isOpen={visitRecapModal.isOpen} onClose={() => setVisitRecapModal({isOpen: false})} title="Podsumowanie wizyty">
                 <VisitRecapForm onSubmit={handleEndVisit} />
             </Modal>
@@ -2929,6 +2930,7 @@ const VisitRecapForm = ({ onSubmit }) => {
         </form>
     );
 };
+
 
 export default function AppWrapper() {
     return (
