@@ -14,7 +14,15 @@ const nodemailer = require('nodemailer');
 const axios = require('axios');
 
 const app = express();
-app.use(cors());
+const corsOptions = {
+  origin: '*', // Pozwala na żądania z dowolnego źródła
+  methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+  credentials: true,
+  optionsSuccessStatus: 204
+};
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions)); // Umożliwia obsługę zapytań preflight (OPTIONS)
+
 app.use(express.json());
 
 // --- Konfiguracja i połączenie z bazą danych ---

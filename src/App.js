@@ -359,6 +359,18 @@ const api = {
         if (!response.ok) throw new Error('Błąd tworzenia delegacji');
         return await response.json();
     },
+	saveDelegation: async (delegation) => {
+        const url = delegation._id 
+            ? `${API_BASE_URL}/api/delegations/${delegation._id}` 
+            : `${API_BASE_URL}/api/delegations`;
+        const method = delegation._id ? 'PUT' : 'POST';
+        const response = await fetchWithAuth(url, { method, body: JSON.stringify(delegation) });
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || 'Błąd zapisywania delegacji');
+        }
+        return await response.json();
+    },
     updateDelegationStatus: async (delegationId, status) => {
         const response = await fetchWithAuth(`${API_BASE_URL}/api/delegations/${delegationId}/status`, { method: 'PUT', body: JSON.stringify({ status }) });
         if (!response.ok) throw new Error('Błąd aktualizacji statusu delegacji');
