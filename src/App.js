@@ -2919,6 +2919,20 @@ const DelegationForm = ({ onSubmit, delegationData }) => {
 const DelegationDetails = ({ delegation, onUpdate, onNavigate, setCurrentOrder, isMapLoaded }) => {
     const { showNotification } = useNotification();
     const [visitRecapModal, setVisitRecapModal] = useState({ isOpen: false, clientIndex: null });
+    const mapRef = useRef();
+
+    const validClients = useMemo(() => delegation.clients.filter(c => c.lat && c.lng), [delegation.clients]);
+
+    useEffect(() => {
+        if (isMapLoaded && mapRef.current && validClients.length > 0) {
+            const bounds = new window.google.maps.LatLngBounds();
+            validClients.forEach(client => {
+                bounds.extend(new window.google.maps.LatLng(client.lat, client.lng));
+            });
+            mapRef.current.fitBounds(bounds);
+        }
+    }, [isMapLoaded, validClients]);
+
 
     const handleStartDelegation = async () => {
         try {
@@ -2962,12 +2976,10 @@ const DelegationDetails = ({ delegation, onUpdate, onNavigate, setCurrentOrder, 
             showNotification(error.message, 'error');
         }
     };
-    
-    const validClients = delegation.clients.filter(c => c.lat && c.lng);
 
     return (
         <div>
-            <div className="flex justify-between items-center mb-4">
+            <div className="flex flex-wrap justify-between items-center mb-4 gap-2">
                 <h2 className="text-2xl font-bold">{delegation.destination}</h2>
                 <div>
                     {delegation.status === 'Zaakceptowana' && !delegation.startTime && (
@@ -2989,7 +3001,7 @@ const DelegationDetails = ({ delegation, onUpdate, onNavigate, setCurrentOrder, 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                     <h3 className="text-xl font-semibold mb-2">Plan Wizyt</h3>
-                    <div className="space-y-4">
+                    <div className="space-y-4 max-h-[400px] overflow-y-auto">
                         {delegation.clients.map((client, index) => (
                             <div key={index} className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
                                 <div className="flex justify-between items-start">
@@ -3023,8 +3035,9 @@ const DelegationDetails = ({ delegation, onUpdate, onNavigate, setCurrentOrder, 
                      {isMapLoaded ? (
                          <GoogleMap
                             mapContainerStyle={MAP_CONTAINER_STYLE}
-                            center={validClients.length > 0 ? { lat: validClients[0].lat, lng: validClients[0].lng } : CENTER}
-                            zoom={8}
+                            center={CENTER}
+                            zoom={7}
+                            onLoad={map => { mapRef.current = map; }}
                          >
                              {validClients.map((client, index) => (
                                  <Marker key={index} position={{ lat: client.lat, lng: client.lng }} label={`${index + 1}`} />
@@ -3048,6 +3061,7 @@ const DelegationDetails = ({ delegation, onUpdate, onNavigate, setCurrentOrder, 
         </div>
     );
 };
+
 
 const VisitRecapForm = ({ onSubmit }) => {
     const [visitNotes, setVisitNotes] = useState('');
