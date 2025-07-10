@@ -5,13 +5,13 @@ import { pl } from 'date-fns/locale';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { GoogleMap, useLoadScript, Marker, Polyline } from '@react-google-maps/api';
-const libraries = ["places"];
-const mapContainerStyle = {
+const LIBRARIES = ["places"]; // ZMIANA: Wyniesienie stałej poza komponent
+const MAP_CONTAINER_STYLE = {
   width: '100%',
   height: '400px',
   borderRadius: '0.5rem'
 };
-const center = { // Domyślne centrum mapy (Polska)
+const CENTER = { // Domyślne centrum mapy (Polska)
   lat: 52.237049,
   lng: 21.017532
 };
@@ -120,7 +120,7 @@ const useSortableData = (items, config = null) => {
 
 
 // --- API Client ---
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://dekor.onrender.com';
+const API_BASE_URL = 'https://dekor.onrender.com';
 
 const fetchWithAuth = async (url, options = {}) => {
     const token = localStorage.getItem('userToken');
@@ -2673,7 +2673,9 @@ const DelegationsView = ({ user, onNavigate, setCurrentOrder }) => {
 
     const { isLoaded, loadError } = useLoadScript({
         googleMapsApiKey: "AIzaSyDMr9jJIDp0M52-pvwJjehyXShfHmQ0AYE", // <-- WAŻNE: ZASTĄP SWOIM KLUCZEM
-        libraries: ["places"],
+        libraries: LIBRARIES, // ZMIANA: Użycie stałej zdefiniowanej na zewnątrz
+    });
+
     });
 
     const getSortIcon = (name) => {
