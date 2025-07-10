@@ -2835,14 +2835,7 @@ const DelegationForm = ({ onSubmit }) => {
             alert('Proszę wypełnić wszystkie wymagane pola.');
             return;
         }
-        // Symulacja Geokodowania - Zastąp to w przyszłości prawdziwym API
-        const geocodedClients = formData.clients.map(client => ({
-            ...client,
-            lat: 52.237049 + (Math.random() - 0.5) * 2, // Losowe współrzędne wokół Warszawy
-            lng: 21.017532 + (Math.random() - 0.5) * 2,
-        }));
-        
-        onSubmit({ ...formData, clients: geocodedClients });
+        onSubmit(formData);
     };
 
     return (
@@ -2875,6 +2868,7 @@ const DelegationForm = ({ onSubmit }) => {
         </form>
     );
 };
+
 
 const DelegationDetails = ({ delegation, onUpdate, onNavigate, setCurrentOrder, isMapLoaded }) => {
     const { showNotification } = useNotification();
