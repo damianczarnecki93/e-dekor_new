@@ -282,6 +282,11 @@ const api = {
         if (!response.ok) throw new Error('Błąd aktualizacji modułów użytkownika');
         return await response.json();
     },
+	updateUserDashboardLayout: async (layout) => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/api/user/dashboard-layout`, { method: 'PUT', body: JSON.stringify({ layout }) });
+        if (!response.ok) throw new Error('Błąd zapisywania układu pulpitu');
+        return await response.json();
+    },
     deleteUser: async (userId) => {
         const response = await fetchWithAuth(`${API_BASE_URL}/api/admin/users/${userId}`, { method: 'DELETE' });
         if (!response.ok) throw new Error('Błąd usuwania użytkownika');
