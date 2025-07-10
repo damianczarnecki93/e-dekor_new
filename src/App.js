@@ -2671,7 +2671,7 @@ const DelegationsView = ({ user, onNavigate, setCurrentOrder }) => {
     const { items: sortedDelegations, requestSort, sortConfig } = useSortableData(delegations);
 
     const { isLoaded, loadError } = useLoadScript({
-        googleMapsApiKey: "AIzaSyDMr9jJIDp0M52-pvwJjehyXShfHmQ0AYE",
+        googleMapsApiKey: "TAIzaSyDMr9jJIDp0M52-pvwJjehyXShfHmQ0AYE", // <-- WAŻNE: ZASTĄP SWOIM KLUCZEM
         libraries: LIBRARIES,
     });
 
@@ -2801,7 +2801,6 @@ const DelegationsView = ({ user, onNavigate, setCurrentOrder }) => {
     );
 };
 
-
 const DelegationForm = ({ onSubmit }) => {
     const [formData, setFormData] = useState({
         destination: '', purpose: '', dateFrom: '', dateTo: '', transport: '', kms: 0, advancePayment: 0, clients: [{ name: '', address: '', note: '' }]
@@ -2868,7 +2867,6 @@ const DelegationForm = ({ onSubmit }) => {
         </form>
     );
 };
-
 
 const DelegationDetails = ({ delegation, onUpdate, onNavigate, setCurrentOrder, isMapLoaded }) => {
     const { showNotification } = useNotification();
@@ -2976,8 +2974,8 @@ const DelegationDetails = ({ delegation, onUpdate, onNavigate, setCurrentOrder, 
                      <h3 className="text-xl font-semibold mb-2">Mapa Trasy</h3>
                      {isMapLoaded ? (
                          <GoogleMap
-                            mapContainerStyle={mapContainerStyle}
-                            center={validClients.length > 0 ? { lat: validClients[0].lat, lng: validClients[0].lng } : center}
+                            mapContainerStyle={MAP_CONTAINER_STYLE}
+                            center={validClients.length > 0 ? { lat: validClients[0].lat, lng: validClients[0].lng } : CENTER}
                             zoom={8}
                          >
                              {validClients.map((client, index) => (
@@ -3028,7 +3026,6 @@ const VisitRecapForm = ({ onSubmit }) => {
         </form>
     );
 };
-
 
 
 export default function AppWrapper() {
