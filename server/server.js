@@ -11,6 +11,7 @@ const iconv = require('iconv-lite');
 const fs = require('fs');
 const path = require('path');
 const nodemailer = require('nodemailer');
+const axios = require('axios');
 
 const app = express();
 app.use(cors());
@@ -190,7 +191,25 @@ const parseCsv = (buffer) => {
             .on('error', (err) => reject(err));
     });
 };
-
+async function geocodeAddress(address) {
+    try {
+        const response = await axios.get('https://maps.googleapis.com/maps/api/geocode/json', {
+            params: {
+                address: address,
+                key: process.env.Maps_API_KEY,
+            },
+        });
+        const { results } = response.data;
+        if (results && results.length > 0) {
+            const { lat, lng } = results[0].geometry.location;
+            return { lat, lng };
+        }
+        return null;
+    } catch (error) {
+        console.error('Błąd geokodowania:', error);
+        return null;
+    }
+}
 
 // --- API Endpoints - Uwierzytelnianie ---
 app.post('/api/register', async (req, res) => {
@@ -1041,17 +1060,31 @@ app.delete('/api/kanban/tasks/:id', authMiddleware, async (req, res) => {
 
 
 // --- Endpointy Delegacji (bez zmian) ---
-app.get('/api/delegations', authMiddleware, async (req, res) => {
+app.post('/api/delegations', authMiddleware, async (req, res) => {
     try {
-        let delegations;
-        if (req.user.role === 'administrator') {
-            delegations = await Delegation.find().sort({ dateFrom: -1 });
-        } else {
-            delegations = await Delegation.find({ authorId: req.user.userId }).sort({ dateFrom: -1 });
-        }
-        res.json(delegations);
+        const { destination, purpose, dateFrom, dateTo, notes, kms, advancePayment, transport, clients } = req.body;
+        
+        const geocodedClients = await Promise.all(
+            clients.map(async (client) => {
+                const location = await geocodeAddress(client.address);
+                return {
+                    ...client,
+                    lat: location ? location.lat : null,
+                    lng: location ? location.lng : null,
+                };
+            })
+        );
+
+        const newDelegation = new Delegation({
+            destination, purpose, dateFrom, dateTo, notes, kms, advancePayment, transport, 
+            clients: geocodedClients,
+            author: req.user.username,
+            authorId: req.user.userId,
+        });
+        await newDelegation.save();
+        res.status(201).json(newDelegation);
     } catch (error) {
-        res.status(500).json({ message: 'Błąd pobierania delegacji' });
+        res.status(500).json({ message: 'Błąd tworzenia delegacji' });
     }
 });
 
