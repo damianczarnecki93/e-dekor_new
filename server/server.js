@@ -116,9 +116,9 @@ const delegationSchema = new mongoose.Schema({
     transport: String,
     clients: [{
         name: String,
-        address: String, // Nowe pole na adres
-        lat: Number,      // Nowe pole na szerokość geograficzną
-        lng: Number,      // Nowe pole na długość geograficzną
+        address: String,
+        lat: Number,
+        lng: Number,
         note: String,
         startTime: Date,
         endTime: Date,
@@ -128,7 +128,6 @@ const delegationSchema = new mongoose.Schema({
     startTime: Date,
     endTime: Date
 });
-
 const Delegation = mongoose.models.Delegation || mongoose.model('Delegation', delegationSchema);
 
 // NOWY SCHEMAT KONFIGURACJI POCZTY
@@ -1059,32 +1058,17 @@ app.delete('/api/kanban/tasks/:id', authMiddleware, async (req, res) => {
 
 
 
-// --- Endpointy Delegacji (bez zmian) ---
-app.post('/api/delegations', authMiddleware, async (req, res) => {
+app.get('/api/delegations', authMiddleware, async (req, res) => {
     try {
-        const { destination, purpose, dateFrom, dateTo, notes, kms, advancePayment, transport, clients } = req.body;
-        
-        const geocodedClients = await Promise.all(
-            clients.map(async (client) => {
-                const location = await geocodeAddress(client.address);
-                return {
-                    ...client,
-                    lat: location ? location.lat : null,
-                    lng: location ? location.lng : null,
-                };
-            })
-        );
-
-        const newDelegation = new Delegation({
-            destination, purpose, dateFrom, dateTo, notes, kms, advancePayment, transport, 
-            clients: geocodedClients,
-            author: req.user.username,
-            authorId: req.user.userId,
-        });
-        await newDelegation.save();
-        res.status(201).json(newDelegation);
+        let delegations;
+        if (req.user.role === 'administrator') {
+            delegations = await Delegation.find().sort({ dateFrom: -1 });
+        } else {
+            delegations = await Delegation.find({ authorId: req.user.userId }).sort({ dateFrom: -1 });
+        }
+        res.json(delegations);
     } catch (error) {
-        res.status(500).json({ message: 'Błąd tworzenia delegacji' });
+        res.status(500).json({ message: 'Błąd pobierania delegacji' });
     }
 });
 
@@ -1183,8 +1167,6 @@ app.post('/api/delegations/:id/visits/:clientIndex/end', authMiddleware, async (
         res.status(500).json({ message: 'Błąd zakończenia wizyty' });
     }
 });
-
-
 
 // --- Start serwera ---
 const PORT = process.env.PORT || 3001;
