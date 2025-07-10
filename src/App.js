@@ -2746,9 +2746,9 @@ const DelegationsView = ({ user, onNavigate, setCurrentOrder }) => {
         setDelegations(prev => prev.map(d => d._id === updatedDelegation._id ? updatedDelegation : d));
         setDetailsModal(prev => ({...prev, delegation: updatedDelegation}));
     };
-
-    if (loadError) return "Błąd ładowania mapy";
-    if (!isLoaded) return "Ładowanie mapy...";
+    
+    if (loadError) return <div className="p-8 text-red-500">Błąd ładowania mapy. Sprawdź klucz API i ustawienia w Google Cloud Console.</div>;
+    if (!isLoaded) return <div className="p-8 text-center">Ładowanie mapy...</div>;
 
     return (
         <div className="p-4 md:p-8">
@@ -2938,36 +2938,60 @@ const DelegationDetails = ({ delegation, onUpdate, onNavigate, setCurrentOrder }
                 <p><strong>Status:</strong> {delegation.status}</p>
             </div>
 
-            <h3 className="text-xl font-semibold mb-2">Plan Wizyt</h3>
-            <div className="space-y-4">
-                {delegation.clients.map((client, index) => (
-                    <div key={index} className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                        <div className="flex justify-between items-start">
-                            <div>
-                                <h4 className="font-bold">{client.name}</h4>
-                                <p className="text-xs text-gray-500">{client.note}</p>
-                            </div>
-                            <div className="flex gap-2">
-                                {!client.startTime && delegation.status === 'W trakcie' && (
-                                    <button onClick={() => handleStartVisit(index)} className="px-3 py-1 text-xs bg-green-500 text-white rounded-lg">Rozpocznij wizytę</button>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <h3 className="text-xl font-semibold mb-2">Plan Wizyt</h3>
+                    <div className="space-y-4">
+                        {delegation.clients.map((client, index) => (
+                            <div key={index} className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                                <div className="flex justify-between items-start">
+                                    <div>
+                                        <h4 className="font-bold">{client.name}</h4>
+                                        <p className="text-xs text-gray-500">{client.address}</p>
+                                    </div>
+                                    <div className="flex gap-2">
+                                        {!client.startTime && delegation.status === 'W trakcie' && (
+                                            <button onClick={() => handleStartVisit(index)} className="px-3 py-1 text-xs bg-green-500 text-white rounded-lg">Rozpocznij wizytę</button>
+                                        )}
+                                        {client.startTime && !client.endTime && (
+                                            <button onClick={() => setVisitRecapModal({isOpen: true, clientIndex: index})} className="px-3 py-1 text-xs bg-red-500 text-white rounded-lg">Zakończ wizytę</button>
+                                        )}
+                                    </div>
+                                </div>
+                                {client.startTime && (
+                                     <div className="mt-2 text-xs border-t pt-2">
+                                        <p>Rozpoczęto: {format(parseISO(client.startTime), 'HH:mm:ss')}</p>
+                                        {client.endTime && <p>Zakończono: {format(parseISO(client.endTime), 'HH:mm:ss')}</p>}
+                                        {client.visitNotes && <p className="mt-1"><strong>Notatki:</strong> {client.visitNotes}</p>}
+                                        {client.ordered && <p className="text-green-600 font-bold">Złożono zamówienie</p>}
+                                     </div>
                                 )}
-                                {client.startTime && !client.endTime && (
-                                    <button onClick={() => setVisitRecapModal({isOpen: true, clientIndex: index})} className="px-3 py-1 text-xs bg-red-500 text-white rounded-lg">Zakończ wizytę</button>
-                                )}
                             </div>
-                        </div>
-                        {client.startTime && (
-                             <div className="mt-2 text-xs border-t pt-2">
-                                <p>Rozpoczęto: {format(parseISO(client.startTime), 'HH:mm:ss')}</p>
-                                {client.endTime && <p>Zakończono: {format(parseISO(client.endTime), 'HH:mm:ss')}</p>}
-                                {client.visitNotes && <p className="mt-1"><strong>Notatki:</strong> {client.visitNotes}</p>}
-                                {client.ordered && <p className="text-green-600 font-bold">Złożono zamówienie</p>}
-                             </div>
-                        )}
+                        ))}
                     </div>
-                ))}
+                </div>
+                <div>
+                     <h3 className="text-xl font-semibold mb-2">Mapa Trasy</h3>
+                     <GoogleMap
+                        mapContainerStyle={mapContainerStyle}
+                        center={delegation.clients.length > 0 ? { lat: delegation.clients[0].lat, lng: delegation.clients[0].lng } : center}
+                        zoom={8}
+                     >
+                         {delegation.clients.map((client, index) => (
+                             <Marker key={index} position={{ lat: client.lat, lng: client.lng }} label={`${index + 1}`} />
+                         ))}
+                         <Polyline
+                             path={delegation.clients.map(c => ({lat: c.lat, lng: c.lng}))}
+                             options={{
+                                 strokeColor: "#FF0000",
+                                 strokeOpacity: 0.8,
+                                 strokeWeight: 2,
+                             }}
+                         />
+                     </GoogleMap>
+                </div>
             </div>
-            
+
             <Modal isOpen={visitRecapModal.isOpen} onClose={() => setVisitRecapModal({isOpen: false})} title="Podsumowanie wizyty">
                 <VisitRecapForm onSubmit={handleEndVisit} />
             </Modal>
@@ -3000,8 +3024,6 @@ const VisitRecapForm = ({ onSubmit }) => {
         </form>
     );
 };
-
-
 
 
 export default function AppWrapper() {
