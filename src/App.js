@@ -2347,12 +2347,10 @@ const KanbanView = ({ user }) => {
             const userIdToFetch = user.role === 'administrator' ? selectedUserId : user.id;
             const [tasksData, usersData] = await Promise.all([
                 api.getKanbanTasks(userIdToFetch),
-                user.role === 'administrator' ? api.getUsersList() : Promise.resolve([])
+                api.getUsersList()
             ]);
             setTasks(tasksData);
-            if (user.role === 'administrator') {
-                setUsers(usersData);
-            }
+            setUsers(usersData);
         } catch (error) {
             showNotification(error.message, 'error');
         } finally {
@@ -2366,8 +2364,12 @@ const KanbanView = ({ user }) => {
 
     const handleTaskMove = async (taskId, newStatus) => {
         const originalTasks = [...tasks];
+        const taskToMove = tasks.find(t => t._id === taskId);
+        if (!taskToMove) return;
+
         const updatedTasks = tasks.map(t => t._id === taskId ? { ...t, status: newStatus } : t);
         setTasks(updatedTasks);
+
         try {
             await api.updateKanbanTask(taskId, { status: newStatus });
         } catch (error) {
@@ -2378,10 +2380,18 @@ const KanbanView = ({ user }) => {
     
     const handleAddTask = async (taskData) => {
         try {
-            await api.addKanbanTask(taskData);
+            const authorData = user;
+            const fullTaskData = {
+                ...taskData,
+                authorId: authorData.id,
+                author: authorData.username,
+                assignedToId: authorData.id,
+                assignedTo: authorData.username,
+            };
+            const newTask = await api.addKanbanTask(fullTaskData);
+            setTasks(prev => [newTask, ...prev]);
             showNotification('Zadanie dodane pomyślnie.', 'success');
             setIsModalOpen(false);
-            fetchAllData(); // Odśwież dane
         } catch(error) {
             showNotification(error.message, 'error');
         }
@@ -2398,7 +2408,7 @@ const KanbanView = ({ user }) => {
             }
         }
     };
-
+    
     const handleUpdateDetails = async (taskId, dataToUpdate) => {
         try {
             const updatedTask = await api.updateKanbanTask(taskId, dataToUpdate);
@@ -2624,6 +2634,7 @@ const TaskDetails = ({ task, onSave }) => {
         </div>
     );
 };
+
 
 
 
