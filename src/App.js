@@ -1933,10 +1933,13 @@ const DashboardView = ({ user, onNavigate }) => {
         'stats_products': { name: 'Liczba Produktów', component: (props) => <StatCard {...props} title="Produktów w bazie" value={stats?.productCount} icon={<Package />} /> },
         'stats_pending_orders': { name: 'Zamówienia Oczekujące', component: (props) => <StatCard {...props} title="Zamówień do skompletowania" value={stats?.pendingOrders} icon={<List />} onClick={() => onNavigate('picking')} /> },
         'stats_completed_orders': { name: 'Zamówienia Zrealizowane', component: (props) => <StatCard {...props} title="Zamówień skompletowanych" value={stats?.completedOrders} icon={<CheckCircle />} onClick={() => onNavigate('orders')} /> },
+        'sales_goals': { name: 'Cele Sprzedażowe', component: (props) => <SalesGoalsWidget {...props} stats={stats} user={user} /> },
         'quick_actions': { name: 'Szybkie Akcje', component: (props) => <QuickActionsWidget {...props} onNavigate={onNavigate} /> },
         'my_tasks': { name: 'Moje Zadania', component: (props) => <MyTasksWidget {...props} tasks={tasks} onNavigate={onNavigate} /> },
-        'recent_activity': { name: 'Ostatnia Aktywność', component: (props) => <RecentActivityWidget {...props} /> },
-    }), [stats, tasks, onNavigate]);
+        'top_products': { name: 'Najlepsze Produkty', component: (props) => <TopProductsWidget {...props} stats={stats} /> },
+        'top_customers': { name: 'Najlepsi Klienci', component: (props) => <TopCustomersWidget {...props} stats={stats} /> },
+        'notes_widget': { name: 'Notatki', component: (props) => <NotesWidget {...props} /> },
+    }), [stats, tasks, onNavigate, user]);
 
     const fetchDashboardData = useCallback(async () => {
         setIsLoading(true);
@@ -1968,7 +1971,6 @@ const DashboardView = ({ user, onNavigate }) => {
         }
     };
     
-    // Prosta implementacja drag-and-drop
     const draggedItem = useRef(null);
     const onDragStart = (e, index) => {
         draggedItem.current = index;
@@ -2031,6 +2033,7 @@ const DashboardView = ({ user, onNavigate }) => {
     );
 };
 
+// Dodaj te nowe komponenty pomocnicze w pliku App.js
 const StatCard = ({ title, value, icon, onClick }) => (
     <div onClick={onClick} className={`bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md flex items-center text-left transition-all hover:shadow-xl hover:scale-105 ${onClick ? 'cursor-pointer' : ''}`}>
         <div className="p-4 bg-gray-100 dark:bg-gray-900/30 rounded-full">{React.cloneElement(icon, { className: "h-8 w-8 text-indigo-500" })}</div>
@@ -2040,6 +2043,37 @@ const StatCard = ({ title, value, icon, onClick }) => (
         </div>
     </div>
 );
+
+const SalesGoalsWidget = ({ stats, user }) => {
+    const individualGoalProgress = stats?.individualSalesGoal > 0 ? ((stats?.individualMonthlySales || 0) / stats.individualSalesGoal) * 100 : 0;
+    const totalGoalProgress = stats?.totalSalesGoal > 0 ? ((stats?.totalMonthlySales || 0) / stats.totalSalesGoal) * 100 : 0;
+
+    return (
+        <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md h-full">
+            <h3 className="font-bold mb-4 flex items-center"><BarChart2 className="w-5 h-5 mr-2 text-indigo-500"/>Cele Sprzedażowe</h3>
+            <div className="space-y-4">
+                <div>
+                    <h4 className="text-sm font-semibold">Twój cel miesięczny</h4>
+                    <div className="flex justify-between mb-1 text-xs">
+                        <span>{(stats?.individualMonthlySales || 0).toFixed(2)} / {(stats?.individualSalesGoal || 0).toFixed(2)} PLN</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700">
+                        <div className="bg-indigo-600 h-2.5 rounded-full" style={{ width: `${Math.min(individualGoalProgress, 100)}%` }}></div>
+                    </div>
+                </div>
+                <div>
+                    <h4 className="text-sm font-semibold">Cel ogólny</h4>
+                    <div className="flex justify-between mb-1 text-xs">
+                        <span>{(stats?.totalMonthlySales || 0).toFixed(2)} / {(stats?.totalSalesGoal || 0).toFixed(2)} PLN</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700">
+                        <div className="bg-purple-600 h-2.5 rounded-full" style={{ width: `${Math.min(totalGoalProgress, 100)}%` }}></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
 
 const QuickActionsWidget = ({ onNavigate }) => (
     <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md h-full">
@@ -2063,15 +2097,31 @@ const MyTasksWidget = ({ tasks, onNavigate }) => (
     </div>
 );
 
-const RecentActivityWidget = () => (
+const TopProductsWidget = ({ stats }) => (
     <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md h-full">
-         <h3 className="font-bold mb-4">Ostatnia Aktywność</h3>
-         <p className="text-sm text-gray-400">Moduł w przygotowaniu.</p>
+        <h3 className="font-bold mb-4 flex items-center"><Trophy className="w-5 h-5 mr-2 text-yellow-500"/>Najlepsze Produkty</h3>
+        <ul className="space-y-2 text-sm">
+            {stats?.topProducts.map(p => <li key={p._id} className="flex justify-between"><span>{p._id}</span><strong>{p.totalSold} szt.</strong></li>)}
+        </ul>
     </div>
 );
 
+const TopCustomersWidget = ({ stats }) => (
+    <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md h-full">
+        <h3 className="font-bold mb-4 flex items-center"><Crown className="w-5 h-5 mr-2 text-blue-500"/>Najlepsi Klienci</h3>
+        <ul className="space-y-2 text-sm">
+            {stats?.topCustomers.map(c => <li key={c._id} className="flex justify-between"><span>{c._id}</span><strong>{c.orderCount} zam.</strong></li>)}
+        </ul>
+    </div>
+);
+
+
 const CustomizeDashboardModal = ({ isOpen, onClose, availableWidgets, currentLayout, onSave }) => {
     const [layout, setLayout] = useState(currentLayout);
+
+    useEffect(() => {
+        setLayout(currentLayout);
+    }, [currentLayout, isOpen]);
 
     const toggleWidget = (widgetId) => {
         setLayout(prev => 
@@ -2096,11 +2146,12 @@ const CustomizeDashboardModal = ({ isOpen, onClose, availableWidgets, currentLay
                 ))}
             </div>
             <div className="flex justify-end mt-6">
-                <button onClick={() => onSave(layout)} className="px-4 py-2 bg-blue-600 text-white rounded-lg">Zapisz</button>
+                <button onClick={() => { onSave(layout); onClose(); }} className="px-4 py-2 bg-blue-600 text-white rounded-lg">Zapisz</button>
             </div>
         </Modal>
     );
 };
+
 
 
 const NotesWidget = () => {
