@@ -2698,10 +2698,10 @@ const DelegationsView = ({ user, onNavigate, setCurrentOrder }) => {
         fetchDelegations();
     }, [fetchDelegations]);
 
-    const handleAddDelegation = async (delegationData) => {
+    const handleAddOrUpdateDelegation = async (delegationData) => {
         try {
-            await api.addDelegation(delegationData);
-            showNotification('Delegacja została pomyślnie dodana.', 'success');
+            await api.saveDelegation(delegationData);
+            showNotification(`Delegacja pomyślnie ${delegationData._id ? 'zaktualizowana' : 'dodana'}.`, 'success');
             setIsFormModalOpen(false);
             fetchDelegations();
         } catch (error) {
@@ -2749,11 +2749,12 @@ const DelegationsView = ({ user, onNavigate, setCurrentOrder }) => {
     if (loadError) return <div className="p-8 text-red-500">Błąd ładowania mapy. Sprawdź klucz API i ustawienia w Google Cloud Console.</div>;
 
     return (
-        <div className="p-4 md:p-8">
-            <div className="flex justify-between items-center mb-6">
-                <h1 className="text-3xl font-bold">Planer Wizyt i Tras</h1>
+        <div className="p-2 sm:p-4 md:p-8">
+            <div className="flex flex-wrap justify-between items-center mb-6 gap-2">
+                <h1 className="text-2xl md:text-3xl font-bold">Planer Wizyt i Tras</h1>
                 <button onClick={() => setIsFormModalOpen(true)} className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
-                    <PlusCircle className="w-5 h-5 mr-2"/> Nowa Delegacja
+                    <PlusCircle className="w-5 h-5 md:mr-2"/>
+                    <span className="hidden md:inline">Nowa Delegacja</span>
                 </button>
             </div>
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-x-auto">
@@ -2776,13 +2777,8 @@ const DelegationsView = ({ user, onNavigate, setCurrentOrder }) => {
                                 <td className="p-2 sm:p-3 text-center"><span className={`px-2 py-1 text-xs font-semibold rounded-full ${getStatusClass(d.status)}`}>{d.status}</span></td>
                                 <td className="p-2 sm:p-3 text-center whitespace-nowrap">
                                     <Tooltip text="Podgląd"><button onClick={() => setDetailsModal({isOpen: true, delegation: d})} className="p-2 text-blue-500 hover:text-blue-700"><Eye className="w-5 h-5"/></button></Tooltip>
-                                    {user.role === 'administrator' && d.status === 'Oczekująca' && (
-                                        <>
-                                            <Tooltip text="Akceptuj"><button onClick={() => handleStatusUpdate(d._id, 'Zaakceptowana')} className="p-2 text-green-500 hover:text-green-700"><CheckCircle className="w-5 h-5"/></button></Tooltip>
-                                            <Tooltip text="Odrzuć"><button onClick={() => handleStatusUpdate(d._id, 'Odrzucona')} className="p-2 text-red-500 hover:text-red-700"><XCircle className="w-5 h-5"/></button></Tooltip>
-                                        </>
-                                    )}
-                                    {(user.id === d.authorId || user.role === 'administrator') && (
+                                    <Tooltip text="Edytuj"><button onClick={() => setIsFormModalOpen(d)} className="p-2 text-yellow-500 hover:text-yellow-700"><Edit className="w-5 h-5"/></button></Tooltip>
+                                    {user.role === 'administrator' && (
                                         <Tooltip text="Usuń"><button onClick={() => handleDelete(d._id)} className="p-2 text-gray-500 hover:text-red-500"><Trash2 className="w-5 h-5"/></button></Tooltip>
                                     )}
                                 </td>
@@ -2791,8 +2787,8 @@ const DelegationsView = ({ user, onNavigate, setCurrentOrder }) => {
                     </tbody>
                 </table>
             </div>
-            <Modal isOpen={isFormModalOpen} onClose={() => setIsFormModalOpen(false)} title="Nowa Delegacja" maxWidth="2xl">
-                <DelegationForm onSubmit={handleAddDelegation} />
+            <Modal isOpen={isFormModalOpen} onClose={() => setIsFormModalOpen(false)} title={isFormModalOpen._id ? "Edytuj Delegację" : "Nowa Delegacja"} maxWidth="2xl">
+                <DelegationForm onSubmit={handleAddOrUpdateDelegation} delegationData={isFormModalOpen._id ? isFormModalOpen : null} />
             </Modal>
              <Modal isOpen={detailsModal.isOpen} onClose={() => setDetailsModal({isOpen: false, delegation: null})} title="Szczegóły Delegacji" maxWidth="4xl">
                 {detailsModal.delegation && <DelegationDetails delegation={detailsModal.delegation} onUpdate={handleDelegationUpdate} onNavigate={onNavigate} setCurrentOrder={setCurrentOrder} isMapLoaded={isLoaded}/>}
@@ -2800,6 +2796,7 @@ const DelegationsView = ({ user, onNavigate, setCurrentOrder }) => {
         </div>
     );
 };
+
 
 const DelegationForm = ({ onSubmit }) => {
     const [formData, setFormData] = useState({

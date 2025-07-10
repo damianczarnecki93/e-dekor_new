@@ -1115,6 +1115,17 @@ app.put('/api/delegations/:id/status', authMiddleware, adminMiddleware, async (r
     }
 });
 
+app.put('/api/delegations/:id', authMiddleware, async (req, res) => {
+    try {
+        const delegationData = req.body;
+        const updatedDelegation = await Delegation.findByIdAndUpdate(req.params.id, delegationData, { new: true });
+        if (!updatedDelegation) return res.status(404).json({ message: 'Nie znaleziono delegacji.' });
+        res.json({ message: 'Delegacja zaktualizowana!', delegation: updatedDelegation });
+    } catch (error) {
+        res.status(500).json({ message: 'Błąd aktualizacji delegacji' });
+    }
+});
+
 app.delete('/api/delegations/:id', authMiddleware, async (req, res) => {
     try {
         const delegation = await Delegation.findById(req.params.id);
