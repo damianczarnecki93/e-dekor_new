@@ -2339,7 +2339,6 @@ const KanbanView = ({ user }) => {
     const [detailsModal, setDetailsModal] = useState({ isOpen: false, task: null });
     const { showNotification } = useNotification();
     const [selectedUserId, setSelectedUserId] = useState(user.id);
-    const [expandedTasks, setExpandedTasks] = useState({});
 
     const fetchAllData = useCallback(async () => {
         setIsLoading(true);
@@ -2347,10 +2346,12 @@ const KanbanView = ({ user }) => {
             const userIdToFetch = user.role === 'administrator' ? selectedUserId : user.id;
             const [tasksData, usersData] = await Promise.all([
                 api.getKanbanTasks(userIdToFetch),
-                api.getUsersList()
+                user.role === 'administrator' ? api.getUsersList() : Promise.resolve([])
             ]);
             setTasks(tasksData);
-            setUsers(usersData);
+            if (user.role === 'administrator') {
+                setUsers(usersData);
+            }
         } catch (error) {
             showNotification(error.message, 'error');
         } finally {
@@ -2364,17 +2365,8 @@ const KanbanView = ({ user }) => {
 
     const handleTaskMove = async (taskId, newStatus) => {
         const originalTasks = [...tasks];
-        const taskToMove = tasks.find(t => t._id === taskId);
-        if (!taskToMove) return;
-
-        if (!taskToMove.isAccepted && user.role !== 'administrator' && taskToMove.assignedToId === user.id) {
-            showNotification("Musisz najpierw zaakceptować to zadanie, aby zmienić jego status.", "error");
-            return;
-        }
-
         const updatedTasks = tasks.map(t => t._id === taskId ? { ...t, status: newStatus } : t);
         setTasks(updatedTasks);
-
         try {
             await api.updateKanbanTask(taskId, { status: newStatus });
         } catch (error) {
@@ -2385,10 +2377,16 @@ const KanbanView = ({ user }) => {
     
     const handleAddTask = async (taskData) => {
         try {
-            await api.addKanbanTask(taskData);
+            const authorData = user.role === 'administrator' ? users.find(u => u._id === selectedUserId) : user;
+            const fullTaskData = {
+                ...taskData,
+                authorId: authorData._id || authorData.id,
+                author: authorData.username,
+            };
+            const newTask = await api.addKanbanTask(fullTaskData);
+            setTasks(prev => [newTask, ...prev]);
             showNotification('Zadanie dodane pomyślnie.', 'success');
             setIsModalOpen(false);
-            fetchAllData();
         } catch(error) {
             showNotification(error.message, 'error');
         }
@@ -2406,16 +2404,6 @@ const KanbanView = ({ user }) => {
         }
     };
     
-    const handleAcceptTask = async (taskId) => {
-        try {
-            const updatedTask = await api.updateKanbanTask(taskId, { isAccepted: true });
-            setTasks(tasks.map(t => t._id === taskId ? updatedTask : t));
-            showNotification('Zadanie zaakceptowane.', 'success');
-        } catch(error) {
-            showNotification(error.message, 'error');
-        }
-    };
-
     const handleUpdateDetails = async (taskId, dataToUpdate) => {
         try {
             const updatedTask = await api.updateKanbanTask(taskId, dataToUpdate);
@@ -2427,16 +2415,8 @@ const KanbanView = ({ user }) => {
         }
     };
 
-    const toggleExpandTask = (taskId) => {
-        setExpandedTasks(prev => ({...prev, [taskId]: !prev[taskId]}));
-    };
-
-    const onDragStart = (e, task) => {
-        if (!task.isAccepted && user.role !== 'administrator' && task.authorId !== user.id) {
-            e.preventDefault();
-            return;
-        }
-        e.dataTransfer.setData("taskId", task._id);
+    const onDragStart = (e, taskId) => {
+        e.dataTransfer.setData("taskId", taskId);
     };
 
     const onDrop = (e, newStatus) => {
@@ -2457,8 +2437,7 @@ const KanbanView = ({ user }) => {
                 <div className="flex items-center gap-4">
                     {user.role === 'administrator' && (
                          <select value={selectedUserId} onChange={(e) => setSelectedUserId(e.target.value)} className="p-2 border rounded-md bg-white dark:bg-gray-700">
-                             <option value={user.id}>{user.username} (Moja tablica)</option>
-                             {users.filter(u => u._id !== user.id).map(u => <option key={u._id} value={u._id}>{u.username}</option>)}
+                             {users.map(u => <option key={u._id} value={u._id}>{u.username}</option>)}
                          </select>
                     )}
                     <button onClick={() => setIsModalOpen(true)} className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
@@ -2480,52 +2459,9 @@ const KanbanView = ({ user }) => {
                                 {column.title}
                             </h2>
                             <div className="space-y-4">
-                                {tasks.filter(t => t.status === column.id).map(task => {
-                                    const isAssignedToMe = task.assignedToId === user.id;
-                                    const isMyTask = task.authorId === user.id;
-                                    let taskColor = 'bg-white dark:bg-gray-700';
-                                    if (isMyTask && !isAssignedToMe) {
-                                        taskColor = 'bg-blue-50 dark:bg-blue-900/30';
-                                    } else if (!isMyTask && isAssignedToMe) {
-                                        taskColor = 'bg-purple-50 dark:bg-purple-900/30';
-                                    }
-
-                                    return (
-                                    <div key={task._id} 
-                                         draggable={task.isAccepted || user.role === 'administrator' || isMyTask}
-                                         onDragStart={(e) => onDragStart(e, task)}
-                                         onClick={() => toggleExpandTask(task._id)}
-                                         className={`${taskColor} p-4 rounded-md shadow group relative ${task.isAccepted || user.role === 'administrator' || isMyTask ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`}
-                                    >
-                                        <p>{task.content}</p>
-                                        <div className="text-xs text-gray-500 mt-2 flex justify-between">
-                                            <span>Dla: {task.assignedTo}</span>
-                                            {!isMyTask && <span className="italic">Od: {task.author}</span>}
-                                        </div>
-                                        <p className="text-xs text-gray-400 mt-1">{format(parseISO(task.date), 'd MMM, HH:mm')}</p>
-                                        {!task.isAccepted && isAssignedToMe && (
-                                            <button onClick={(e) => { e.stopPropagation(); handleAcceptTask(task._id); }} className="mt-2 w-full px-2 py-1 bg-green-500 text-white text-xs rounded-lg">Zaakceptuj zadanie</button>
-                                        )}
-                                        {(isMyTask || user.role === 'administrator') && (
-                                            <button onClick={(e) => { e.stopPropagation(); handleDeleteTask(task._id); }} className="absolute top-1 right-1 p-1 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                <Trash2 className="w-4 h-4"/>
-                                            </button>
-                                        )}
-                                         {expandedTasks[task._id] && (
-                                            <div className="mt-2 text-sm space-y-2">
-                                                {task.details && <p className="p-2 bg-gray-50 dark:bg-gray-600 rounded-md">{task.details}</p>}
-                                                {task.subtasks?.length > 0 && (
-                                                    <ul className="list-disc list-inside">
-                                                        {task.subtasks.map((st, i) => (
-                                                            <li key={i} className={st.isDone ? 'line-through text-gray-500' : ''}>{st.content}</li>
-                                                        ))}
-                                                    </ul>
-                                                )}
-                                                <button onClick={(e) => {e.stopPropagation(); setDetailsModal({isOpen: true, task})}} className="text-xs font-bold text-blue-600 hover:underline">Edytuj</button>
-                                            </div>
-                                        )}
-                                    </div>
-                                )})}
+                                {tasks.filter(t => t.status === column.id).map(task => (
+                                    <TaskCard key={task._id} task={task} user={user} onDelete={handleDeleteTask} onEdit={() => setDetailsModal({isOpen: true, task})}/>
+                                ))}
                             </div>
                         </div>
                     ))}
@@ -2533,7 +2469,7 @@ const KanbanView = ({ user }) => {
             )}
 
             <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Nowe Zadanie" maxWidth="2xl">
-                <KanbanForm onSubmit={handleAddTask} users={users} currentUser={user} />
+                <KanbanForm onSubmit={handleAddTask} />
             </Modal>
             <Modal isOpen={detailsModal.isOpen} onClose={() => setDetailsModal({isOpen: false, task: null})} title="Szczegóły zadania" maxWidth="2xl">
                 {detailsModal.task && <TaskDetails onSave={handleUpdateDetails} task={detailsModal.task} />}
@@ -2542,16 +2478,16 @@ const KanbanView = ({ user }) => {
     );
 };
 
-const KanbanForm = ({ onSubmit, users, currentUser }) => {
+const KanbanForm = ({ onSubmit }) => {
     const [content, setContent] = useState('');
-    const [assignedToId, setAssignedToId] = useState(currentUser.id);
     const [details, setDetails] = useState('');
     const [subtasks, setSubtasks] = useState([]);
     const [newSubtask, setNewSubtask] = useState('');
+    const [priority, setPriority] = useState('normal');
 
     const handleAddSubtask = () => {
         if (!newSubtask.trim()) return;
-        setSubtasks([...subtasks, { content: newSubtask, isDone: false }]);
+        setSubtasks([...subtasks, { content: newSubtask, isDone: false, _id: `new-${Date.now()}` }]);
         setNewSubtask('');
     };
     
@@ -2567,46 +2503,23 @@ const KanbanForm = ({ onSubmit, users, currentUser }) => {
             alert('Treść zadania jest wymagana.');
             return;
         }
-        const assignedToUser = users.find(u => u._id === assignedToId);
-        onSubmit({ 
-            content, 
-            assignedToId, 
-            assignedTo: assignedToUser.username,
-            details, 
-            subtasks 
-        });
+        onSubmit({ content, details, subtasks, priority });
         setContent('');
-        setAssignedToId(currentUser.id);
         setDetails('');
         setSubtasks([]);
+        setPriority('normal');
     };
 
     return (
         <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-                <label className="block text-sm font-medium">Treść zadania</label>
-                <textarea value={content} onChange={(e) => setContent(e.target.value)} className="w-full p-2 border rounded-md" required />
-            </div>
-            {currentUser.role === 'administrator' && (
-                <div>
-                    <label className="block text-sm font-medium">Przypisz do</label>
-                    <select value={assignedToId} onChange={(e) => setAssignedToId(e.target.value)} className="w-full p-2 border rounded-md" required>
-                        {users.map(u => <option key={u._id} value={u._id}>{u.username}</option>)}
-                    </select>
-                </div>
-            )}
-             <div>
-                <label className="block text-sm font-medium">Szczegóły (opcjonalnie)</label>
-                <textarea value={details} onChange={(e) => setDetails(e.target.value)} className="w-full p-2 border rounded-md min-h-[100px]"/>
-            </div>
+            <div><label className="block text-sm font-medium">Treść zadania</label><textarea value={content} onChange={(e) => setContent(e.target.value)} className="w-full p-2 border rounded-md" required /></div>
+            <div><label className="block text-sm font-medium">Priorytet</label><select value={priority} onChange={(e) => setPriority(e.target.value)} className="w-full p-2 border rounded-md"><option value="normal">Normalny</option><option value="high">Wysoki</option><option value="critical">Krytyczny</option></select></div>
+            <div><label className="block text-sm font-medium">Szczegóły (opcjonalnie)</label><textarea value={details} onChange={(e) => setDetails(e.target.value)} className="w-full p-2 border rounded-md min-h-[100px]"/></div>
              <div>
                 <h4 className="font-semibold">Podzadania (opcjonalnie)</h4>
                 <div className="space-y-2 mt-2">
                     {subtasks.map((st, index) => (
-                        <div key={index} className="flex items-center gap-2">
-                            <span>{st.content}</span>
-                            <button type="button" onClick={() => removeSubtask(index)} className="ml-auto p-1 text-red-500 hover:text-red-700"><Trash2 className="w-4 h-4"/></button>
-                        </div>
+                        <div key={index} className="flex items-center gap-2"><span>{st.content}</span><button type="button" onClick={() => removeSubtask(index)} className="ml-auto p-1 text-red-500 hover:text-red-700"><Trash2 className="w-4 h-4"/></button></div>
                     ))}
                 </div>
                 <div className="flex gap-2 mt-2">
@@ -2614,9 +2527,7 @@ const KanbanForm = ({ onSubmit, users, currentUser }) => {
                     <button type="button" onClick={handleAddSubtask} className="px-3 py-1 bg-gray-200 rounded-md">Dodaj</button>
                 </div>
             </div>
-            <div className="flex justify-end pt-4">
-                <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg">Dodaj zadanie</button>
-            </div>
+            <div className="flex justify-end pt-4"><button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg">Dodaj zadanie</button></div>
         </form>
     );
 };
@@ -2626,6 +2537,7 @@ const TaskDetails = ({ task, onSave }) => {
     const [details, setDetails] = useState(task.details || '');
     const [subtasks, setSubtasks] = useState(task.subtasks || []);
     const [newSubtask, setNewSubtask] = useState('');
+    const [priority, setPriority] = useState(task.priority || 'normal');
 
     const handleAddSubtask = () => {
         if (!newSubtask.trim()) return;
@@ -2646,19 +2558,14 @@ const TaskDetails = ({ task, onSave }) => {
     };
     
     const handleSave = () => {
-        onSave(task._id, { content, details, subtasks });
+        onSave(task._id, { content, details, subtasks, priority });
     };
 
     return (
         <div className="space-y-4">
-             <div>
-                <label className="block text-sm font-medium">Tytuł zadania</label>
-                <input type="text" value={content} onChange={(e) => setContent(e.target.value)} className="w-full p-2 border rounded-md"/>
-            </div>
-            <div>
-                <label className="block text-sm font-medium">Szczegóły</label>
-                <textarea value={details} onChange={(e) => setDetails(e.target.value)} className="w-full p-2 border rounded-md min-h-[100px]"/>
-            </div>
+             <div><label className="block text-sm font-medium">Tytuł zadania</label><input type="text" value={content} onChange={(e) => setContent(e.target.value)} className="w-full p-2 border rounded-md"/></div>
+             <div><label className="block text-sm font-medium">Priorytet</label><select value={priority} onChange={(e) => setPriority(e.target.value)} className="w-full p-2 border rounded-md"><option value="normal">Normalny</option><option value="high">Wysoki</option><option value="critical">Krytyczny</option></select></div>
+            <div><label className="block text-sm font-medium">Szczegóły</label><textarea value={details} onChange={(e) => setDetails(e.target.value)} className="w-full p-2 border rounded-md min-h-[100px]"/></div>
             <div>
                 <h4 className="font-semibold">Podzadania</h4>
                 <div className="space-y-2 mt-2">
@@ -2675,12 +2582,51 @@ const TaskDetails = ({ task, onSave }) => {
                     <button type="button" onClick={handleAddSubtask} className="px-3 py-1 bg-gray-200 rounded-md">Dodaj</button>
                 </div>
             </div>
-            <div className="flex justify-end pt-4">
-                <button onClick={handleSave} className="px-4 py-2 bg-blue-600 text-white rounded-lg">Zapisz szczegóły</button>
-            </div>
+            <div className="flex justify-end pt-4"><button onClick={handleSave} className="px-4 py-2 bg-blue-600 text-white rounded-lg">Zapisz szczegóły</button></div>
         </div>
     );
 };
+
+const TaskCard = ({ task, user, onDelete, onEdit }) => {
+    const [isExpanded, setIsExpanded] = useState(false);
+
+    const priorityClass = {
+        high: 'bg-yellow-100 dark:bg-yellow-900/30',
+        critical: 'bg-red-100 dark:bg-red-900/30',
+        normal: 'bg-white dark:bg-gray-700',
+    };
+
+    return (
+        <div 
+            draggable 
+            onDragStart={(e) => e.dataTransfer.setData("taskId", task._id)}
+            className={`${priorityClass[task.priority]} p-4 rounded-md shadow group relative cursor-pointer`}
+            onClick={() => setIsExpanded(!isExpanded)}
+        >
+            <p>{task.content}</p>
+            <p className="text-xs text-gray-400 mt-1">{format(parseISO(task.date), 'd MMM, HH:mm')}</p>
+            {(user.id === task.authorId || user.role === 'administrator') && (
+                <button onClick={(e) => { e.stopPropagation(); onDelete(task._id); }} className="absolute top-1 right-1 p-1 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Trash2 className="w-4 h-4"/>
+                </button>
+            )}
+            {isExpanded && (
+                <div className="mt-2 text-sm space-y-2">
+                    {task.details && <p className="p-2 bg-gray-50 dark:bg-gray-600 rounded-md whitespace-pre-wrap">{task.details}</p>}
+                    {task.subtasks?.length > 0 && (
+                        <ul className="list-disc list-inside">
+                            {task.subtasks.map((st, i) => (
+                                <li key={i} className={st.isDone ? 'line-through text-gray-500' : ''}>{st.content}</li>
+                            ))}
+                        </ul>
+                    )}
+                    <button onClick={(e) => {e.stopPropagation(); onEdit();}} className="text-xs font-bold text-blue-600 hover:underline">Edytuj</button>
+                </div>
+            )}
+        </div>
+    );
+};
+
 
 
 
