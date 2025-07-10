@@ -5,16 +5,6 @@ import { pl } from 'date-fns/locale';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { GoogleMap, useLoadScript, Marker, Polyline } from '@react-google-maps/api';
-const LIBRARIES = ["places"]; // ZMIANA: Wyniesienie stałej poza komponent
-const MAP_CONTAINER_STYLE = {
-  width: '100%',
-  height: '400px',
-  borderRadius: '0.5rem'
-};
-const CENTER = { // Domyślne centrum mapy (Polska)
-  lat: 52.237049,
-  lng: 21.017532
-};
 
 
 // --- Komponent Granicy Błędu (Error Boundary) ---
@@ -2661,7 +2651,16 @@ const TaskCard = ({ task, user, onDelete, onEdit }) => {
     );
 };
 
-
+const LIBRARIES = ["places"]; // ZMIANA: Wyniesienie stałej poza komponent
+const MAP_CONTAINER_STYLE = {
+  width: '100%',
+  height: '400px',
+  borderRadius: '0.5rem'
+};
+const CENTER = { // Domyślne centrum mapy (Polska)
+  lat: 52.237049,
+  lng: 21.017532
+};
 
 const DelegationsView = ({ user, onNavigate, setCurrentOrder }) => {
     const [delegations, setDelegations] = useState([]);
