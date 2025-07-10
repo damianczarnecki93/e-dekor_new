@@ -2919,20 +2919,39 @@ const DelegationForm = ({ onSubmit, delegationData }) => {
 const DelegationDetails = ({ delegation, onUpdate, onNavigate, setCurrentOrder, isMapLoaded }) => {
     const { showNotification } = useNotification();
     const [visitRecapModal, setVisitRecapModal] = useState({ isOpen: false, clientIndex: null });
+    const [directionsResponse, setDirectionsResponse] = useState(null);
     const mapRef = useRef();
 
     const validClients = useMemo(() => delegation.clients.filter(c => c.lat && c.lng), [delegation.clients]);
 
     useEffect(() => {
-        if (isMapLoaded && mapRef.current && validClients.length > 0) {
-            const bounds = new window.google.maps.LatLngBounds();
-            validClients.forEach(client => {
-                bounds.extend(new window.google.maps.LatLng(client.lat, client.lng));
-            });
-            mapRef.current.fitBounds(bounds);
+        if (isMapLoaded && validClients.length > 1) {
+            const directionsService = new window.google.maps.DirectionsService();
+
+            const origin = { lat: validClients[0].lat, lng: validClients[0].lng };
+            const destination = { lat: validClients[validClients.length - 1].lat, lng: validClients[validClients.length - 1].lng };
+            const waypoints = validClients.slice(1, -1).map(client => ({
+                location: { lat: client.lat, lng: client.lng },
+                stopover: true,
+            }));
+
+            directionsService.route(
+                {
+                    origin: origin,
+                    destination: destination,
+                    waypoints: waypoints,
+                    travelMode: window.google.maps.TravelMode.DRIVING,
+                },
+                (result, status) => {
+                    if (status === window.google.maps.DirectionsStatus.OK) {
+                        setDirectionsResponse(result);
+                    } else {
+                        console.error(`Błąd podczas pobierania trasy: ${status}`);
+                    }
+                }
+            );
         }
     }, [isMapLoaded, validClients]);
-
 
     const handleStartDelegation = async () => {
         try {
@@ -3039,17 +3058,13 @@ const DelegationDetails = ({ delegation, onUpdate, onNavigate, setCurrentOrder, 
                             zoom={7}
                             onLoad={map => { mapRef.current = map; }}
                          >
-                             {validClients.map((client, index) => (
-                                 <Marker key={index} position={{ lat: client.lat, lng: client.lng }} label={`${index + 1}`} />
-                             ))}
-                             <Polyline
-                                 path={validClients.map(c => ({lat: c.lat, lng: c.lng}))}
-                                 options={{
-                                     strokeColor: "#FF0000",
-                                     strokeOpacity: 0.8,
-                                     strokeWeight: 2,
-                                 }}
-                             />
+                            {directionsResponse ? (
+                                <DirectionsRenderer directions={directionsResponse} />
+                            ) : (
+                                validClients.map((client, index) => (
+                                    <Marker key={index} position={{ lat: client.lat, lng: client.lng }} label={`${index + 1}`} />
+                                ))
+                            )}
                          </GoogleMap>
                      ) : <div>Ładowanie mapy...</div>}
                 </div>
@@ -3061,6 +3076,7 @@ const DelegationDetails = ({ delegation, onUpdate, onNavigate, setCurrentOrder, 
         </div>
     );
 };
+
 
 
 const VisitRecapForm = ({ onSubmit }) => {
