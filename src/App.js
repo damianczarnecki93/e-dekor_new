@@ -2657,7 +2657,7 @@ const TaskCard = ({ task, user, onDelete, onEdit }) => {
 
 
 
-const DelegationsView = ({ user }) => {
+const DelegationsView = ({ user, onNavigate, setCurrentOrder }) => {
     const [delegations, setDelegations] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -2723,15 +2723,17 @@ const DelegationsView = ({ user }) => {
 
     const getStatusClass = (status) => {
         switch (status) {
-            case 'Zaakceptowana':
-                return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300';
-            case 'Odrzucona':
-                return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300';
-            case 'W trakcie':
-                return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300';
-            default:
-                return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300';
+            case 'Zaakceptowana': return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300';
+            case 'Odrzucona': return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300';
+            case 'W trakcie': return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300';
+            case 'Zakończona': return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300';
+            default: return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300';
         }
+    };
+
+    const handleDelegationUpdate = (updatedDelegation) => {
+        setDelegations(prev => prev.map(d => d._id === updatedDelegation._id ? updatedDelegation : d));
+        setDetailsModal(prev => ({...prev, delegation: updatedDelegation}));
     };
 
     return (
@@ -2759,9 +2761,7 @@ const DelegationsView = ({ user }) => {
                                 <td className="p-2 sm:p-3 font-medium">{d.destination}</td>
                                 <td className="hidden md:table-cell p-2 sm:p-3">{d.author}</td>
                                 <td className="p-2 sm:p-3">{format(parseISO(d.dateFrom), 'd.MM.yy')} - {format(parseISO(d.dateTo), 'd.MM.yy')}</td>
-                                <td className="p-2 sm:p-3 text-center">
-                                    <span className={`px-2 py-1 text-xs font-semibold rounded-full ${getStatusClass(d.status)}`}>{d.status}</span>
-                                </td>
+                                <td className="p-2 sm:p-3 text-center"><span className={`px-2 py-1 text-xs font-semibold rounded-full ${getStatusClass(d.status)}`}>{d.status}</span></td>
                                 <td className="p-2 sm:p-3 text-center whitespace-nowrap">
                                     <Tooltip text="Podgląd"><button onClick={() => setDetailsModal({isOpen: true, delegation: d})} className="p-2 text-blue-500 hover:text-blue-700"><Eye className="w-5 h-5"/></button></Tooltip>
                                     {user.role === 'administrator' && d.status === 'Oczekująca' && (
@@ -2782,8 +2782,8 @@ const DelegationsView = ({ user }) => {
             <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Nowa Delegacja" maxWidth="2xl">
                 <DelegationForm onSubmit={handleAddDelegation} />
             </Modal>
-            <Modal isOpen={detailsModal.isOpen} onClose={() => setDetailsModal({isOpen: false, delegation: null})} title="Szczegóły Delegacji" maxWidth="4xl">
-                {/* Komponent szczegółów delegacji */}
+             <Modal isOpen={detailsModal.isOpen} onClose={() => setDetailsModal({isOpen: false, delegation: null})} title="Szczegóły Delegacji" maxWidth="4xl">
+                {detailsModal.delegation && <DelegationDetails delegation={detailsModal.delegation} onUpdate={handleDelegationUpdate} onNavigate={onNavigate} setCurrentOrder={setCurrentOrder}/>}
             </Modal>
         </div>
     );
@@ -2791,14 +2791,7 @@ const DelegationsView = ({ user }) => {
 
 const DelegationForm = ({ onSubmit }) => {
     const [formData, setFormData] = useState({
-        destination: '',
-        purpose: '',
-        dateFrom: '',
-        dateTo: '',
-        transport: '',
-        kms: 0,
-        advancePayment: 0,
-        clients: [{ name: '', note: '' }]
+        destination: '', purpose: '', dateFrom: '', dateTo: '', transport: '', kms: 0, advancePayment: 0, clients: [{ name: '', note: '' }]
     });
 
     const handleChange = (e) => {
@@ -2863,6 +2856,88 @@ const DelegationForm = ({ onSubmit }) => {
     );
 };
 
+const DelegationDetails = ({ delegation, onUpdate, onNavigate, setCurrentOrder }) => {
+    const { showNotification } = useNotification();
+    const [visitRecapModal, setVisitRecapModal] = useState({ isOpen: false, clientIndex: null });
+
+    const handleStartDelegation = async () => {
+        try {
+            const updatedDelegation = await api.startDelegation(delegation._id);
+            onUpdate(updatedDelegation);
+            showNotification('Delegacja rozpoczęta!', 'success');
+        } catch (error) {
+            showNotification(error.message, 'error');
+        }
+    };
+
+    const handleEndDelegation = async () => {
+        try {
+            const updatedDelegation = await api.endDelegation(delegation._id);
+            onUpdate(updatedDelegation);
+            showNotification('Delegacja zakończona!', 'success');
+        } catch (error) {
+            showNotification(error.message, 'error');
+        }
+    };
+    
+    const handleStartVisit = async (clientIndex) => {
+        try {
+            const updatedDelegation = await api.startClientVisit(delegation._id, clientIndex);
+            onUpdate(updatedDelegation);
+            showNotification('Wizyta rozpoczęta!', 'success');
+            setCurrentOrder({ customerName: delegation.clients[clientIndex].name, items: [], isDirty: false });
+            onNavigate('order');
+        } catch (error) {
+            showNotification(error.message, 'error');
+        }
+    };
+    
+    const handleEndVisit = async (visitData) => {
+        try {
+            const updatedDelegation = await api.endClientVisit(delegation._id, visitRecapModal.clientIndex, visitData);
+            onUpdate(updatedDelegation);
+            setVisitRecapModal({ isOpen: false, clientIndex: null });
+            showNotification('Wizyta zakończona.', 'success');
+        } catch (error) {
+            showNotification(error.message, 'error');
+        }
+    };
+
+    return (
+        <div>
+            {/* Tutaj widok szczegółów delegacji i lista klientów */}
+            <Modal isOpen={visitRecapModal.isOpen} onClose={() => setVisitRecapModal({isOpen: false})} title="Podsumowanie wizyty">
+                <VisitRecapForm onSubmit={handleEndVisit} />
+            </Modal>
+        </div>
+    );
+};
+
+const VisitRecapForm = ({ onSubmit }) => {
+    const [visitNotes, setVisitNotes] = useState('');
+    const [ordered, setOrdered] = useState(false);
+
+    const handleSubmit = (e) => {
+        e.preventDefault();
+        onSubmit({ visitNotes, ordered });
+    };
+
+    return (
+        <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+                <label className="block text-sm font-medium">Podsumowanie wizyty</label>
+                <textarea value={visitNotes} onChange={(e) => setVisitNotes(e.target.value)} className="w-full p-2 border rounded-md" />
+            </div>
+            <div className="flex items-center">
+                <input type="checkbox" checked={ordered} onChange={(e) => setOrdered(e.target.checked)} id="ordered" className="h-4 w-4 text-indigo-600 border-gray-300 rounded" />
+                <label htmlFor="ordered" className="ml-2 block text-sm">Zrealizowano zamówienie</label>
+            </div>
+            <div className="flex justify-end pt-4">
+                <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg">Zakończ wizytę</button>
+            </div>
+        </form>
+    );
+};
 
 export default function AppWrapper() {
     return (
