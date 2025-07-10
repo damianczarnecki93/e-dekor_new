@@ -2671,7 +2671,7 @@ const DelegationsView = ({ user, onNavigate, setCurrentOrder }) => {
     const { items: sortedDelegations, requestSort, sortConfig } = useSortableData(delegations);
 
     const { isLoaded, loadError } = useLoadScript({
-        googleMapsApiKey: "TAIzaSyDMr9jJIDp0M52-pvwJjehyXShfHmQ0AYE", // <-- WAŻNE: ZASTĄP SWOIM KLUCZEM
+        googleMapsApiKey: "AIzaSyDMr9jJIDp0M52-pvwJjehyXShfHmQ0AYE", // <-- WAŻNE: ZASTĄP SWOIM KLUCZEM
         libraries: LIBRARIES,
     });
 
