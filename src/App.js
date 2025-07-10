@@ -2833,10 +2833,26 @@ const TaskCard = ({ task, user, onDelete, onEdit }) => {
 
 
 
-const DelegationForm = ({ onSubmit }) => {
+const DelegationForm = ({ onSubmit, delegationData }) => {
     const [formData, setFormData] = useState({
         destination: '', purpose: '', dateFrom: '', dateTo: '', transport: '', kms: 0, advancePayment: 0, clients: [{ name: '', address: '', note: '' }]
     });
+
+    useEffect(() => {
+        if (delegationData) {
+            setFormData({
+                _id: delegationData._id,
+                destination: delegationData.destination || '',
+                purpose: delegationData.purpose || '',
+                dateFrom: delegationData.dateFrom ? format(parseISO(delegationData.dateFrom), 'yyyy-MM-dd') : '',
+                dateTo: delegationData.dateTo ? format(parseISO(delegationData.dateTo), 'yyyy-MM-dd') : '',
+                transport: delegationData.transport || '',
+                kms: delegationData.kms || 0,
+                advancePayment: delegationData.advancePayment || 0,
+                clients: delegationData.clients && delegationData.clients.length > 0 ? delegationData.clients : [{ name: '', address: '', note: '' }]
+            });
+        }
+    }, [delegationData]);
 
     const handleChange = (e) => {
         const { name, value } = e.target;
@@ -2894,7 +2910,7 @@ const DelegationForm = ({ onSubmit }) => {
             </div>
 
             <div className="flex justify-end pt-4">
-                <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg">Wyślij do akceptacji</button>
+                <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg">Zapisz zmiany</button>
             </div>
         </form>
     );
