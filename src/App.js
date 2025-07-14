@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, createContext, useContext, useCallback } from 'react';
 import { Search, List, Wrench, Sun, Moon, LogOut, FileDown, Printer, Save, CheckCircle, AlertTriangle, Upload, Trash2, XCircle, UserPlus, KeyRound, PlusCircle, MessageSquare, Archive, Edit, Home, Menu, Filter, RotateCcw, FileUp, GitMerge, Eye, Trophy, Crown, BarChart2, Users, Package, StickyNote, Settings, ChevronsUpDown, ChevronUp, ChevronDown, ClipboardList, Plane, ListChecks, Zap } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
+import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 import { pl } from 'date-fns/locale';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
@@ -2995,7 +2996,7 @@ const TaskCard = ({ task, user, onDelete, onEdit }) => {
 
 const DelegationForm = ({ onSubmit, delegationData }) => {
     const [formData, setFormData] = useState({
-        destination: '', purpose: '', dateFrom: '', dateTo: '', transport: '', kms: 0, advancePayment: 0, clients: [{ name: '', address: '', note: '' }]
+        destination: '', purpose: '', dateFrom: '', dateTo: '', transport: '', kms: 0, advancePayment: 0, clients: [{ id: `client-${Date.now()}`, name: '', address: '', note: '', visitTime: '' }]
     });
 
     useEffect(() => {
@@ -3009,7 +3010,7 @@ const DelegationForm = ({ onSubmit, delegationData }) => {
                 transport: delegationData.transport || '',
                 kms: delegationData.kms || 0,
                 advancePayment: delegationData.advancePayment || 0,
-                clients: delegationData.clients && delegationData.clients.length > 0 ? delegationData.clients : [{ name: '', address: '', note: '' }]
+                clients: delegationData.clients && delegationData.clients.length > 0 ? delegationData.clients.map(c => ({...c, id: c.id || `client-${Math.random()}`})) : [{ id: `client-${Date.now()}`, name: '', address: '', note: '', visitTime: '' }]
             });
         }
     }, [delegationData]);
@@ -3027,7 +3028,7 @@ const DelegationForm = ({ onSubmit, delegationData }) => {
     };
 
     const addClient = () => {
-        setFormData(prev => ({ ...prev, clients: [...prev.clients, { name: '', address: '', note: '' }] }));
+        setFormData(prev => ({ ...prev, clients: [...prev.clients, { id: `client-${Date.now()}`, name: '', address: '', note: '', visitTime: '' }] }));
     };
 
     const removeClient = (index) => {
@@ -3044,6 +3045,14 @@ const DelegationForm = ({ onSubmit, delegationData }) => {
         }
         onSubmit(formData);
     };
+    
+    const onDragEnd = (result) => {
+        if (!result.destination) return;
+        const items = Array.from(formData.clients);
+        const [reorderedItem] = items.splice(result.source.index, 1);
+        items.splice(result.destination.index, 0, reorderedItem);
+        setFormData(prev => ({ ...prev, clients: items }));
+    };
 
     return (
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -3059,13 +3068,39 @@ const DelegationForm = ({ onSubmit, delegationData }) => {
             
             <div>
                 <h3 className="text-lg font-semibold mt-4">Planowani Kontrahenci</h3>
-                {formData.clients.map((client, index) => (
-                    <div key={index} className="grid grid-cols-1 md:grid-cols-3 gap-2 p-2 border-b">
-                        <input type="text" name="name" value={client.name} onChange={(e) => handleClientChange(index, e)} placeholder="Nazwa kontrahenta" className="w-full p-2 border rounded-md"/>
-                        <input type="text" name="address" value={client.address} onChange={(e) => handleClientChange(index, e)} placeholder="Adres" className="w-full p-2 border rounded-md"/>
-                        <button type="button" onClick={() => removeClient(index)} className="p-2 text-red-500 hover:text-red-700"><Trash2 className="w-5 h-5"/></button>
-                    </div>
-                ))}
+                <DragDropContext onDragEnd={onDragEnd}>
+                    <Droppable droppableId="clients">
+                        {(provided) => (
+                            <div {...provided.droppableProps} ref={provided.innerRef}>
+                                {formData.clients.map((client, index) => (
+                                    <Draggable key={client.id} draggableId={client.id} index={index}>
+                                        {(provided, snapshot) => (
+                                            <div 
+                                                ref={provided.innerRef} 
+                                                {...provided.draggableProps} 
+                                                {...provided.dragHandleProps}
+                                                className={`p-3 border-b grid grid-cols-1 md:grid-cols-3 gap-2 items-start ${snapshot.isDragging ? 'bg-blue-100 dark:bg-blue-900/50' : 'bg-gray-50 dark:bg-gray-800'}`}
+                                            >
+                                                <div className="space-y-2">
+                                                    <input type="text" name="name" value={client.name} onChange={(e) => handleClientChange(index, e)} placeholder="Nazwa kontrahenta" className="w-full p-2 border rounded-md"/>
+                                                    <input type="text" name="address" value={client.address} onChange={(e) => handleClientChange(index, e)} placeholder="Adres" className="w-full p-2 border rounded-md"/>
+                                                </div>
+                                                <div className="space-y-2">
+                                                    <input type="time" name="visitTime" value={client.visitTime} onChange={(e) => handleClientChange(index, e)} placeholder="Godzina wizyty" className="w-full p-2 border rounded-md"/>
+                                                    <textarea name="note" value={client.note} onChange={(e) => handleClientChange(index, e)} placeholder="Szczegóły wizyty..." className="w-full p-2 border rounded-md text-sm" rows="1"></textarea>
+                                                </div>
+                                                <div className="flex items-center justify-end">
+                                                    <button type="button" onClick={() => removeClient(index)} className="p-2 text-red-500 hover:text-red-700"><Trash2 className="w-5 h-5"/></button>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </Draggable>
+                                ))}
+                                {provided.placeholder}
+                            </div>
+                        )}
+                    </Droppable>
+                </DragDropContext>
                 <button type="button" onClick={addClient} className="mt-2 flex items-center px-3 py-1 bg-gray-200 dark:bg-gray-600 text-sm rounded-lg"><PlusCircle className="w-4 h-4 mr-1"/> Dodaj kontrahenta</button>
             </div>
 
@@ -3185,8 +3220,10 @@ const DelegationDetails = ({ delegation, onUpdate, onNavigate, setCurrentOrder, 
                             <div key={index} className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
                                 <div className="flex justify-between items-start">
                                     <div>
-                                        <h4 className="font-bold">{client.name}</h4>
+                                        <h4 className="font-bold">{index + 1}. {client.name}</h4>
                                         <p className="text-xs text-gray-500">{client.address}</p>
+                                        {client.visitTime && <p className="text-sm font-semibold text-blue-600">Planowana godzina: {client.visitTime}</p>}
+                                        {client.note && <p className="mt-1 text-xs italic">Szczegóły: {client.note}</p>}
                                     </div>
                                     <div className="flex gap-2">
                                         {!client.startTime && delegation.status === 'W trakcie' && (
@@ -3210,14 +3247,14 @@ const DelegationDetails = ({ delegation, onUpdate, onNavigate, setCurrentOrder, 
                     </div>
                 </div>
                 <div>
-                     <h3 className="text-xl font-semibold mb-2">Mapa Trasy</h3>
-                     {isMapLoaded ? (
-                         <GoogleMap
-                            mapContainerStyle={MAP_CONTAINER_STYLE}
+                    <h3 className="text-xl font-semibold mb-2">Mapa Trasy</h3>
+                    {isMapLoaded ? (
+                        <GoogleMap
+                            mapContainerStyle={{ height: '400px', width: '100%' }}
                             center={CENTER}
                             zoom={7}
                             onLoad={map => { mapRef.current = map; }}
-                         >
+                        >
                             {directionsResponse ? (
                                 <DirectionsRenderer directions={directionsResponse} />
                             ) : (
@@ -3225,8 +3262,8 @@ const DelegationDetails = ({ delegation, onUpdate, onNavigate, setCurrentOrder, 
                                     <Marker key={index} position={{ lat: client.lat, lng: client.lng }} label={`${index + 1}`} />
                                 ))
                             )}
-                         </GoogleMap>
-                     ) : <div>Ładowanie mapy...</div>}
+                        </GoogleMap>
+                    ) : <div>Ładowanie mapy...</div>}
                 </div>
             </div>
 
