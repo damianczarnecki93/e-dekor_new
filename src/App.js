@@ -3207,9 +3207,6 @@ const DelegationForm = ({ onSubmit, delegationData }) => {
         </>
     );
 };
-```
-
-Ta poprawiona wersja komponentu powinna rozwiązać problem znikających danych i zapewnić, że cała funkcjonalność delegacji działa zgodnie z oczekiwania
 
 const DelegationDetails = ({ delegation, onUpdate, onNavigate, setCurrentOrder, isMapLoaded }) => {
     const { showNotification } = useNotification();
