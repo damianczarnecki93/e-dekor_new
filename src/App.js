@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, createContext, useContext, useCallback } from 'react';
 import { Search, List, Wrench, Sun, Moon, LogOut, FileDown, Printer, Save, CheckCircle, AlertTriangle, Upload, Trash2, XCircle, UserPlus, KeyRound, PlusCircle, MessageSquare, Archive, Edit, Home, Menu, Filter, RotateCcw, FileUp, GitMerge, Eye, Trophy, Crown, BarChart2, Users, Package, StickyNote, Settings, ChevronsUpDown, ChevronUp, ChevronDown, ClipboardList, Plane, ListChecks, Zap } from 'lucide-react';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, eachDayOfInterval, isValid } from 'date-fns';
 import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 import { pl } from 'date-fns/locale';
 import jsPDF from 'jspdf';
@@ -2968,59 +2968,59 @@ const DelegationsView = ({ user, onNavigate, setCurrentOrder }) => {
 
     if (loadError) return <div className="p-8 text-red-500">Błąd ładowania mapy. Sprawdź klucz API i ustawienia w Google Cloud Console.</div>;
 
-    return (
-        <div className="p-2 sm:p-4 md:p-8">
-            <div className="flex flex-wrap justify-between items-center mb-6 gap-2">
-                <h1 className="text-2xl md:text-3xl font-bold">Planer Wizyt i Tras</h1>
-                <button onClick={() => setIsFormModalOpen(true)} className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
-                    <PlusCircle className="w-5 h-5 md:mr-2"/>
-                    <span className="hidden md:inline">Nowa Delegacja</span>
-                </button>
-            </div>
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-x-auto">
-                <table className="w-full text-left text-sm">
-                    <thead className="bg-gray-50 dark:bg-gray-700">
-                        <tr>
-                            <th className="p-2 sm:p-3 cursor-pointer" onClick={() => requestSort('destination')}><div className="flex items-center">Cel {getSortIcon('destination')}</div></th>
-                            <th className="hidden md:table-cell p-2 sm:p-3 cursor-pointer" onClick={() => requestSort('author')}><div className="flex items-center">Autor {getSortIcon('author')}</div></th>
-                            <th className="p-2 sm:p-3 cursor-pointer" onClick={() => requestSort('dateFrom')}><div className="flex items-center">Daty {getSortIcon('dateFrom')}</div></th>
-                            <th className="p-2 sm:p-3 text-center">Status</th>
-                            <th className="p-2 sm:p-3 text-center">Akcje</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                        {isLoading ? (<tr><td colSpan="5" className="p-8 text-center text-gray-500">Ładowanie...</td></tr>) : sortedDelegations.map(d => (
-                            <tr key={d._id}>
-                                <td className="p-2 sm:p-3 font-medium">{d.destination}</td>
-                                <td className="hidden md:table-cell p-2 sm:p-3">{d.author}</td>
-                                <td className="p-2 sm:p-3">{format(parseISO(d.dateFrom), 'd.MM.yy')} - {format(parseISO(d.dateTo), 'd.MM.yy')}</td>
-                                <td className="p-2 sm:p-3 text-center"><span className={`px-2 py-1 text-xs font-semibold rounded-full ${getStatusClass(d.status)}`}>{d.status}</span></td>
-                                <td className="p-2 sm:p-3 text-center whitespace-nowrap">
-                                    <Tooltip text="Podgląd"><button onClick={() => setDetailsModal({isOpen: true, delegation: d})} className="p-2 text-blue-500 hover:text-blue-700"><Eye className="w-5 h-5"/></button></Tooltip>
-                                    <Tooltip text="Edytuj"><button onClick={() => setIsFormModalOpen(d)} className="p-2 text-yellow-500 hover:text-yellow-700"><Edit className="w-5 h-5"/></button></Tooltip>
-                                    {user.role === 'administrator' && d.status === 'Oczekująca' && (
-                                        <>
-                                            <Tooltip text="Akceptuj"><button onClick={() => handleStatusUpdate(d._id, 'Zaakceptowana')} className="p-2 text-green-500 hover:text-green-700"><CheckCircle className="w-5 h-5"/></button></Tooltip>
-                                            <Tooltip text="Odrzuć"><button onClick={() => handleStatusUpdate(d._id, 'Odrzucona')} className="p-2 text-red-500 hover:text-red-700"><XCircle className="w-5 h-5"/></button></Tooltip>
-                                        </>
-                                    )}
-                                    {(user.id === d.authorId || user.role === 'administrator') && (
-                                        <Tooltip text="Usuń"><button onClick={() => handleDelete(d._id)} className="p-2 text-gray-500 hover:text-red-500"><Trash2 className="w-5 h-5"/></button></Tooltip>
-                                    )}
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            </div>
-            <Modal isOpen={isFormModalOpen} onClose={() => setIsFormModalOpen(false)} title={isFormModalOpen._id ? "Edytuj Delegację" : "Nowa Delegacja"} maxWidth="2xl">
-                <DelegationForm onSubmit={handleAddOrUpdateDelegation} delegationData={isFormModalOpen._id ? isFormModalOpen : null} />
-            </Modal>
-             <Modal isOpen={detailsModal.isOpen} onClose={() => setDetailsModal({isOpen: false, delegation: null})} title="Szczegóły Delegacji" maxWidth="4xl">
-                {detailsModal.delegation && <DelegationDetails delegation={detailsModal.delegation} onUpdate={handleDelegationUpdate} onNavigate={onNavigate} setCurrentOrder={setCurrentOrder} isMapLoaded={isLoaded}/>}
-            </Modal>
+return (
+    <div className="p-2 sm:p-4 md:p-8">
+        <div className="flex flex-wrap justify-between items-center mb-6 gap-2">
+            <h1 className="text-2xl md:text-3xl font-bold">Planer Wizyt i Tras</h1>
+            <button onClick={() => setIsFormModalOpen(true)} className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
+                <PlusCircle className="w-5 h-5 md:mr-2"/>
+                <span className="hidden md:inline">Nowa Delegacja</span>
+            </button>
         </div>
-    );
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-x-auto">
+            <table className="w-full text-left text-sm">
+                <thead className="bg-gray-50 dark:bg-gray-700">
+                    <tr>
+                        <th className="p-2 sm:p-3 cursor-pointer" onClick={() => requestSort('destination')}><div className="flex items-center">Cel {getSortIcon('destination')}</div></th>
+                        <th className="hidden md:table-cell p-2 sm:p-3 cursor-pointer" onClick={() => requestSort('author')}><div className="flex items-center">Autor {getSortIcon('author')}</div></th>
+                        <th className="p-2 sm:p-3 cursor-pointer" onClick={() => requestSort('dateFrom')}><div className="flex items-center">Daty {getSortIcon('dateFrom')}</div></th>
+                        <th className="p-2 sm:p-3 text-center">Status</th>
+                        <th className="p-2 sm:p-3 text-center">Akcje</th>
+                    </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                    {isLoading ? (<tr><td colSpan="5" className="p-8 text-center text-gray-500">Ładowanie...</td></tr>) : sortedDelegations.map(d => (
+                        <tr key={d._id}>
+                            <td className="p-2 sm:p-3 font-medium">{d.destination}</td>
+                            <td className="hidden md:table-cell p-2 sm:p-3">{d.author}</td>
+                            <td className="p-2 sm:p-3">{format(parseISO(d.dateFrom), 'd.MM.yy')} - {format(parseISO(d.dateTo), 'd.MM.yy')}</td>
+                            <td className="p-2 sm:p-3 text-center"><span className={`px-2 py-1 text-xs font-semibold rounded-full ${getStatusClass(d.status)}`}>{d.status}</span></td>
+                            <td className="p-2 sm:p-3 text-center whitespace-nowrap">
+                                <Tooltip text="Podgląd"><button onClick={() => setDetailsModal({isOpen: true, delegation: d})} className="p-2 text-blue-500 hover:text-blue-700"><Eye className="w-5 h-5"/></button></Tooltip>
+                                <Tooltip text="Edytuj"><button onClick={() => setIsFormModalOpen(d)} className="p-2 text-yellow-500 hover:text-yellow-700"><Edit className="w-5 h-5"/></button></Tooltip>
+                                {user.role === 'administrator' && d.status === 'Oczekująca' && (
+                                    <>
+                                        <Tooltip text="Akceptuj"><button onClick={() => handleStatusUpdate(d._id, 'Zaakceptowana')} className="p-2 text-green-500 hover:text-green-700"><CheckCircle className="w-5 h-5"/></button></Tooltip>
+                                        <Tooltip text="Odrzuć"><button onClick={() => handleStatusUpdate(d._id, 'Odrzucona')} className="p-2 text-red-500 hover:text-red-700"><XCircle className="w-5 h-5"/></button></Tooltip>
+                                    </>
+                                )}
+                                {(user.id === d.authorId || user.role === 'administrator') && (
+                                    <Tooltip text="Usuń"><button onClick={() => handleDelete(d._id)} className="p-2 text-gray-500 hover:text-red-500"><Trash2 className="w-5 h-5"/></button></Tooltip>
+                                )}
+                            </td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+        </div>
+        <Modal isOpen={isFormModalOpen} onClose={() => setIsFormModalOpen(false)} title={isFormModalOpen._id ? "Edytuj Delegację" : "Nowa Delegacja"} maxWidth="2xl">
+            <DelegationForm onSubmit={handleAddOrUpdateDelegation} delegationData={isFormModalOpen._id ? isFormModalOpen : null} />
+        </Modal>
+         <Modal isOpen={detailsModal.isOpen} onClose={() => setDetailsModal({isOpen: false, delegation: null})} title="Szczegóły Delegacji" maxWidth="4xl">
+            {detailsModal.delegation && <DelegationDetails delegation={detailsModal.delegation} onUpdate={handleDelegationUpdate} onNavigate={onNavigate} setCurrentOrder={setCurrentOrder} isMapLoaded={isLoaded}/>}
+        </Modal>
+    </div>
+);
 };
 
 
