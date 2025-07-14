@@ -3024,9 +3024,6 @@ return (
 };
 
 
-
-
-
 const DelegationForm = ({ onSubmit, delegationData }) => {
     const [formData, setFormData] = useState({
         destination: '', purpose: '', dateFrom: '', dateTo: '', transport: '', kms: 0, advancePayment: 0, clientsByDay: {}
@@ -3038,10 +3035,15 @@ const DelegationForm = ({ onSubmit, delegationData }) => {
         if (delegationData) {
             // Edycja istniejącej delegacji
             const clientsByDay = (delegationData.clients || []).reduce((acc, client) => {
-                const day = client.date ? format(parseISO(client.date), 'yyyy-MM-dd') : format(parseISO(delegationData.dateFrom), 'yyyy-MM-dd');
+                // Upewniamy się, że data jest poprawnie odczytana i sformatowana
+                const day = client.date && isValid(parseISO(client.date)) 
+                    ? format(parseISO(client.date), 'yyyy-MM-dd') 
+                    : format(parseISO(delegationData.dateFrom), 'yyyy-MM-dd');
+                
                 if (!acc[day]) {
                     acc[day] = [];
                 }
+                // Upewniamy się, że każdy klient ma unikalne ID dla drag-n-drop
                 acc[day].push({ ...client, id: client.id || `client-${Math.random()}` });
                 return acc;
             }, {});
@@ -3108,6 +3110,7 @@ const DelegationForm = ({ onSubmit, delegationData }) => {
             alert('Proszę wypełnić wszystkie wymagane pola.');
             return;
         }
+        // Spłaszczenie struktury przed wysłaniem, z dodaniem daty do każdego klienta
         const flatClients = Object.entries(formData.clientsByDay).flatMap(([date, clients]) => 
             clients.map(client => ({ ...client, date }))
         );
@@ -3204,6 +3207,9 @@ const DelegationForm = ({ onSubmit, delegationData }) => {
         </>
     );
 };
+```
+
+Ta poprawiona wersja komponentu powinna rozwiązać problem znikających danych i zapewnić, że cała funkcjonalność delegacji działa zgodnie z oczekiwania
 
 const DelegationDetails = ({ delegation, onUpdate, onNavigate, setCurrentOrder, isMapLoaded }) => {
     const { showNotification } = useNotification();
