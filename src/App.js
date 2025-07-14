@@ -3204,14 +3204,7 @@ const DelegationForm = ({ onSubmit, delegationData }) => {
         </>
     );
 };
-```
 
----
-
-#### **3. Zaktualizowany kod `DelegationDetails`**
-Ten komponent teraz wyświetla wszystkie informacje z formularza, w tym listę kontrahentów w poprawnej kolejności, wraz z godziną wizyty i notatkami.
-
-```javascript
 const DelegationDetails = ({ delegation, onUpdate, onNavigate, setCurrentOrder, isMapLoaded }) => {
     const { showNotification } = useNotification();
     const [visitRecapModal, setVisitRecapModal] = useState({ isOpen: false, clientIndex: null });
