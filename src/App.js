@@ -3214,7 +3214,7 @@ const DelegationDetails = ({ delegation, onUpdate, onNavigate, setCurrentOrder, 
 
     const clientsByDay = useMemo(() => {
         return (delegation.clients || []).reduce((acc, client) => {
-            const day = client.date ? format(parseISO(client.date), 'yyyy-MM-dd') : 'unassigned';
+            const day = client.date && isValid(parseISO(client.date)) ? format(parseISO(client.date), 'yyyy-MM-dd') : 'unassigned';
             if (!acc[day]) {
                 acc[day] = [];
             }
@@ -3223,7 +3223,7 @@ const DelegationDetails = ({ delegation, onUpdate, onNavigate, setCurrentOrder, 
         }, {});
     }, [delegation.clients]);
     
-    const validClients = useMemo(() => delegation.clients.filter(c => c.lat && c.lng), [delegation.clients]);
+    const validClients = useMemo(() => (delegation.clients || []).filter(c => c.lat && c.lng), [delegation.clients]);
 
     useEffect(() => {
         if (isMapLoaded && validClients.length > 1) {
@@ -3314,7 +3314,7 @@ const DelegationDetails = ({ delegation, onUpdate, onNavigate, setCurrentOrder, 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm mb-6">
                 <p><strong>Cel:</strong> {delegation.purpose}</p>
                 <p><strong>Autor:</strong> {delegation.author}</p>
-                <p><strong>Data:</strong> {format(parseISO(delegation.dateFrom), 'd MMM yyyy')} - {format(parseISO(delegation.dateTo), 'd MMM yyyy')}</p>
+                <p><strong>Data:</strong> {delegation.dateFrom && isValid(parseISO(delegation.dateFrom)) ? format(parseISO(delegation.dateFrom), 'd MMM yyyy') : ''} - {delegation.dateTo && isValid(parseISO(delegation.dateTo)) ? format(parseISO(delegation.dateTo), 'd MMM yyyy') : ''}</p>
                 <p><strong>Status:</strong> {delegation.status}</p>
             </div>
 
@@ -3324,7 +3324,7 @@ const DelegationDetails = ({ delegation, onUpdate, onNavigate, setCurrentOrder, 
                     <div className="space-y-4 max-h-[400px] overflow-y-auto">
                         {Object.keys(clientsByDay).sort().map(day => (
                             <div key={day}>
-                                <h4 className="text-lg font-semibold mt-4 mb-2 bg-gray-100 dark:bg-gray-700 p-2 rounded-md">{format(parseISO(day), 'eeee, d MMMM yyyy', { locale: pl })}</h4>
+                                <h4 className="text-lg font-semibold mt-4 mb-2 bg-gray-100 dark:bg-gray-700 p-2 rounded-md">{day !== 'unassigned' && isValid(parseISO(day)) ? format(parseISO(day), 'eeee, d MMMM yyyy', { locale: pl }) : 'Nieprzypisane'}</h4>
                                 {clientsByDay[day].map((client, index) => (
                                     <div key={index} className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg mb-2">
                                         <div className="flex justify-between items-start">
@@ -3345,8 +3345,8 @@ const DelegationDetails = ({ delegation, onUpdate, onNavigate, setCurrentOrder, 
                                         </div>
                                         {client.startTime && (
                                              <div className="mt-2 text-xs border-t pt-2">
-                                                <p>Rozpoczęto: {format(parseISO(client.startTime), 'HH:mm:ss')}</p>
-                                                {client.endTime && <p>Zakończono: {format(parseISO(client.endTime), 'HH:mm:ss')}</p>}
+                                                <p>Rozpoczęto: {isValid(parseISO(client.startTime)) ? format(parseISO(client.startTime), 'HH:mm:ss') : 'Błędna data'}</p>
+                                                {client.endTime && <p>Zakończono: {isValid(parseISO(client.endTime)) ? format(parseISO(client.endTime), 'HH:mm:ss') : 'Błędna data'}</p>}
                                                 {client.visitNotes && <p className="mt-1"><strong>Notatki:</strong> {client.visitNotes}</p>}
                                                 {client.ordered && <p className="text-green-600 font-bold">Złożono zamówienie</p>}
                                              </div>
@@ -3384,7 +3384,6 @@ const DelegationDetails = ({ delegation, onUpdate, onNavigate, setCurrentOrder, 
         </div>
     );
 };
-
 
 
 const VisitRecapForm = ({ onSubmit }) => {
