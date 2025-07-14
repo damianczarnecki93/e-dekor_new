@@ -3030,23 +3030,19 @@ const DelegationForm = ({ onSubmit, delegationData }) => {
     });
     const [previewModal, setPreviewModal] = useState(false);
 
-    // Efekt do inicjalizacji i aktualizacji formularza na podstawie dat
+    // Efekt do inicjalizacji formularza (edycja) i tworzenia sekcji dni (nowa delegacja)
     useEffect(() => {
+        const initialClientsByDay = {};
+        
+        // Jeśli edytujemy istniejącą delegację, grupujemy klientów po dacie
         if (delegationData) {
-            // Edycja istniejącej delegacji
-            const clientsByDay = (delegationData.clients || []).reduce((acc, client) => {
-                // Upewniamy się, że data jest poprawnie odczytana i sformatowana
-                const day = client.date && isValid(parseISO(client.date)) 
-                    ? format(parseISO(client.date), 'yyyy-MM-dd') 
-                    : format(parseISO(delegationData.dateFrom), 'yyyy-MM-dd');
-                
-                if (!acc[day]) {
-                    acc[day] = [];
+            (delegationData.clients || []).forEach(client => {
+                const day = client.date ? format(parseISO(client.date), 'yyyy-MM-dd') : format(parseISO(delegationData.dateFrom), 'yyyy-MM-dd');
+                if (!initialClientsByDay[day]) {
+                    initialClientsByDay[day] = [];
                 }
-                // Upewniamy się, że każdy klient ma unikalne ID dla drag-n-drop
-                acc[day].push({ ...client, id: client.id || `client-${Math.random()}` });
-                return acc;
-            }, {});
+                initialClientsByDay[day].push({ ...client, id: client.id || `client-${Math.random()}` });
+            });
 
             setFormData({
                 _id: delegationData._id,
@@ -3057,28 +3053,29 @@ const DelegationForm = ({ onSubmit, delegationData }) => {
                 transport: delegationData.transport || '',
                 kms: delegationData.kms || 0,
                 advancePayment: delegationData.advancePayment || 0,
-                clientsByDay: clientsByDay
+                clientsByDay: initialClientsByDay
             });
         }
     }, [delegationData]);
 
-    // Efekt do tworzenia sekcji dni przy nowej delegacji
+    // Efekt do dynamicznego tworzenia/usuwania sekcji dni na podstawie wybranego zakresu dat
     useEffect(() => {
-        if (!delegationData) { // Tylko dla nowych delegacji
-            const { dateFrom, dateTo } = formData;
-            if (dateFrom && dateTo && isValid(new Date(dateFrom)) && isValid(new Date(dateTo)) && new Date(dateFrom) <= new Date(dateTo)) {
-                const days = eachDayOfInterval({ start: new Date(dateFrom), end: new Date(dateTo) });
-                const newClientsByDay = {};
-                days.forEach(day => {
-                    const dayString = format(day, 'yyyy-MM-dd');
-                    newClientsByDay[dayString] = formData.clientsByDay[dayString] || [];
-                });
-                setFormData(prev => ({ ...prev, clientsByDay: newClientsByDay }));
-            } else {
-                setFormData(prev => ({ ...prev, clientsByDay: {} }));
-            }
+        const { dateFrom, dateTo } = formData;
+        if (dateFrom && dateTo && isValid(new Date(dateFrom)) && isValid(new Date(dateTo)) && new Date(dateFrom) <= new Date(dateTo)) {
+            const days = eachDayOfInterval({ start: new Date(dateFrom), end: new Date(dateTo) });
+            const newClientsByDay = {};
+            days.forEach(day => {
+                const dayString = format(day, 'yyyy-MM-dd');
+                newClientsByDay[dayString] = formData.clientsByDay[dayString] || [];
+            });
+            setFormData(prev => ({ ...prev, clientsByDay: newClientsByDay }));
+        } else {
+             // Czyścimy listę, jeśli daty są nieprawidłowe
+            setFormData(prev => ({ ...prev, clientsByDay: {} }));
         }
-    }, [formData.dateFrom, formData.dateTo, delegationData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [formData.dateFrom, formData.dateTo]);
+
 
     const handleChange = (e) => {
         const { name, value } = e.target;
@@ -3208,12 +3205,24 @@ const DelegationForm = ({ onSubmit, delegationData }) => {
     );
 };
 
+
 const DelegationDetails = ({ delegation, onUpdate, onNavigate, setCurrentOrder, isMapLoaded }) => {
     const { showNotification } = useNotification();
     const [visitRecapModal, setVisitRecapModal] = useState({ isOpen: false, clientIndex: null });
     const [directionsResponse, setDirectionsResponse] = useState(null);
     const mapRef = useRef();
 
+    const clientsByDay = useMemo(() => {
+        return (delegation.clients || []).reduce((acc, client) => {
+            const day = client.date ? format(parseISO(client.date), 'yyyy-MM-dd') : 'unassigned';
+            if (!acc[day]) {
+                acc[day] = [];
+            }
+            acc[day].push(client);
+            return acc;
+        }, {});
+    }, [delegation.clients]);
+    
     const validClients = useMemo(() => delegation.clients.filter(c => c.lat && c.lng), [delegation.clients]);
 
     useEffect(() => {
@@ -3313,32 +3322,37 @@ const DelegationDetails = ({ delegation, onUpdate, onNavigate, setCurrentOrder, 
                 <div>
                     <h3 className="text-xl font-semibold mb-2">Plan Wizyt</h3>
                     <div className="space-y-4 max-h-[400px] overflow-y-auto">
-                        {delegation.clients.map((client, index) => (
-                            <div key={index} className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                                <div className="flex justify-between items-start">
-                                    <div>
-                                        <h4 className="font-bold">{index + 1}. {client.name}</h4>
-                                        <p className="text-xs text-gray-500">{client.address}</p>
-                                        {client.visitTime && <p className="text-sm font-semibold text-blue-600">Planowana godzina: {client.visitTime}</p>}
-                                        {client.note && <p className="mt-1 text-xs italic">Szczegóły: {client.note}</p>}
-                                    </div>
-                                    <div className="flex gap-2">
-                                        {!client.startTime && delegation.status === 'W trakcie' && (
-                                            <button onClick={() => handleStartVisit(index)} className="px-3 py-1 text-xs bg-green-500 text-white rounded-lg">Rozpocznij wizytę</button>
+                        {Object.keys(clientsByDay).sort().map(day => (
+                            <div key={day}>
+                                <h4 className="text-lg font-semibold mt-4 mb-2 bg-gray-100 dark:bg-gray-700 p-2 rounded-md">{format(parseISO(day), 'eeee, d MMMM yyyy', { locale: pl })}</h4>
+                                {clientsByDay[day].map((client, index) => (
+                                    <div key={index} className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg mb-2">
+                                        <div className="flex justify-between items-start">
+                                            <div>
+                                                <h5 className="font-bold">{index + 1}. {client.name}</h5>
+                                                <p className="text-xs text-gray-500">{client.address}</p>
+                                                {client.visitTime && <p className="text-sm font-semibold text-blue-600">Planowana godzina: {client.visitTime}</p>}
+                                                {client.note && <p className="mt-1 text-xs italic">Szczegóły: {client.note}</p>}
+                                            </div>
+                                            <div className="flex gap-2">
+                                                {!client.startTime && delegation.status === 'W trakcie' && (
+                                                    <button onClick={() => handleStartVisit(index)} className="px-3 py-1 text-xs bg-green-500 text-white rounded-lg">Rozpocznij wizytę</button>
+                                                )}
+                                                {client.startTime && !client.endTime && (
+                                                    <button onClick={() => setVisitRecapModal({isOpen: true, clientIndex: index})} className="px-3 py-1 text-xs bg-red-500 text-white rounded-lg">Zakończ wizytę</button>
+                                                )}
+                                            </div>
+                                        </div>
+                                        {client.startTime && (
+                                             <div className="mt-2 text-xs border-t pt-2">
+                                                <p>Rozpoczęto: {format(parseISO(client.startTime), 'HH:mm:ss')}</p>
+                                                {client.endTime && <p>Zakończono: {format(parseISO(client.endTime), 'HH:mm:ss')}</p>}
+                                                {client.visitNotes && <p className="mt-1"><strong>Notatki:</strong> {client.visitNotes}</p>}
+                                                {client.ordered && <p className="text-green-600 font-bold">Złożono zamówienie</p>}
+                                             </div>
                                         )}
-                                        {client.startTime && !client.endTime && (
-                                            <button onClick={() => setVisitRecapModal({isOpen: true, clientIndex: index})} className="px-3 py-1 text-xs bg-red-500 text-white rounded-lg">Zakończ wizytę</button>
-                                        )}
                                     </div>
-                                </div>
-                                {client.startTime && (
-                                     <div className="mt-2 text-xs border-t pt-2">
-                                        <p>Rozpoczęto: {format(parseISO(client.startTime), 'HH:mm:ss')}</p>
-                                        {client.endTime && <p>Zakończono: {format(parseISO(client.endTime), 'HH:mm:ss')}</p>}
-                                        {client.visitNotes && <p className="mt-1"><strong>Notatki:</strong> {client.visitNotes}</p>}
-                                        {client.ordered && <p className="text-green-600 font-bold">Złożono zamówienie</p>}
-                                     </div>
-                                )}
+                                ))}
                             </div>
                         ))}
                     </div>
@@ -3370,6 +3384,7 @@ const DelegationDetails = ({ delegation, onUpdate, onNavigate, setCurrentOrder, 
         </div>
     );
 };
+
 
 
 const VisitRecapForm = ({ onSubmit }) => {
