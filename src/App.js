@@ -775,12 +775,12 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty }) => {
     
     const handleExportPdf = () => {
         const doc = new jsPDF();
-        doc.text(`Zamówienie dla: ${order.customerName}`, 14, 15);
+        doc.text(`Zamowienie dla: ${order.customerName}`, 14, 15);
         doc.text(`Data: ${new Date().toLocaleDateString()}`, 14, 22);
 
         doc.autoTable({
             startY: 30,
-            head: [['Nazwa', 'Kod produktu', 'Ilość', 'Cena', 'Wartość']],
+            head: [['Nazwa', 'Kod produktu', 'Ilosc', 'Cena', 'Wartosc']],
             body: order.items.map(item => [
                 item.name,
                 item.product_code,
