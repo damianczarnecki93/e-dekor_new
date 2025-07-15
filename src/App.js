@@ -3043,6 +3043,7 @@ const DelegationForm = ({ onSubmit, delegationData }) => {
                 if (!initialClientsByDay[day]) {
                     initialClientsByDay[day] = [];
                 }
+                // Upewniamy się, że każdy klient ma unikalne ID dla drag-n-drop
                 initialClientsByDay[day].push({ ...client, id: client.id || `client-${Math.random()}` });
             });
 
@@ -3076,6 +3077,7 @@ const DelegationForm = ({ onSubmit, delegationData }) => {
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [formData.dateFrom, formData.dateTo, delegationData]);
+
 
     const handleChange = (e) => {
         const { name, value } = e.target;
@@ -3383,8 +3385,6 @@ const DelegationDetails = ({ delegation, onUpdate, onNavigate, setCurrentOrder, 
         </div>
     );
 };
-
-
 
 const VisitRecapForm = ({ onSubmit }) => {
     const [visitNotes, setVisitNotes] = useState('');
