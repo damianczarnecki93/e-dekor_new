@@ -1429,7 +1429,6 @@ function App() {
             case 'orders': return <OrdersListView onEdit={loadOrderForEditing} />;
             case 'picking': return <PickingView />;
             case 'inventory': return <InventoryView user={user} />;
-            case 'delegations': return <DelegationsView />;
             case 'admin': return <AdminView user={user} />;
             default: return <HomeView user={user} setActiveView={setActiveView} />;
         }
