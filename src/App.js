@@ -3030,23 +3030,21 @@ const DelegationForm = ({ onSubmit, delegationData }) => {
     });
     const [previewModal, setPreviewModal] = useState(false);
 
-    // Efekt do inicjalizacji i aktualizacji formularza na podstawie dat
+    // Efekt do inicjalizacji formularza (edycja)
     useEffect(() => {
         if (delegationData) {
-            // Edycja istniejącej delegacji
-            const clientsByDay = (delegationData.clients || []).reduce((acc, client) => {
-                // Upewniamy się, że data jest poprawnie odczytana i sformatowana
+            const initialClientsByDay = {};
+            // Poprawne grupowanie klientów według daty z delegacji
+            (delegationData.clients || []).forEach(client => {
                 const day = client.date && isValid(parseISO(client.date)) 
                     ? format(parseISO(client.date), 'yyyy-MM-dd') 
                     : format(parseISO(delegationData.dateFrom), 'yyyy-MM-dd');
                 
-                if (!acc[day]) {
-                    acc[day] = [];
+                if (!initialClientsByDay[day]) {
+                    initialClientsByDay[day] = [];
                 }
-                // Upewniamy się, że każdy klient ma unikalne ID dla drag-n-drop
-                acc[day].push({ ...client, id: client.id || `client-${Math.random()}` });
-                return acc;
-            }, {});
+                initialClientsByDay[day].push({ ...client, id: client.id || `client-${Math.random()}` });
+            });
 
             setFormData({
                 _id: delegationData._id,
@@ -3057,31 +3055,27 @@ const DelegationForm = ({ onSubmit, delegationData }) => {
                 transport: delegationData.transport || '',
                 kms: delegationData.kms || 0,
                 advancePayment: delegationData.advancePayment || 0,
-                clientsByDay: clientsByDay
+                clientsByDay: initialClientsByDay
             });
         }
     }, [delegationData]);
-
-    // Efekt do tworzenia sekcji dni przy nowej delegacji
+    
+    // Efekt do tworzenia sekcji dni przy zmianie zakresu dat
     useEffect(() => {
-        if (!delegationData) { // Tylko dla nowych delegacji
-            const { dateFrom, dateTo } = formData;
-            if (dateFrom && dateTo && isValid(new Date(dateFrom)) && isValid(new Date(dateTo)) && new Date(dateFrom) <= new Date(dateTo)) {
-                const days = eachDayOfInterval({ start: new Date(dateFrom), end: new Date(dateTo) });
-                const newClientsByDay = {};
-                days.forEach(day => {
-                    const dayString = format(day, 'yyyy-MM-dd');
-                    newClientsByDay[dayString] = formData.clientsByDay[dayString] || [];
-                });
-                setFormData(prev => ({ ...prev, clientsByDay: newClientsByDay }));
-            } else {
-                 // Czyścimy listę, jeśli daty są nieprawidłowe
-                setFormData(prev => ({ ...prev, clientsByDay: {} }));
-            }
+        const { dateFrom, dateTo } = formData;
+        if (dateFrom && dateTo && isValid(new Date(dateFrom)) && isValid(new Date(dateTo)) && new Date(dateFrom) <= new Date(dateTo)) {
+            const days = eachDayOfInterval({ start: new Date(dateFrom), end: new Date(dateTo) });
+            const newClientsByDay = {};
+            days.forEach(day => {
+                const dayString = format(day, 'yyyy-MM-dd');
+                newClientsByDay[dayString] = formData.clientsByDay[dayString] || [];
+            });
+            setFormData(prev => ({ ...prev, clientsByDay: newClientsByDay }));
+        } else if (!delegationData) { // Czyść tylko dla nowych delegacji, jeśli daty są nieprawidłowe
+            setFormData(prev => ({ ...prev, clientsByDay: {} }));
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [formData.dateFrom, formData.dateTo, delegationData]);
-
 
     const handleChange = (e) => {
         const { name, value } = e.target;
@@ -3210,8 +3204,6 @@ const DelegationForm = ({ onSubmit, delegationData }) => {
         </>
     );
 };
-
-
 
 const DelegationDetails = ({ delegation, onUpdate, onNavigate, setCurrentOrder, isMapLoaded }) => {
     const { showNotification } = useNotification();
@@ -3391,6 +3383,7 @@ const DelegationDetails = ({ delegation, onUpdate, onNavigate, setCurrentOrder, 
         </div>
     );
 };
+
 
 
 const VisitRecapForm = ({ onSubmit }) => {
