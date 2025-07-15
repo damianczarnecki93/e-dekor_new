@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, createContext, useContext, useCallback } from 'react';
-import { Search, List, Wrench, Sun, Moon, LogOut, FileDown, Printer, Save, CheckCircle, AlertTriangle, Upload, Trash2, XCircle, UserPlus, KeyRound, PlusCircle, MessageSquare, Archive, Edit, Home, Menu, Filter, RotateCcw, FileUp, GitMerge, Eye, Trophy, Crown, BarChart2, Users, Package, StickyNote, Settings, ChevronsUpDown, ChevronUp, ChevronDown, ClipboardList, Plane, ListChecks, Zap } from 'lucide-react';
+import { Search, List, Wrench, Sun, Moon, LogOut, FileDown, Printer, Save, CheckCircle, AlertTriangle, Upload, Trash2, XCircle, UserPlus, KeyRound, PlusCircle, MessageSquare, Archive, Edit, Home, Menu, Filter, RotateCcw, FileUp, GitMerge, Eye, Trophy, Crown, BarChart2, Users, Package, StickyNote, Settings, ChevronsUpDown, ChevronUp, ChevronDown, ClipboardList, Plane, ListChecks, Zap, LayoutDashboard } from 'lucide-react';
 import { format, parseISO, eachDayOfInterval, isValid } from 'date-fns';
 import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 import { pl } from 'date-fns/locale';
@@ -2540,150 +2540,152 @@ const UserChangePasswordModal = ({ isOpen, onClose }) => {
 
 // --- Nowe Komponenty (Kanban i Delegacje) ---
 
-const KanbanView = ({ user }) => {
-    const [tasks, setTasks] = useState([]);
-    const [users, setUsers] = useState([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [isModalOpen, setIsModalOpen] = useState(false);
-    const [detailsModal, setDetailsModal] = useState({ isOpen: false, task: null });
-    const { showNotification } = useNotification();
-    const [selectedUserId, setSelectedUserId] = useState(user.id);
-
-    const fetchAllData = useCallback(async () => {
-        setIsLoading(true);
-        try {
-            const userIdToFetch = user.role === 'administrator' ? selectedUserId : user.id;
-            const [tasksData, usersData] = await Promise.all([
-                api.getKanbanTasks(userIdToFetch),
-                api.getUsersList()
-            ]);
-            setTasks(tasksData);
-            setUsers(usersData);
-        } catch (error) {
-            showNotification(error.message, 'error');
-        } finally {
-            setIsLoading(false);
+const KanbanView = () => {
+    const [columns, setColumns] = useState({
+        'todo': {
+            name: 'Do zrobienia',
+            items: []
+        },
+        'in-progress': {
+            name: 'W trakcie',
+            items: []
+        },
+        'done': {
+            name: 'Gotowe',
+            items: []
         }
-    }, [user.id, user.role, selectedUserId, showNotification]);
+    });
+    const [newTaskContent, setNewTaskContent] = useState('');
+    const [newTaskPriority, setNewTaskPriority] = useState('Niski');
 
-    useEffect(() => {
-        fetchAllData();
-    }, [selectedUserId]);
+    const onDragEnd = (result) => {
+        if (!result.destination) return;
+        const { source, destination } = result;
 
-    const handleTaskMove = async (taskId, newStatus) => {
-        const originalTasks = [...tasks];
-        const updatedTasks = tasks.map(t => t._id === taskId ? { ...t, status: newStatus } : t);
-        setTasks(updatedTasks);
-        try {
-            await api.updateKanbanTask(taskId, { status: newStatus });
-        } catch (error) {
-            showNotification('Błąd podczas aktualizacji zadania.', 'error');
-            setTasks(originalTasks);
-        }
-    };
-    
-    const handleAddTask = async (taskData) => {
-        try {
-            const authorData = user.role === 'administrator' ? users.find(u => u._id === selectedUserId) || user : user;
-            const fullTaskData = {
-                ...taskData,
-                authorId: authorData._id || authorData.id,
-                author: authorData.username,
-            };
-            const newTask = await api.addKanbanTask(fullTaskData);
-            setTasks(prev => [newTask, ...prev]);
-            showNotification('Zadanie dodane pomyślnie.', 'success');
-            setIsModalOpen(false);
-        } catch(error) {
-            showNotification(error.message, 'error');
+        if (source.droppableId === destination.droppableId) {
+            const column = columns[source.droppableId];
+            const copiedItems = [...column.items];
+            const [removed] = copiedItems.splice(source.index, 1);
+            copiedItems.splice(destination.index, 0, removed);
+            setColumns({
+                ...columns,
+                [source.droppableId]: {
+                    ...column,
+                    items: copiedItems
+                }
+            });
+        } else {
+            const sourceColumn = columns[source.droppableId];
+            const destColumn = columns[destination.droppableId];
+            const sourceItems = [...sourceColumn.items];
+            const destItems = [...destColumn.items];
+            const [removed] = sourceItems.splice(source.index, 1);
+            destItems.splice(destination.index, 0, removed);
+            setColumns({
+                ...columns,
+                [source.droppableId]: {
+                    ...sourceColumn,
+                    items: sourceItems
+                },
+                [destination.droppableId]: {
+                    ...destColumn,
+                    items: destItems
+                }
+            });
         }
     };
 
-    const handleDeleteTask = async (taskId) => {
-        if(window.confirm('Czy na pewno chcesz usunąć to zadanie?')) {
-            try {
-                await api.deleteKanbanTask(taskId);
-                setTasks(prev => prev.filter(t => t._id !== taskId));
-                showNotification('Zadanie usunięte.', 'success');
-            } catch (error) {
-                showNotification(error.message, 'error');
+    const handleAddTask = () => {
+        if (!newTaskContent) return;
+        const newTask = {
+            id: `task-${Date.now()}`,
+            content: newTaskContent,
+            priority: newTaskPriority
+        };
+        const todoColumn = columns['todo'];
+        const updatedItems = [...todoColumn.items, newTask];
+        setColumns({
+            ...columns,
+            'todo': {
+                ...todoColumn,
+                items: updatedItems
             }
-        }
-    };
-    
-    const handleUpdateDetails = async (taskId, dataToUpdate) => {
-        try {
-            const updatedTask = await api.updateKanbanTask(taskId, dataToUpdate);
-            setTasks(tasks.map(t => t._id === taskId ? updatedTask : t));
-            setDetailsModal({ isOpen: false, task: null });
-            showNotification('Szczegóły zadania zaktualizowane.', 'success');
-        } catch (error) {
-            showNotification(error.message, 'error');
-        }
+        });
+        setNewTaskContent('');
+        setNewTaskPriority('Niski');
     };
 
-    const onDragStart = (e, taskId) => {
-        e.dataTransfer.setData("taskId", taskId);
+    const getPriorityClass = (priority) => {
+        switch (priority) {
+            case 'Wysoki': return 'border-l-4 border-red-500';
+            case 'Średni': return 'border-l-4 border-yellow-500';
+            default: return 'border-l-4 border-green-500';
+        }
     };
-
-    const onDrop = (e, newStatus) => {
-        const taskId = e.dataTransfer.getData("taskId");
-        handleTaskMove(taskId, newStatus);
-    };
-    
-    const columns = [
-        { id: 'todo', title: 'Do zrobienia', color: 'bg-red-500' },
-        { id: 'inprogress', title: 'W trakcie', color: 'bg-yellow-500' },
-        { id: 'done', title: 'Gotowe', color: 'bg-green-500' },
-    ];
 
     return (
         <div className="p-4 md:p-8">
-            <div className="flex flex-wrap justify-between items-center mb-6">
-                <h1 className="text-3xl font-bold">Tablica Zadań</h1>
-                <div className="flex items-center gap-4">
-                    {user.role === 'administrator' && (
-                         <select value={selectedUserId} onChange={(e) => setSelectedUserId(e.target.value)} className="p-2 border rounded-md bg-white dark:bg-gray-700">
-                             {users.map(u => <option key={u._id} value={u._id}>{u.username}</option>)}
-                         </select>
-                    )}
-                    <button onClick={() => setIsModalOpen(true)} className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
-                        <PlusCircle className="w-5 h-5 mr-2"/> Nowe Zadanie
-                    </button>
+            <h1 className="text-3xl font-bold mb-6">Tablica Kanban</h1>
+            <div className="mb-6 p-4 bg-white dark:bg-gray-800 rounded-lg shadow-md">
+                <h2 className="text-xl font-semibold mb-2">Nowe zadanie</h2>
+                <div className="flex flex-col sm:flex-row gap-4">
+                    <input
+                        type="text"
+                        value={newTaskContent}
+                        onChange={(e) => setNewTaskContent(e.target.value)}
+                        placeholder="Opis zadania..."
+                        className="form-input flex-grow"
+                    />
+                    <select
+                        value={newTaskPriority}
+                        onChange={(e) => setNewTaskPriority(e.target.value)}
+                        className="form-select sm:w-48"
+                    >
+                        <option>Niski</option>
+                        <option>Średni</option>
+                        <option>Wysoki</option>
+                    </select>
+                    <button onClick={handleAddTask} className="btn btn-primary">Dodaj zadanie</button>
                 </div>
             </div>
-            
-            {isLoading ? <div className="text-center p-8">Ładowanie...</div> : (
+            <DragDropContext onDragEnd={onDragEnd}>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    {columns.map(column => (
-                        <div key={column.id} 
-                             className="bg-gray-100 dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700 min-h-[50vh]"
-                             onDragOver={(e) => e.preventDefault()}
-                             onDrop={(e) => onDrop(e, column.id)}
-                        >
-                            <h2 className={`font-bold text-lg mb-4 capitalize flex items-center`}>
-                                <span className={`w-3 h-3 rounded-full mr-2 ${column.color}`}></span>
-                                {column.title}
-                            </h2>
-                            <div className="space-y-4">
-                                {tasks.filter(t => t.status === column.id).map(task => (
-                                    <TaskCard key={task._id} task={task} user={user} onDelete={handleDeleteTask} onEdit={() => setDetailsModal({isOpen: true, task})}/>
-                                ))}
-                            </div>
+                    {Object.entries(columns).map(([columnId, column]) => (
+                        <div key={columnId} className="bg-gray-100 dark:bg-gray-900 rounded-lg p-4">
+                            <h2 className="text-lg font-bold mb-4 text-center">{column.name}</h2>
+                            <Droppable droppableId={columnId}>
+                                {(provided, snapshot) => (
+                                    <div
+                                        {...provided.droppableProps}
+                                        ref={provided.innerRef}
+                                        className={`min-h-[400px] p-2 rounded-md transition-colors ${snapshot.isDraggingOver ? 'bg-blue-50 dark:bg-blue-900/30' : ''}`}
+                                    >
+                                        {column.items.map((item, index) => (
+                                            <Draggable key={item.id} draggableId={item.id} index={index}>
+                                                {(provided, snapshot) => (
+                                                    <div
+                                                        ref={provided.innerRef}
+                                                        {...provided.draggableProps}
+                                                        {...provided.dragHandleProps}
+                                                        className={`p-3 mb-3 rounded-lg shadow-md bg-white dark:bg-gray-800 ${getPriorityClass(item.priority)} ${snapshot.isDragging ? 'shadow-lg' : ''}`}
+                                                    >
+                                                        {item.content}
+                                                    </div>
+                                                )}
+                                            </Draggable>
+                                        ))}
+                                        {provided.placeholder}
+                                    </div>
+                                )}
+                            </Droppable>
                         </div>
                     ))}
                 </div>
-            )}
-
-            <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Nowe Zadanie" maxWidth="2xl">
-                <KanbanForm onSubmit={handleAddTask} />
-            </Modal>
-            <Modal isOpen={detailsModal.isOpen} onClose={() => setDetailsModal({isOpen: false, task: null})} title="Szczegóły zadania" maxWidth="2xl">
-                {detailsModal.task && <TaskDetails onSave={handleUpdateDetails} task={detailsModal.task} />}
-            </Modal>
+            </DragDropContext>
         </div>
     );
 };
+
 
 const KanbanForm = ({ onSubmit }) => {
     const [content, setContent] = useState('');
