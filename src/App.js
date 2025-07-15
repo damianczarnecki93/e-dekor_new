@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, createContext, useContext, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useMemo, createContext, useContext, useCallback, Suspense } from 'react';
 import { Search, List, Wrench, Sun, Moon, LogOut, FileDown, Printer, Save, CheckCircle, AlertTriangle, Upload, Trash2, XCircle, UserPlus, KeyRound, PlusCircle, MessageSquare, Archive, Edit, Home, Menu, Filter, RotateCcw, FileUp, GitMerge, Eye, Trophy, Crown, BarChart2, Users, Package, StickyNote, Settings, ChevronsUpDown, ChevronUp, ChevronDown, ClipboardList, Plane, ListChecks, Zap, LayoutDashboard } from 'lucide-react';
 import { format, parseISO, eachDayOfInterval, isValid } from 'date-fns';
 import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
@@ -8,6 +8,7 @@ import 'jspdf-autotable';
 import { GoogleMap, useLoadScript, Marker, Polyline, DirectionsRenderer } from '@react-google-maps/api';
 
 // --- Komponent Granicy Błędu (Error Boundary) ---
+
 class ErrorBoundary extends React.Component {
     constructor(props) {
         super(props);
@@ -52,8 +53,8 @@ class ErrorBoundary extends React.Component {
     }
 }
 
-
 // --- Kontekst Powiadomień ---
+
 const NotificationContext = createContext();
 const NotificationProvider = ({ children }) => {
     const [notification, setNotification] = useState(null);
@@ -78,6 +79,7 @@ const NotificationProvider = ({ children }) => {
 const useNotification = () => useContext(NotificationContext);
 
 // --- Hook do sortowania ---
+
 const useSortableData = (items, config = null) => {
     const [sortConfig, setSortConfig] = useState(config);
 
@@ -123,7 +125,7 @@ const fetchWithAuth = async (url, options = {}) => {
     if (response.status === 401) {
         localStorage.removeItem('userToken');
         localStorage.removeItem('userData');
-        window.location.hash = '/login'; // Przekierowanie do logowania
+        window.location.hash = '/login';
         window.location.reload();
         throw new Error('Sesja wygasła. Proszę zalogować się ponownie.');
     }
@@ -410,8 +412,9 @@ const api = {
 };
 
 // --- Komponenty UI ---
+
 const Tooltip = ({ children, text }) => ( <div className="relative flex items-center group">{children}<div className="absolute bottom-full mb-2 w-max px-2 py-1 bg-gray-800 text-white text-xs rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none">{text}</div></div>);
-    const Modal = ({ isOpen, onClose, title, children, maxWidth = 'md' }) => {
+const Modal = ({ isOpen, onClose, title, children, maxWidth = 'md' }) => {
         if (!isOpen) return null;
         const maxWidthClass = { sm: 'max-w-sm', md: 'max-w-md', lg: 'max-w-lg', xl: 'max-w-xl', '2xl': 'max-w-2xl', '4xl': 'max-w-4xl' }[maxWidth];
         return (
@@ -463,6 +466,8 @@ const MainSearchView = () => {
     );
 };
 
+// --- Moduł wyszukiwania ---
+
 const SearchView = ({ onProductSelect }) => {
     const [query, setQuery] = useState('');
     const [suggestions, setSuggestions] = useState([]);
@@ -475,22 +480,17 @@ const SearchView = ({ onProductSelect }) => {
         setSuggestions([]);
         try {
             const results = await api.searchProducts(searchQuery, filterByQuantity);
-            
-            // Sprawdzenie, czy wprowadzony tekst jest potencjalnym kodem EAN
             const isEanLike = /^\d{8,13}$/.test(searchQuery.trim());
 
             if (isEanLike && results.length > 0) {
                 const matchedProduct = results.find(p => p.barcodes.includes(searchQuery.trim()));
                 if (matchedProduct) {
-                    // Automatyczne dodanie produktu, jeśli znaleziono dokładne dopasowanie EAN
                     onProductSelect(matchedProduct);
-                    setQuery(''); // Wyczyszczenie pola po dodaniu
+                    setQuery('');
                     setIsLoading(false);
-                    return; // Zakończenie funkcji, aby nie pokazywać sugestii
+                    return;
                 }
             }
-            
-            // Domyślne zachowanie - pokazuj sugestie
             setSuggestions(results);
 
         } catch (error) {
@@ -501,7 +501,6 @@ const SearchView = ({ onProductSelect }) => {
     }, [filterByQuantity, onProductSelect, showNotification]);
 
     useEffect(() => {
-        // Użycie timeoutu, aby uniknąć wysyłania zapytań przy każdym naciśnięciu klawisza
         const handler = setTimeout(() => {
             if (query.trim().length > 2) {
                 handleSearch(query);
@@ -558,6 +557,7 @@ const SearchView = ({ onProductSelect }) => {
     );
 };
 
+// --- Pasek wyszukiwania ---
 
 const PinnedInputBar = ({ onProductAdd, onSave, isDirty }) => {
     const [query, setQuery] = useState('');
@@ -678,6 +678,8 @@ const PinnedInputBar = ({ onProductAdd, onSave, isDirty }) => {
         </div>
     );
 };
+
+// --- Moduł Nowe zamówienie ---
 
 const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty }) => {
     const [order, setOrder] = useState(currentOrder);
@@ -811,7 +813,6 @@ const handlePrint = () => {
     const content = printRef.current;
     if (content) {
         const printWindow = window.open('', '_blank');
-        // --- POPRAWKA: Dodano <meta charset="UTF-8"> ---
         printWindow.document.write('<html><head><meta charset="UTF-8"><title>Wydruk Zamówienia</title><script src="https://cdn.tailwindcss.com"></script><style>.print-header { display: block !important; } body { padding: 2rem; }</style></head><body>');
         printWindow.document.write(content.innerHTML);
         printWindow.document.write('</body></html>');
@@ -894,6 +895,8 @@ const handlePrint = () => {
         </div>
     );
 };
+
+// --- Moduł Listy zamówień ---
 
 const OrdersListView = ({ onEdit }) => {
     const [orders, setOrders] = useState([]);
@@ -1044,6 +1047,8 @@ const OrdersListView = ({ onEdit }) => {
         </>
     );
 };
+
+// --- Moduł kompletacji ---
 
 const PickingView = () => {
     const [orders, setOrders] = useState([]);
@@ -1266,6 +1271,8 @@ const PickingView = () => {
     );
 };
 
+// --- Moduł Inwentaryzacji ---
+
 const InventoryView = ({ user, onNavigate, isDirty, setIsDirty }) => {
     const [inventories, setInventories] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -1383,6 +1390,7 @@ const InventoryView = ({ user, onNavigate, isDirty, setIsDirty }) => {
         </div>
     );
 };
+
 
 const NewInventorySheet = ({ user, onSave, inventoryId = null, setDirty }) => {
     const [inventory, setInventory] = useState({ name: '', items: [] });
@@ -1590,6 +1598,7 @@ const NewInventorySheet = ({ user, onSave, inventoryId = null, setDirty }) => {
     );
 };
 
+// --- Moduł Admina ---
 
 const AdminView = ({ user, onNavigate }) => {
     return (
@@ -1662,7 +1671,6 @@ const AdminUsersView = ({ user }) => {
         try {
             await api.updateUserModules(userId, updatedModules);
             showNotification('Uprawnienia zaktualizowane', 'success');
-            // Aktualizuj stan lokalnie, aby uniknąć ponownego pobierania danych
             setUsers(users.map(u => u._id === userId ? {...u, visibleModules: updatedModules} : u));
         } catch (error) {
             showNotification(error.message, 'error');
@@ -1773,7 +1781,7 @@ const AdminProductsView = () => {
         try {
             const result = await api.uploadProductsFile(file, importMode);
             showNotification(result.message, 'success');
-            fetchProducts(); // Odśwież listę
+            fetchProducts();
         } catch (error) {
             showNotification(error.message, 'error');
         } finally {
@@ -1788,7 +1796,7 @@ const AdminProductsView = () => {
             try {
                 const result = await api.mergeProducts();
                 showNotification(result.message, 'success');
-                fetchProducts(); // Odśwież listę
+                fetchProducts();
             } catch (error) {
                 showNotification(error.message, 'error');
             } finally {
@@ -1851,6 +1859,7 @@ const AdminProductsView = () => {
     );
 };
 
+// --- Moduł Logowania i rejestracji ---
 
 const AuthPage = ({ onLogin }) => {
     const [isLoginView, setIsLoginView] = useState(true);
@@ -1933,6 +1942,8 @@ const RegisterView = ({ showLogin }) => {
         </div>
     );
 };
+
+// --- Moduł panelu głównego ---
 
 const DashboardView = ({ user, onNavigate }) => {
     const [stats, setStats] = useState(null);
@@ -2075,7 +2086,7 @@ const SalesGoalsWidget = ({ stats, user, onUpdate }) => {
         try {
             await api.setUserGoal(goalValue);
             showNotification('Cel miesięczny został zaktualizowany!', 'success');
-            onUpdate(); // Odśwież dane pulpitu
+            onUpdate();
         } catch (error) {
             showNotification(error.message, 'error');
         }
@@ -2092,7 +2103,7 @@ const SalesGoalsWidget = ({ stats, user, onUpdate }) => {
             await api.addManualSales(saleValue);
             showNotification('Sprzedaż została dodana!', 'success');
             setManualSaleInput('');
-            onUpdate(); // Odśwież dane pulpitu
+            onUpdate();
         } catch (error) {
             showNotification(error.message, 'error');
         }
@@ -2216,7 +2227,6 @@ const CustomizeDashboardModal = ({ isOpen, onClose, availableWidgets, currentLay
     );
 };
 
-
 const NotesWidget = () => {
     const [notes, setNotes] = useState([]);
     const [newNote, setNewNote] = useState('');
@@ -2276,269 +2286,7 @@ const NotesWidget = () => {
     );
 };
 
-
-// --- Główny Komponent Aplikacji ---
-function App() {
-    const [user, setUser] = useState(null);
-    const [activeView, setActiveView] = useState({ view: 'dashboard', params: {} });
-    const [currentOrder, setCurrentOrder] = useState({ customerName: '', items: [], isDirty: false });
-    const [isDirty, setIsDirty] = useState(false);
-    const [isDarkMode, setIsDarkMode] = useState(false);
-    const [isLoading, setIsLoading] = useState(true);
-    const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
-    const [isNavOpen, setIsNavOpen] = useState(false);
-    const [expandedCategories, setExpandedCategories] = useState(['Główne']);
-
-    const updateUserData = (newUserData) => {
-        setUser(newUserData);
-        localStorage.setItem('userData', JSON.stringify(newUserData));
-    };
-
-    useEffect(() => {
-        const savedTheme = localStorage.getItem('theme');
-        if (savedTheme === 'dark') setIsDarkMode(true);
-    }, []);
-
-    useEffect(() => {
-        if (isDarkMode) {
-            document.documentElement.classList.add('dark');
-            localStorage.setItem('theme', 'dark');
-        } else {
-            document.documentElement.classList.remove('dark');
-            localStorage.setItem('theme', 'light');
-        }
-    }, [isDarkMode]);
-
-    const handleLogout = useCallback(() => {
-        localStorage.removeItem('userToken');
-        localStorage.removeItem('userData');
-        setUser(null);
-        setIsLoading(false);
-        setActiveView({ view: 'dashboard', params: {} });
-    }, []);
-
-    const handleLogin = useCallback((data) => {
-        localStorage.setItem('userToken', data.token);
-        localStorage.setItem('userData', JSON.stringify(data.user));
-        setUser(data.user);
-        setIsLoading(false);
-        setActiveView({ view: 'dashboard', params: {} });
-    }, []);
-
-    const handleNavigate = (view, params = {}) => {
-        if (isDirty) {
-            if (!window.confirm("Masz niezapisane zmiany. Czy na pewno chcesz opuścić tę stronę? Zmiany zostaną utracone.")) {
-                return;
-            }
-        }
-        setIsDirty(false);
-        setActiveView({ view, params });
-        setIsNavOpen(false);
-    };
-
-    useEffect(() => {
-        const token = localStorage.getItem('userToken');
-        const userData = localStorage.getItem('userData');
-        if (token && userData) {
-            try {
-                const userObj = JSON.parse(userData);
-                if (userObj && userObj.id) {
-                    setUser(userObj);
-                } else {
-                    handleLogout();
-                }
-            } catch (e) {
-                handleLogout();
-            }
-        }
-        setIsLoading(false);
-    }, [handleLogout]);
-    
-    const loadOrderForEditing = async (orderId) => {
-        try {
-            const order = await api.getOrderById(orderId);
-            setCurrentOrder(order);
-            handleNavigate('order');
-        } catch (error) {
-            console.error("Błąd ładowania zamówienia", error);
-        }
-    };
-
-    const handleNewOrder = () => {
-        if (isDirty) {
-            if (!window.confirm("Masz niezapisane zmiany. Czy na pewno chcesz opuścić tę stronę? Zmiany zostaną utracone.")) {
-                return;
-            }
-        }
-        setIsDirty(false);
-        setCurrentOrder({ customerName: '', items: [], isDirty: false });
-        handleNavigate('order');
-    };
-    
-    const toggleCategory = (category) => {
-        setExpandedCategories(prev => 
-            prev.includes(category) ? prev.filter(c => c !== category) : [...prev, category]
-        );
-    };
-
-    const navConfig = useMemo(() => [
-        {
-            category: 'Główne',
-            items: [
-                { id: 'dashboard', label: 'Panel Główny', icon: Home, roles: ['user', 'administrator'], alwaysVisible: true },
-                { id: 'search', label: 'Wyszukiwarka', icon: Search, roles: ['user', 'administrator'] },
-            ]
-        },
-        {
-            category: 'Sprzedaż',
-            items: [
-                { id: 'order', label: 'Nowe Zamówienie', icon: PlusCircle, roles: ['user', 'administrator'], action: handleNewOrder },
-                { id: 'orders', label: 'Zamówienia', icon: Archive, roles: ['user', 'administrator'] },
-            ]
-        },
-        {
-            category: 'Magazyn',
-            items: [
-                { id: 'picking', label: 'Kompletacja', icon: List, roles: ['user', 'administrator'] },
-                { id: 'inventory', label: 'Inwentaryzacja', icon: Wrench, roles: ['user', 'administrator'] },
-            ]
-        },
-        {
-            category: 'Organizacyjne',
-            items: [
-                { id: 'kanban', label: 'Tablica Zadań', icon: ClipboardList, roles: ['user', 'administrator'] },
-                { id: 'delegations', label: 'Delegacje', icon: Plane, roles: ['user', 'administrator'] },
-            ]
-        },
-        {
-            category: 'Administracja',
-            items: [
-                 { id: 'admin', label: 'Panel Admina', icon: Settings, roles: ['administrator'] },
-            ]
-        }
-    ], [handleNewOrder]);
-
-    const availableNav = useMemo(() => {
-        if (!user) return [];
-        return navConfig
-            .map(category => {
-                const visibleItems = category.items.filter(item => {
-                    if (!item.roles.includes(user.role)) {
-                        return false;
-                    }
-                    if (user.role === 'administrator') {
-                        return true;
-                    }
-                    return item.alwaysVisible || user.visibleModules?.includes(item.id);
-                });
-                return { ...category, items: visibleItems };
-            })
-            .filter(category => category.items.length > 0);
-    }, [user, navConfig]);
-    
-
-    if (isLoading) { return <div className="flex items-center justify-center h-screen bg-gray-100 dark:bg-gray-900">Ładowanie...</div> }
-    if (!user) { return <AuthPage onLogin={handleLogin} />; }
-
-    const renderView = () => {
-        const { view, params } = activeView;
-        switch (view) {
-            case 'dashboard': return <DashboardView user={user} onNavigate={handleNavigate} onUpdateUser={updateUserData}/>;
-            case 'search': return <MainSearchView />;
-            case 'order': return <OrderView currentOrder={currentOrder} setCurrentOrder={setCurrentOrder} user={user} setDirty={setIsDirty} />;
-            case 'orders': return <OrdersListView onEdit={loadOrderForEditing} />;
-            case 'picking': return <PickingView />;
-            case 'inventory': return <InventoryView user={user} onNavigate={handleNavigate} isDirty={isDirty} setIsDirty={setIsDirty} />;
-            case 'inventory-sheet': return <NewInventorySheet user={user} onSave={() => handleNavigate('inventory')} inventoryId={params.inventoryId} setDirty={setIsDirty} />;
-            case 'kanban': return <KanbanView user={user} />;
-            case 'delegations': return <DelegationsView user={user} onNavigate={handleNavigate} setCurrentOrder={setCurrentOrder} />;
-            case 'admin': return <AdminView user={user} onNavigate={handleNavigate} />;
-            case 'admin-users': return <AdminUsersView user={user} />;
-            case 'admin-products': return <AdminProductsView />;
-            default: return <DashboardView user={user} onNavigate={handleNavigate} onUpdateUser={updateUserData}/>;
-        }
-    };
-
-    return (
-        <>
-            <div className="flex h-screen bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-sans">
-                <nav className={`w-64 bg-white dark:bg-gray-800 shadow-lg flex flex-col flex-shrink-0 transition-transform duration-300 ease-in-out z-40 fixed lg:static h-full ${isNavOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}>
-                    <div className="flex items-center justify-center h-20 border-b border-gray-200 dark:border-gray-700">
-                         <img src={isDarkMode ? "/logo-dark.png" : "/logo.png"} onError={(e) => { e.currentTarget.src = 'https://placehold.co/120x40/4f46e5/ffffff?text=Logo'; }} alt="Dekor-Art-Serwis" loading="lazy" className="h-10" />
-                    </div>
-                    <ul className="flex-grow overflow-y-auto">
-                        {availableNav.map(category => (
-                            <div key={category.category} className="my-2">
-                                <h3 onClick={() => toggleCategory(category.category)} className="px-6 mt-4 mb-2 text-xs font-semibold text-gray-400 uppercase flex justify-between items-center cursor-pointer">
-                                    {category.category}
-                                    {expandedCategories.includes(category.category) ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                                </h3>
-                                {expandedCategories.includes(category.category) && category.items.map(item => (
-                                     <li key={item.id}>
-                                        <button onClick={() => { item.action ? item.action() : handleNavigate(item.id); }} className={`w-full flex items-center justify-start h-12 px-6 text-base transition-colors duration-200 text-left ${activeView.view.startsWith(item.id) ? 'bg-indigo-50 dark:bg-gray-700 text-indigo-600 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'}`}>
-                                            <item.icon className="h-5 w-5" />
-                                            <span className="ml-4">{item.label}</span>
-                                        </button>
-                                    </li>
-                                ))}
-                            </div>
-                        ))}
-                    </ul>
-                    <div className="p-4 border-t border-gray-200 dark:border-gray-700">
-                        <div className="flex items-center justify-between mb-4">
-                            <div><p className="font-semibold">{user.username}</p><p className="text-sm text-gray-500">{user.role}</p></div>
-                             <div className="flex items-center">
-                                <Tooltip text="Zmień hasło"><button onClick={() => setIsPasswordModalOpen(true)} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600"><KeyRound className="h-6 w-6 text-gray-500" /></button></Tooltip>
-                                <Tooltip text="Wyloguj"><button onClick={handleLogout} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600"><LogOut className="h-6 w-6 text-gray-500" /></button></Tooltip>
-                             </div>
-                        </div>
-                        <Tooltip text="Zmień motyw"><button onClick={() => setIsDarkMode(!isDarkMode)} className="w-full flex justify-center p-2 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600">{isDarkMode ? <Sun className="h-6 w-6 text-yellow-400" /> : <Moon className="h-6 w-6 text-indigo-500" />}</button></Tooltip>
-                    </div>
-                </nav>
-                <main className="flex-1 flex flex-col overflow-hidden">
-                    <div className="lg:hidden p-2 bg-white dark:bg-gray-800 border-b dark:border-gray-700 flex justify-between items-center">
-                        <button onClick={() => setIsNavOpen(!isNavOpen)} className="p-2 rounded-md"><Menu className="w-6 w-6" /></button>
-                        <span className="font-semibold">{navConfig.flatMap(c => c.items).find(item => item.id === activeView.view)?.label}</span>
-                    </div>
-                    <div className="flex-1 overflow-x-hidden overflow-y-auto">{renderView()}</div>
-                </main>
-            </div>
-            <UserChangePasswordModal isOpen={isPasswordModalOpen} onClose={() => setIsPasswordModalOpen(false)} />
-        </>
-    );
-}
-
-
-const UserChangePasswordModal = ({ isOpen, onClose }) => {
-    const [currentPassword, setCurrentPassword] = useState('');
-    const [newPassword, setNewPassword] = useState('');
-    const [error, setError] = useState('');
-    const { showNotification } = useNotification();
-
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        setError('');
-        if (newPassword.length < 6) { setError('Nowe hasło musi mieć co najmniej 6 znaków.'); return; }
-        try {
-            await api.userChangeOwnPassword(currentPassword, newPassword);
-            showNotification('Hasło zostało zmienione pomyślnie!', 'success');
-            onClose();
-        } catch (err) { setError(err.message); }
-    };
-
-    return (
-        <Modal isOpen={isOpen} onClose={onClose} title="Zmień swoje hasło">
-            <form onSubmit={handleSubmit} className="space-y-4">
-                <div><label className="block mb-2 text-sm font-medium">Aktualne hasło</label><input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} className="w-full p-3 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg" required /></div>
-                <div><label className="block mb-2 text-sm font-medium">Nowe hasło</label><input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="w-full p-3 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg" required /></div>
-                {error && <p className="text-sm text-red-500">{error}</p>}
-                <div className="flex justify-end gap-4 pt-4"><button type="button" onClick={onClose} className="px-4 py-2 bg-gray-200 dark:bg-gray-600 rounded-lg">Anuluj</button><button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg">Zmień hasło</button></div>
-            </form>
-        </Modal>
-    );
-};
-
-// --- Nowe Komponenty (Kanban i Delegacje) ---
+// --- Moduł tabeli zadań ---
 
 const KanbanView = () => {
     const [columns, setColumns] = useState({
@@ -2840,18 +2588,8 @@ const TaskCard = ({ task, user, onDelete, onEdit }) => {
     );
 };
 
+// --- Moduł delegacji ---
 
-    const LIBRARIES = ["places"];
-    const MAP_CONTAINER_STYLE = {
-      width: '100%',
-      height: '400px',
-      borderRadius: '0.5rem'
-    };
-    const CENTER = {
-      lat: 52.237049,
-      lng: 21.017532
-    };
-    
 const DelegationsView = ({ user, onNavigate, setCurrentOrder }) => {
     const [delegations, setDelegations] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -2860,6 +2598,7 @@ const DelegationsView = ({ user, onNavigate, setCurrentOrder }) => {
     const { showNotification } = useNotification();
     
     // Prosty hook do sortowania
+	
     const useSortableData = (items, config = null) => {
         const [sortConfig, setSortConfig] = useState(config);
         const sortedItems = useMemo(() => {
@@ -3032,11 +2771,9 @@ const DelegationForm = ({ onSubmit, delegationData }) => {
     });
     const [previewModal, setPreviewModal] = useState(false);
 
-    // Efekt do inicjalizacji formularza (edycja)
     useEffect(() => {
         if (delegationData) {
             const initialClientsByDay = {};
-            // Poprawne grupowanie klientów według daty z delegacji
             (delegationData.clients || []).forEach(client => {
                 const day = client.date && isValid(parseISO(client.date)) 
                     ? format(parseISO(client.date), 'yyyy-MM-dd') 
@@ -3045,7 +2782,6 @@ const DelegationForm = ({ onSubmit, delegationData }) => {
                 if (!initialClientsByDay[day]) {
                     initialClientsByDay[day] = [];
                 }
-                // Upewniamy się, że każdy klient ma unikalne ID dla drag-n-drop
                 initialClientsByDay[day].push({ ...client, id: client.id || `client-${Math.random()}` });
             });
 
@@ -3063,7 +2799,6 @@ const DelegationForm = ({ onSubmit, delegationData }) => {
         }
     }, [delegationData]);
     
-    // Efekt do tworzenia sekcji dni przy zmianie zakresu dat
     useEffect(() => {
         const { dateFrom, dateTo } = formData;
         if (dateFrom && dateTo && isValid(new Date(dateFrom)) && isValid(new Date(dateTo)) && new Date(dateFrom) <= new Date(dateTo)) {
@@ -3074,10 +2809,9 @@ const DelegationForm = ({ onSubmit, delegationData }) => {
                 newClientsByDay[dayString] = formData.clientsByDay[dayString] || [];
             });
             setFormData(prev => ({ ...prev, clientsByDay: newClientsByDay }));
-        } else if (!delegationData) { // Czyść tylko dla nowych delegacji, jeśli daty są nieprawidłowe
+        } else if (!delegationData) {
             setFormData(prev => ({ ...prev, clientsByDay: {} }));
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [formData.dateFrom, formData.dateTo, delegationData]);
 
 
@@ -3111,7 +2845,6 @@ const DelegationForm = ({ onSubmit, delegationData }) => {
             alert('Proszę wypełnić wszystkie wymagane pola.');
             return;
         }
-        // Spłaszczenie struktury przed wysłaniem, z dodaniem daty do każdego klienta
         const flatClients = Object.entries(formData.clientsByDay).flatMap(([date, clients]) => 
             clients.map(client => ({ ...client, date }))
         );
@@ -3145,7 +2878,6 @@ const DelegationForm = ({ onSubmit, delegationData }) => {
     return (
         <>
             <form onSubmit={handleSubmit} className="space-y-6 p-1">
-                {/* --- Sekcja głównych informacji o delegacji --- */}
                 <div className="space-y-4">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
@@ -3179,7 +2911,6 @@ const DelegationForm = ({ onSubmit, delegationData }) => {
                     </div>
                 </div>
 
-                {/* --- Sekcja planowania wizyt (Drag-and-Drop) --- */}
                 <DragDropContext onDragEnd={onDragEnd}>
                     <div className="space-y-6">
                         {Object.keys(formData.clientsByDay).sort().map(day => (
@@ -3411,6 +3142,268 @@ const DelegationDetails = ({ delegation, onUpdate, onNavigate, setCurrentOrder, 
                 <VisitRecapForm onSubmit={handleEndVisit} />
             </Modal>
         </div>
+    );
+};
+
+
+// --- Główny Komponent Aplikacji ---
+function App() {
+    const [user, setUser] = useState(null);
+    const [activeView, setActiveView] = useState({ view: 'dashboard', params: {} });
+    const [currentOrder, setCurrentOrder] = useState({ customerName: '', items: [], isDirty: false });
+    const [isDirty, setIsDirty] = useState(false);
+    const [isDarkMode, setIsDarkMode] = useState(false);
+    const [isLoading, setIsLoading] = useState(true);
+    const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
+    const [isNavOpen, setIsNavOpen] = useState(false);
+    const [expandedCategories, setExpandedCategories] = useState(['Główne']);
+
+    const updateUserData = (newUserData) => {
+        setUser(newUserData);
+        localStorage.setItem('userData', JSON.stringify(newUserData));
+    };
+
+    useEffect(() => {
+        const savedTheme = localStorage.getItem('theme');
+        if (savedTheme === 'dark') setIsDarkMode(true);
+    }, []);
+
+    useEffect(() => {
+        if (isDarkMode) {
+            document.documentElement.classList.add('dark');
+            localStorage.setItem('theme', 'dark');
+        } else {
+            document.documentElement.classList.remove('dark');
+            localStorage.setItem('theme', 'light');
+        }
+    }, [isDarkMode]);
+
+    const handleLogout = useCallback(() => {
+        localStorage.removeItem('userToken');
+        localStorage.removeItem('userData');
+        setUser(null);
+        setIsLoading(false);
+        setActiveView({ view: 'dashboard', params: {} });
+    }, []);
+
+    const handleLogin = useCallback((data) => {
+        localStorage.setItem('userToken', data.token);
+        localStorage.setItem('userData', JSON.stringify(data.user));
+        setUser(data.user);
+        setIsLoading(false);
+        setActiveView({ view: 'dashboard', params: {} });
+    }, []);
+
+    const handleNavigate = (view, params = {}) => {
+        if (isDirty) {
+            if (!window.confirm("Masz niezapisane zmiany. Czy na pewno chcesz opuścić tę stronę? Zmiany zostaną utracone.")) {
+                return;
+            }
+        }
+        setIsDirty(false);
+        setActiveView({ view, params });
+        setIsNavOpen(false);
+    };
+
+    useEffect(() => {
+        const token = localStorage.getItem('userToken');
+        const userData = localStorage.getItem('userData');
+        if (token && userData) {
+            try {
+                const userObj = JSON.parse(userData);
+                if (userObj && userObj.id) {
+                    setUser(userObj);
+                } else {
+                    handleLogout();
+                }
+            } catch (e) {
+                handleLogout();
+            }
+        }
+        setIsLoading(false);
+    }, [handleLogout]);
+    
+    const loadOrderForEditing = async (orderId) => {
+        try {
+            const order = await api.getOrderById(orderId);
+            setCurrentOrder(order);
+            handleNavigate('order');
+        } catch (error) {
+            console.error("Błąd ładowania zamówienia", error);
+        }
+    };
+
+    const handleNewOrder = () => {
+        if (isDirty) {
+            if (!window.confirm("Masz niezapisane zmiany. Czy na pewno chcesz opuścić tę stronę? Zmiany zostaną utracone.")) {
+                return;
+            }
+        }
+        setIsDirty(false);
+        setCurrentOrder({ customerName: '', items: [], isDirty: false });
+        handleNavigate('order');
+    };
+    
+    const toggleCategory = (category) => {
+        setExpandedCategories(prev => 
+            prev.includes(category) ? prev.filter(c => c !== category) : [...prev, category]
+        );
+    };
+
+    const navConfig = useMemo(() => [
+        {
+            category: 'Główne',
+            items: [
+                { id: 'dashboard', label: 'Panel Główny', icon: Home, roles: ['user', 'administrator'], alwaysVisible: true },
+                { id: 'search', label: 'Wyszukiwarka', icon: Search, roles: ['user', 'administrator'] },
+            ]
+        },
+        {
+            category: 'Sprzedaż',
+            items: [
+                { id: 'order', label: 'Nowe Zamówienie', icon: PlusCircle, roles: ['user', 'administrator'], action: handleNewOrder },
+                { id: 'orders', label: 'Zamówienia', icon: Archive, roles: ['user', 'administrator'] },
+            ]
+        },
+        {
+            category: 'Magazyn',
+            items: [
+                { id: 'picking', label: 'Kompletacja', icon: List, roles: ['user', 'administrator'] },
+                { id: 'inventory', label: 'Inwentaryzacja', icon: Wrench, roles: ['user', 'administrator'] },
+            ]
+        },
+        {
+            category: 'Organizacyjne',
+            items: [
+                { id: 'kanban', label: 'Tablica Zadań', icon: ClipboardList, roles: ['user', 'administrator'] },
+                { id: 'delegations', label: 'Delegacje', icon: Plane, roles: ['user', 'administrator'] },
+            ]
+        },
+        {
+            category: 'Administracja',
+            items: [
+                 { id: 'admin', label: 'Panel Admina', icon: Settings, roles: ['administrator'] },
+            ]
+        }
+    ], [handleNewOrder]);
+
+    const availableNav = useMemo(() => {
+        if (!user) return [];
+        return navConfig
+            .map(category => {
+                const visibleItems = category.items.filter(item => {
+                    if (!item.roles.includes(user.role)) {
+                        return false;
+                    }
+                    if (user.role === 'administrator') {
+                        return true;
+                    }
+                    return item.alwaysVisible || user.visibleModules?.includes(item.id);
+                });
+                return { ...category, items: visibleItems };
+            })
+            .filter(category => category.items.length > 0);
+    }, [user, navConfig]);
+    
+
+    if (isLoading) { return <div className="flex items-center justify-center h-screen bg-gray-100 dark:bg-gray-900">Ładowanie...</div> }
+    if (!user) { return <AuthPage onLogin={handleLogin} />; }
+
+    const renderView = () => {
+        const { view, params } = activeView;
+        switch (view) {
+            case 'dashboard': return <DashboardView user={user} onNavigate={handleNavigate} onUpdateUser={updateUserData}/>;
+            case 'search': return <MainSearchView />;
+            case 'order': return <OrderView currentOrder={currentOrder} setCurrentOrder={setCurrentOrder} user={user} setDirty={setIsDirty} />;
+            case 'orders': return <OrdersListView onEdit={loadOrderForEditing} />;
+            case 'picking': return <PickingView />;
+            case 'inventory': return <InventoryView user={user} onNavigate={handleNavigate} isDirty={isDirty} setIsDirty={setIsDirty} />;
+            case 'inventory-sheet': return <NewInventorySheet user={user} onSave={() => handleNavigate('inventory')} inventoryId={params.inventoryId} setDirty={setIsDirty} />;
+            case 'kanban': return <KanbanView user={user} />;
+            case 'delegations': return <DelegationsView user={user} onNavigate={handleNavigate} setCurrentOrder={setCurrentOrder} />;
+            case 'admin': return <AdminView user={user} onNavigate={handleNavigate} />;
+            case 'admin-users': return <AdminUsersView user={user} />;
+            case 'admin-products': return <AdminProductsView />;
+            default: return <DashboardView user={user} onNavigate={handleNavigate} onUpdateUser={updateUserData}/>;
+        }
+    };
+
+    return (
+        <>
+            <div className="flex h-screen bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-sans">
+                <nav className={`w-64 bg-white dark:bg-gray-800 shadow-lg flex flex-col flex-shrink-0 transition-transform duration-300 ease-in-out z-40 fixed lg:static h-full ${isNavOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}>
+                    <div className="flex items-center justify-center h-20 border-b border-gray-200 dark:border-gray-700">
+                         <img src={isDarkMode ? "/logo-dark.png" : "/logo.png"} onError={(e) => { e.currentTarget.src = 'https://placehold.co/120x40/4f46e5/ffffff?text=Logo'; }} alt="Dekor-Art-Serwis" loading="lazy" className="h-10" />
+                    </div>
+                    <ul className="flex-grow overflow-y-auto">
+                        {availableNav.map(category => (
+                            <div key={category.category} className="my-2">
+                                <h3 onClick={() => toggleCategory(category.category)} className="px-6 mt-4 mb-2 text-xs font-semibold text-gray-400 uppercase flex justify-between items-center cursor-pointer">
+                                    {category.category}
+                                    {expandedCategories.includes(category.category) ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                                </h3>
+                                {expandedCategories.includes(category.category) && category.items.map(item => (
+                                     <li key={item.id}>
+                                        <button onClick={() => { item.action ? item.action() : handleNavigate(item.id); }} className={`w-full flex items-center justify-start h-12 px-6 text-base transition-colors duration-200 text-left ${activeView.view.startsWith(item.id) ? 'bg-indigo-50 dark:bg-gray-700 text-indigo-600 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'}`}>
+                                            <item.icon className="h-5 w-5" />
+                                            <span className="ml-4">{item.label}</span>
+                                        </button>
+                                    </li>
+                                ))}
+                            </div>
+                        ))}
+                    </ul>
+                    <div className="p-4 border-t border-gray-200 dark:border-gray-700">
+                        <div className="flex items-center justify-between mb-4">
+                            <div><p className="font-semibold">{user.username}</p><p className="text-sm text-gray-500">{user.role}</p></div>
+                             <div className="flex items-center">
+                                <Tooltip text="Zmień hasło"><button onClick={() => setIsPasswordModalOpen(true)} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600"><KeyRound className="h-6 w-6 text-gray-500" /></button></Tooltip>
+                                <Tooltip text="Wyloguj"><button onClick={handleLogout} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600"><LogOut className="h-6 w-6 text-gray-500" /></button></Tooltip>
+                             </div>
+                        </div>
+                        <Tooltip text="Zmień motyw"><button onClick={() => setIsDarkMode(!isDarkMode)} className="w-full flex justify-center p-2 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600">{isDarkMode ? <Sun className="h-6 w-6 text-yellow-400" /> : <Moon className="h-6 w-6 text-indigo-500" />}</button></Tooltip>
+                    </div>
+                </nav>
+                <main className="flex-1 flex flex-col overflow-hidden">
+                    <div className="lg:hidden p-2 bg-white dark:bg-gray-800 border-b dark:border-gray-700 flex justify-between items-center">
+                        <button onClick={() => setIsNavOpen(!isNavOpen)} className="p-2 rounded-md"><Menu className="w-6 w-6" /></button>
+                        <span className="font-semibold">{navConfig.flatMap(c => c.items).find(item => item.id === activeView.view)?.label}</span>
+                    </div>
+                    <div className="flex-1 overflow-x-hidden overflow-y-auto">{renderView()}</div>
+                </main>
+            </div>
+            <UserChangePasswordModal isOpen={isPasswordModalOpen} onClose={() => setIsPasswordModalOpen(false)} />
+        </>
+    );
+}
+
+
+const UserChangePasswordModal = ({ isOpen, onClose }) => {
+    const [currentPassword, setCurrentPassword] = useState('');
+    const [newPassword, setNewPassword] = useState('');
+    const [error, setError] = useState('');
+    const { showNotification } = useNotification();
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setError('');
+        if (newPassword.length < 6) { setError('Nowe hasło musi mieć co najmniej 6 znaków.'); return; }
+        try {
+            await api.userChangeOwnPassword(currentPassword, newPassword);
+            showNotification('Hasło zostało zmienione pomyślnie!', 'success');
+            onClose();
+        } catch (err) { setError(err.message); }
+    };
+
+    return (
+        <Modal isOpen={isOpen} onClose={onClose} title="Zmień swoje hasło">
+            <form onSubmit={handleSubmit} className="space-y-4">
+                <div><label className="block mb-2 text-sm font-medium">Aktualne hasło</label><input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} className="w-full p-3 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg" required /></div>
+                <div><label className="block mb-2 text-sm font-medium">Nowe hasło</label><input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="w-full p-3 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg" required /></div>
+                {error && <p className="text-sm text-red-500">{error}</p>}
+                <div className="flex justify-end gap-4 pt-4"><button type="button" onClick={onClose} className="px-4 py-2 bg-gray-200 dark:bg-gray-600 rounded-lg">Anuluj</button><button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg">Zmień hasło</button></div>
+            </form>
+        </Modal>
     );
 };
 
