@@ -1033,44 +1033,44 @@ const handlePrint = () => {
 const OrdersListView = ({ onEdit }) => {
     const [orders, setOrders] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [view, setView] = useState(''); // Domyślnie pokazuj 'Wszystkie'
     const [modalState, setModalState] = useState({ isOpen: false, orderId: null, type: '' });
     const { showNotification } = useNotification();
     const [filters, setFilters] = useState({ customer: '', author: '', dateFrom: '', dateTo: '' });
     const [showFilters, setShowFilters] = useState(false);
     const importMultipleRef = useRef(null);
-    const { items: sortedOrders, requestSort, sortConfig } = useSortableData(orders);
-
-    const getSortIcon = (name) => {
-        if (!sortConfig || sortConfig.key !== name) {
-            return <ChevronsUpDown className="w-4 h-4 ml-1 opacity-40" />;
-        }
-        return sortConfig.direction === 'ascending' ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />;
-    };
 
     const fetchOrders = useCallback(async () => {
         setIsLoading(true);
         try {
-            const ordersToPick = await api.getOrders({ status: ['Zakończono', 'Braki'] });
-            
-            // Sortujemy, aby zamówienia "Braki" były zawsze na górze listy
-            ordersToPick.sort((a, b) => {
-                if (a.status === 'Braki' && b.status !== 'Braki') return -1;
-                if (a.status !== 'Braki' && b.status === 'Braki') return 1;
-                return 0;
-            });
-
-            setOrders(ordersToPick);
+            // Pobieramy wszystkie zamówienia, ignorując status
+            const fetchedOrders = await api.getOrders(filters);
+            setOrders(fetchedOrders);
         } catch (error) {
             showNotification(error.message, 'error');
         } finally {
             setIsLoading(false);
         }
-    }, [view, filters, showNotification]);
+    }, [filters, showNotification]);
 
     useEffect(() => {
         fetchOrders();
     }, [fetchOrders]);
+
+    // Grupujemy zamówienia po stronie klienta
+    const groupedOrders = useMemo(() => {
+        const groups = {
+            'Braki': [],
+            'Zapisane': [],
+            'Skompletowane': [],
+            'Zakończono': [],
+        };
+        orders.forEach(order => {
+            if (groups[order.status]) {
+                groups[order.status].push(order);
+            }
+        });
+        return groups;
+    }, [orders]);
     
     const handleDelete = async () => {
         try {
@@ -1081,15 +1081,6 @@ const OrdersListView = ({ onEdit }) => {
         } catch (error) { showNotification(error.message, 'error'); }
     };
     
-    const handleRevert = async () => {
-        try {
-            await api.revertOrderCompletion(modalState.orderId);
-            showNotification('Przywrócono zamówienie do kompletacji!', 'success');
-            setModalState({ isOpen: false, orderId: null, type: '' });
-            fetchOrders();
-        } catch (error) { showNotification(error.message, 'error'); }
-    };
-
     const handleFilterChange = (e) => {
         const { name, value } = e.target;
         setFilters(prev => ({...prev, [name]: value}));
@@ -1113,23 +1104,14 @@ const OrdersListView = ({ onEdit }) => {
     };
     
     return (
-        // Używamy fragmentu (<>...</>), aby opakować wszystkie elementy zwracane przez komponent.
-        // Jest to wymagane przez składnię JSX, gdy zwracamy więcej niż jeden element na najwyższym poziomie.
         <>
             <div className="p-4 md:p-8">
                 <div className="flex flex-wrap gap-2 justify-between items-center mb-4">
-                    <h1 className="text-2xl md:text-3xl font-bold text-gray-800 dark:text-white">Zamówienia</h1>
+                    <h1 className="text-2xl md:text-3xl font-bold text-gray-800 dark:text-white">Wszystkie Zamówienia</h1>
                     <div className="flex items-center gap-2 flex-wrap">
                         <input type="file" ref={importMultipleRef} onChange={handleMultipleFileImport} className="hidden" accept=".csv" multiple />
                         <button onClick={() => importMultipleRef.current.click()} className="flex items-center p-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600"><FileUp className="w-5 h-5"/><span className="hidden sm:inline ml-2">Importuj</span></button>
                         <button onClick={() => setShowFilters(!showFilters)} className="flex items-center p-2 bg-gray-200 dark:bg-gray-700 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600"><Filter className="w-5 h-5"/><span className="hidden sm:inline ml-2">Filtry</span></button>
-                        <div className="flex items-center bg-gray-200 dark:bg-gray-700 rounded-lg p-1 flex-wrap">
-                            <button onClick={() => setView('')} className={`px-3 py-1 text-sm font-semibold rounded-md ${view === '' ? 'bg-white dark:bg-gray-900 text-indigo-600' : 'text-gray-500'}`}>Wszystkie</button>
-                            <button onClick={() => setView('Zapisane')} className={`px-3 py-1 text-sm font-semibold rounded-md ${view === 'Zapisane' ? 'bg-white dark:bg-gray-900 text-indigo-600' : 'text-gray-500'}`}>Zapisane</button>
-							 <button onClick={() => setView('Zakończono')} className={`px-3 py-1 text-sm font-semibold rounded-md ${view === 'Zakończono' ? 'bg-white dark:bg-gray-900 text-indigo-600' : 'text-gray-500'}`}>Zakończone</button>
-                            <button onClick={() => setView('Skompletowane')} className={`px-3 py-1 text-sm font-semibold rounded-md ${view === 'Skompletowane' ? 'bg-white dark:bg-gray-900 text-indigo-600' : 'text-gray-500'}`}>Skompletowane</button>
-                           <button onClick={() => setView('Braki')} className={`px-3 py-1 text-sm font-semibold rounded-md ${view === 'Braki' ? 'bg-white dark:bg-gray-900 text-indigo-600' : 'text-gray-500'}`}>Braki</button>
-                        </div>
                     </div>
                 </div>
                 {showFilters && (
@@ -1143,55 +1125,47 @@ const OrdersListView = ({ onEdit }) => {
                         <div className="flex justify-end gap-2 mt-4"><button onClick={resetFilters} className="px-4 py-2 bg-gray-300 dark:bg-gray-600 rounded-lg text-sm">Wyczyść filtry</button></div>
                     </div>
                 )}
-                <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-x-auto">
-                    <table className="w-full text-left text-sm">
-                        <thead className="bg-gray-50 dark:bg-gray-700">
-                            <tr>
-                                <th className="p-2 cursor-pointer" onClick={() => requestSort('customerName')}><div className="flex items-center">Klient {getSortIcon('customerName')}</div></th>
-                                <th className="hidden md:table-cell p-2 cursor-pointer" onClick={() => requestSort('author')}><div className="flex items-center">Autor {getSortIcon('author')}</div></th>
-                                <th className="hidden sm:table-cell p-2 cursor-pointer" onClick={() => requestSort('date')}><div className="flex items-center">Data {getSortIcon('date')}</div></th>
-                                <th className="p-2 text-right cursor-pointer" onClick={() => requestSort('total')}><div className="flex items-center justify-end">Wartość {getSortIcon('total')}</div></th>
-                                <th className="p-2 text-center">Status</th>
-                                <th className="p-2 text-center">Akcje</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                            {isLoading ? (<tr><td colSpan="6" className="p-8 text-center text-gray-500">Ładowanie...</td></tr>) : sortedOrders.length > 0 ? (sortedOrders.map(order => (
-                                <tr key={order._id}>
-                                    <td className="p-2 font-medium"><span className="truncate block max-w-[20ch]">{order.customerName}</span></td>
-                                    <td className="hidden md:table-cell p-2">{order.author}</td>
-                                    <td className="hidden sm:table-cell p-2">{new Date(order.date).toLocaleDateString()}</td>
-                                    <td className="p-2 text-right font-semibold">{(order.total || 0).toFixed(2)}</td>
-                                    <td className="p-2 text-center">
-                                        <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
-                                            {
-                                                'Zapisane': 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300',
-                                                'Skompletowane': 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
-                                                'Braki': 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
-                                                'Zakończono': 'bg-gray-200 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
-                                            }[order.status] || 'bg-gray-100'
-                                        }`}>
-                                            {order.status}
-                                        </span>
-                                    </td>
-                                    <td className="p-2 text-center whitespace-nowrap">
-                                        <Tooltip text="Edytuj/Pokaż"><button onClick={() => onEdit(order._id)} className="p-2 text-blue-500 hover:text-blue-700"><Edit className="w-5 h-5"/></button></Tooltip>
-                                        {view === 'Skompletowane' && <Tooltip text="Cofnij do kompletacji"><button onClick={() => setModalState({ isOpen: true, orderId: order._id, type: 'revert' })} className="p-2 text-orange-500 hover:text-orange-700"><RotateCcw className="w-5 h-5"/></button></Tooltip>}
-                                        <Tooltip text="Usuń"><button onClick={() => setModalState({ isOpen: true, orderId: order._id, type: 'delete' })} className="p-2 text-red-500 hover:text-red-700"><Trash2 className="w-5 h-5"/></button></Tooltip>
-                                    </td>
-                                </tr>
-                            ))) : (<tr><td colSpan="6" className="p-8 text-center text-gray-500">Brak zamówień pasujących do kryteriów.</td></tr>)}
-                        </tbody>
-                    </table>
+                <div className="space-y-6">
+                    {Object.entries(groupedOrders).map(([status, orderList]) => (
+                        orderList.length > 0 && (
+                            <div key={status}>
+                                <h2 className="text-xl font-bold mb-3 text-gray-700 dark:text-gray-300">{status} ({orderList.length})</h2>
+                                <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-x-auto">
+                                    <table className="w-full text-left text-sm">
+                                        <thead className="bg-gray-50 dark:bg-gray-700">
+                                            <tr>
+                                                <th className="p-3">Klient</th>
+                                                <th className="p-3 hidden md:table-cell">Autor</th>
+                                                <th className="p-3 hidden sm:table-cell">Data</th>
+                                                <th className="p-3 text-right">Wartość</th>
+                                                <th className="p-3 text-center">Akcje</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                                            {orderList.map(order => (
+                                                <tr key={order._id}>
+                                                    <td className="p-3 font-medium">{order.customerName}</td>
+                                                    <td className="p-3 hidden md:table-cell">{order.author}</td>
+                                                    <td className="p-3 hidden sm:table-cell">{new Date(order.date).toLocaleDateString()}</td>
+                                                    <td className="p-3 text-right font-semibold">{(order.total || 0).toFixed(2)}</td>
+                                                    <td className="p-3 text-center whitespace-nowrap">
+                                                        <Tooltip text="Edytuj/Pokaż"><button onClick={() => onEdit(order._id)} className="p-2 text-blue-500 hover:text-blue-700"><Edit className="w-5 h-5"/></button></Tooltip>
+                                                        <Tooltip text="Usuń"><button onClick={() => setModalState({ isOpen: true, orderId: order._id, type: 'delete' })} className="p-2 text-red-500 hover:text-red-700"><Trash2 className="w-5 h-5"/></button></Tooltip>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        )
+                    ))}
                 </div>
+                 {orders.length === 0 && !isLoading && <p className="text-center text-gray-500 mt-8">Brak zamówień do wyświetlenia.</p>}
             </div>
-            <Modal isOpen={modalState.isOpen && modalState.type === 'delete'} onClose={() => setModalState({ isOpen: false })} title="Potwierdź usunięcie">
+            <Modal isOpen={modalState.isOpen} onClose={() => setModalState({ isOpen: false })} title="Potwierdź usunięcie">
                 <p>Czy na pewno chcesz usunąć to zamówienie? Tej operacji nie można cofnąć.</p>
                 <div className="flex justify-end gap-4 mt-6"><button onClick={() => setModalState({ isOpen: false })} className="px-4 py-2 bg-gray-200 dark:bg-gray-600 rounded-lg">Anuluj</button><button onClick={handleDelete} className="px-4 py-2 bg-red-600 text-white rounded-lg">Usuń</button></div>
-            </Modal>
-            <Modal isOpen={modalState.isOpen && modalState.type === 'revert'} onClose={() => setModalState({ isOpen: false })} title="Potwierdź cofnięcie">
-                <p>Czy na pewno chcesz cofnąć to zamówienie do kompletacji?</p>
-                <div className="flex justify-end gap-4 mt-6"><button onClick={() => setModalState({ isOpen: false })} className="px-4 py-2 bg-gray-200 dark:bg-gray-600 rounded-lg">Anuluj</button><button onClick={handleRevert} className="px-4 py-2 bg-orange-500 text-white rounded-lg">Tak, cofnij</button></div>
             </Modal>
         </>
     );
@@ -1216,14 +1190,13 @@ const PickingView = () => {
     const fetchOrders = useCallback(async () => {
         setIsLoading(true);
         try {
-            // Pobieramy zamówienia z obydwoma statusami za jednym razem
-            const ordersToPick = await api.getOrders({ status: ['Zakończono', 'Braki'] });
+            // Pobieramy zamówienia ze statusami 'Braki' i 'Zakończono'
+            const ordersToPick = await api.getOrders({ status: ['Braki', 'Zakończono'] });
             
             // Sortujemy, aby zamówienia "Braki" były zawsze na górze listy
             ordersToPick.sort((a, b) => {
                 if (a.status === 'Braki' && b.status !== 'Braki') return -1;
                 if (a.status !== 'Braki' && b.status === 'Braki') return 1;
-                // Sortuj po dacie malejąco jako drugi poziom
                 return new Date(b.date) - new Date(a.date);
             });
 
@@ -1344,18 +1317,23 @@ const PickingView = () => {
         setToPickItems(prev => [...prev, itemToUndo]);
     };
 
-    if (isLoading) { return <div className="p-4 text-center">Ładowanie zamówień...</div> }
-    
-    if (!selectedOrder) {
+        if (!selectedOrder) {
         return (
             <div className="p-4 md:p-8">
                 <h1 className="text-3xl font-bold mb-6 text-gray-800 dark:text-white">Kompletacja Zamówień</h1>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     {orders.map(order => {
-                        const isClickable = order.status === 'Zakończono' || order.status === 'Braki';
-                        const bgColor = order.status === 'Braki' 
-                            ? 'bg-yellow-50 dark:bg-yellow-900/40' 
-                            : 'bg-white dark:bg-gray-800';
+                        const isClickable = true; // Wszystkie zamówienia w tym widoku są do kompletacji
+                        const bgColor = {
+                            'Braki': 'bg-yellow-50 dark:bg-yellow-900/40',
+                            'Zakończono': 'bg-gray-50 dark:bg-gray-800',
+                        }[order.status] || 'bg-white dark:bg-gray-800';
+                        
+                        const statusStyle = {
+                            'Braki': 'bg-yellow-200 text-yellow-800',
+                            'Zakończono': 'bg-gray-200 text-gray-800',
+                        }[order.status] || 'bg-blue-100 text-blue-800';
+
                         return (
                             <div 
                                 key={order._id} 
@@ -1365,14 +1343,14 @@ const PickingView = () => {
                                 <p className="font-bold text-lg text-indigo-600 dark:text-indigo-400">{order.customerName}</p>
                                 <p className="text-sm text-gray-500 dark:text-gray-400">Autor: {order.author}</p>
                                 <p className="text-sm text-gray-500 dark:text-gray-400">{new Date(order.date).toLocaleDateString()}</p>
-                                <div className={`mt-2 text-xs font-semibold px-2 py-1 inline-block rounded-full ${order.status === 'Braki' ? 'bg-yellow-200 text-yellow-800' : 'bg-blue-100 text-blue-800'}`}>
+                                <div className={`mt-2 text-xs font-semibold px-2 py-1 inline-block rounded-full ${statusStyle}`}>
                                     {order.status}
                                 </div>
                             </div>
                         );
                     })}
                 </div>
-                {orders.length === 0 && <p className="text-center text-gray-500 mt-8">Brak zamówień do kompletacji.</p>}
+                {orders.length === 0 && !isLoading && <p className="text-center text-gray-500 mt-8">Brak zamówień do kompletacji.</p>}
             </div>
         );
     }
