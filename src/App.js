@@ -902,7 +902,7 @@ const OrderView = ({ currentOrder, setCurrentOrder, user }) => {
 
 // --- Moduł Listy zamówień ---
 
-onst OrdersListView = ({ onEdit }) => {
+const OrdersListView = ({ onEdit }) => {
     const [orders, setOrders] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [view, setView] = useState('Zapisane');
@@ -1016,6 +1016,7 @@ onst OrdersListView = ({ onEdit }) => {
         </>
     );
 };
+
 
 
 
