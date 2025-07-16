@@ -1,4 +1,3 @@
-@ -1,1222 +1,1237 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
@@ -298,8 +297,6 @@ app.put('/api/user/dashboard-layout', authMiddleware, async (req, res) => {
     try {
         const { layout } = req.body;
         const user = await User.findByIdAndUpdate(req.user.userId, { dashboardLayout: layout }, { new: true });
-        if (!user) return res.status(404).json({ message: 'Nie znaleziono użytkownika.' });
-        res.json({ message: 'Układ pulpitu zapisany.', layout: user.dashboardLayout });
         
         if (!user) {
             return res.status(404).json({ message: 'Nie znaleziono użytkownika.' });
