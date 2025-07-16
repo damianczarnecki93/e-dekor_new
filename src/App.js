@@ -787,7 +787,7 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty }) => {
     
    const handleExportPdf = () => {
         const doc = new jsPDF();
-		doc.addFont('public/Roboto-Regular.ttf', 'Roboto', 'normal');
+		doc.addFont('/Roboto-Regular.ttf', 'Roboto', 'normal');
 		doc.setFont('Roboto'); 
         doc.text(`Zamowienie dla: ${order.customerName}`, 14, 15);
         doc.text(`Data: ${new Date().toLocaleDateString()}`, 14, 22);
