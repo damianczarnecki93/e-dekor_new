@@ -1,4 +1,4 @@
-@ -1,1222 +1,1222 @@
+@ -1,1222 +1,1237 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
@@ -49,7 +49,6 @@ const userSchema = new mongoose.Schema({
     salesGoal: { type: Number, default: 0 },
     manualSales: { type: Number, default: 0 },
     visibleModules: { type: [String], default: [] },
-    dashboardLayout: { type: [String], default: ['stats_products', 'stats_pending_orders', 'stats_completed_orders', 'quick_actions', 'my_tasks'] }
 	dashboardLayout: { type: [String], default: ['stats_products', 'stats_pending_orders', 'stats_completed_orders', 'quick_actions', 'my_tasks'] }
 });
 
@@ -301,6 +300,23 @@ app.put('/api/user/dashboard-layout', authMiddleware, async (req, res) => {
         const user = await User.findByIdAndUpdate(req.user.userId, { dashboardLayout: layout }, { new: true });
         if (!user) return res.status(404).json({ message: 'Nie znaleziono użytkownika.' });
         res.json({ message: 'Układ pulpitu zapisany.', layout: user.dashboardLayout });
+        
+        if (!user) {
+            return res.status(404).json({ message: 'Nie znaleziono użytkownika.' });
+        }
+        
+        // Zwracamy zaktualizowany obiekt użytkownika, aby frontend mógł zsynchronizować stan
+        const userData = {
+             id: user._id,
+             username: user.username,
+             role: user.role,
+             salesGoal: user.salesGoal,
+             manualSales: user.manualSales,
+             visibleModules: user.visibleModules,
+             dashboardLayout: user.dashboardLayout,
+        };
+
+        res.json({ message: 'Układ pulpitu zapisany.', user: userData });
     } catch (error) {
         res.status(500).json({ message: 'Błąd zapisywania układu pulpitu.' });
     }
