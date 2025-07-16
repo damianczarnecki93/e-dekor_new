@@ -1192,11 +1192,15 @@ const PickingView = () => {
     const [suggestions, setSuggestions] = useState([]);
     const searchInputRef = useRef(null);
 
-    const fetchOrders = useCallback(async () => {
+const fetchOrders = useCallback(async () => {
         setIsLoading(true);
         try {
-            const fetchedOrders = await api.getOrders({ status: 'Zakończono' });
-            setOrders(fetchedOrders);
+            // --- POCZĄTEK POPRAWKI ---
+            // Pobieramy zamówienia z dwoma statusami
+            const savedOrders = await api.getOrders({ status: 'Zakończono' });
+            const shortageOrders = await api.getOrders({ status: 'Braki' });
+            setOrders([...shortageOrders, ...savedOrders]); // Najpierw braki, potem nowe
+            // --- KONIEC POPRAWKI ---
         } catch (error) { 
             showNotification(error.message, 'error'); 
         } finally { 

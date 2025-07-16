@@ -602,7 +602,9 @@ app.get('/api/admin/all-products', authMiddleware, adminMiddleware, async (req, 
 app.get('/api/reports/shortages', authMiddleware, async (req, res) => {
     try {
         // 1. Znajdź wszystkie zamówienia ze statusem 'Zapisane'
-        const activeOrders = await Order.find({ status: 'Zapisane' }).lean();
+        const activeOrders = await Order.find({ 
+        status: { $in: ['Zakończono', 'Braki'] } // <-- ZMIANA
+    }).lean();
 
         if (activeOrders.length === 0) {
             return res.json([]);
