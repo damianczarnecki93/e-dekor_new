@@ -179,9 +179,15 @@ const api = {
         return await response.json();
     },
     getOrders: async (filters = {}) => {
-        const params = new URLSearchParams(filters);
+        const params = new URLSearchParams();
         for (const [key, value] of Object.entries(filters)) {
-            if (!value) params.delete(key);
+            if (value) {
+                if (Array.isArray(value)) {
+                    value.forEach(item => params.append(key, item));
+                } else {
+                    params.append(key, value);
+                }
+            }
         }
         const url = `${API_BASE_URL}/api/orders?${params.toString()}`;
         const response = await fetchWithAuth(url);
