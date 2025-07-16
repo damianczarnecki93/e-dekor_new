@@ -3449,7 +3449,6 @@ function App() {
             case 'delegations': return <DelegationsView user={user} onNavigate={handleNavigate} setCurrentOrder={setCurrentOrder} />;
             case 'admin': return <AdminView user={user} onNavigate={handleNavigate} />;
             case 'admin-users': return <AdminUsersView user={user} />;
-            case 'admin-products': return <AdminProductsView />;
 			case 'admin-products': return <AdminProductsView />;
 			case 'shortage-report': return <ShortageReportView />; // <-- Dodaj tę linię
 			default: return <DashboardView user={user} onNavigate={handleNavigate} onUpdateUser={updateUserData}/>;
