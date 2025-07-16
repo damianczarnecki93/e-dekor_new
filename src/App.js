@@ -133,6 +133,18 @@ const fetchWithAuth = async (url, options = {}) => {
 };
 
 const api = {
+	updateOrderStatus: async (orderId, status) => {
+    const response = await fetchWithAuth(`${API_BASE_URL}/api/orders/${orderId}/status`, { 
+        method: 'PUT', 
+        body: JSON.stringify({ status }) 
+    });
+    if (!response.ok) { 
+        const errorData = await response.json(); 
+        throw new Error(errorData.message || 'Błąd aktualizacji statusu'); 
+    }
+    return await response.json();
+	},
+
 	getShortageReport: async () => {
 		const response = await fetchWithAuth(`${API_BASE_URL}/api/reports/shortages`);
 		if (!response.ok) throw new Error('Błąd pobierania raportu braków');
@@ -756,6 +768,17 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty }) => {
         }
     };
 
+const handleStatusChange = async (newStatus) => {
+    try {
+        const { message, order: updatedOrder } = await api.updateOrderStatus(order._id, newStatus);
+        showNotification(message, 'success');
+        // Zaktualizuj stan lokalny
+        updateOrder(updatedOrder, false);
+    } catch (error) {
+        showNotification(error.message, 'error');
+		}
+	};
+
     const removeItemFromOrder = (itemIndex) => {
         const newItems = [...order.items];
         const originalItem = sortedItems[itemIndex];
@@ -848,6 +871,7 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty }) => {
         body: order.items.map(item => [
             item.name,
             item.product_code,
+			item.note,
             item.quantity,
             `${item.price.toFixed(2)} PLN`,
             `${(item.price * item.quantity).toFixed(2)} PLN`,
@@ -897,8 +921,24 @@ const handlePrint = () => {
                         </button>
                     </div>
                 </div>
-                <input type="text" value={order.customerName || ''} onChange={(e) => updateOrder({ customerName: e.target.value })} placeholder="Wprowadź nazwę klienta" className="w-full max-w-lg p-3 mb-6 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-                
+                <input type="text" 
+				value={order.customerName || ''} 
+				onChange={(e) => updateOrder({ customerName: e.target.value })} placeholder="Wprowadź nazwę klienta" className="w-full max-w-lg p-3 mb-6 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                {order._id && ( // Pokaż tylko dla zapisanych zamówień
+        <label className="flex items-center gap-2 cursor-pointer p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
+            <input 
+                type="checkbox"
+                className="h-5 w-5 rounded text-indigo-600 focus:ring-indigo-500"
+                checked={order.status === 'Zakończono'}
+                onChange={(e) => {
+                    const newStatus = e.target.checked ? 'Zakończono' : 'Skompletowane'; // Po odznaczeniu wraca do 'Skompletowane'
+                    handleStatusChange(newStatus);
+                }}
+            />
+            <span className="font-medium">Oznacz jako zakończone</span>
+        </label>
+    )}
+</div>
                 <div ref={printRef} className="flex-grow bg-gray-50 dark:bg-gray-900 p-2 sm:p-4 rounded-lg shadow-inner mt-6">
                     <div className="print-header hidden p-4"><h2 className="text-2xl font-bold">Zamówienie dla: {order.customerName}</h2><p>Data: {new Date().toLocaleDateString()}</p></div>
                     <div className="overflow-x-auto">
@@ -2499,15 +2539,15 @@ const ShortageReportView = () => {
     const [reportData, setReportData] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
     const { showNotification } = useNotification();
-    const { items: sortedData, requestSort, sortConfig } = useSortableData(reportData);
 
     const generateReport = async () => {
         setIsLoading(true);
+        setReportData([]); // Czyścimy stare dane przed generowaniem nowych
         try {
             const data = await api.getShortageReport();
             setReportData(data);
-            if(data.length === 0) {
-                showNotification('Brak braków w aktywnych zamówieniach!', 'success');
+            if (data.length === 0) {
+                showNotification('Wszystkie zamówienia są kompletne!', 'success');
             }
         } catch (error) {
             showNotification(error.message, 'error');
@@ -2516,12 +2556,10 @@ const ShortageReportView = () => {
         }
     };
 
-    // Funkcje do sortowania, PDF, itp. można tu dodać analogicznie jak w innych widokach
-
     return (
         <div className="p-4 md:p-8">
             <div className="flex justify-between items-center mb-6">
-                <h1 className="text-3xl font-bold">Raport Braków Magazynowych</h1>
+                <h1 className="text-3xl font-bold">Raport braków w zamówieniach</h1>
                 <button onClick={generateReport} disabled={isLoading} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-blue-400">
                     {isLoading ? 'Generowanie...' : 'Generuj Raport'}
                 </button>
@@ -2532,24 +2570,38 @@ const ShortageReportView = () => {
                         <tr>
                             <th className="p-4">Nazwa produktu</th>
                             <th className="p-4">Kod produktu</th>
-                            <th className="p-4 text-center">Wymagane</th>
-                            <th className="p-4 text-center">Dostępne</th>
                             <th className="p-4 text-center font-bold">Brak</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                        {sortedData.map(item => (
-                            <tr key={item._id} className="bg-red-50 dark:bg-red-900/20">
-                                <td className="p-4 font-medium">{item.name}</td>
-                                <td className="p-4">{item.product_code}</td>
-                                <td className="p-4 text-center">{item.required}</td>
-                                <td className="p-4 text-center">{item.available}</td>
-                                <td className="p-4 text-center font-bold text-red-600">{item.shortage}</td>
-                            </tr>
+                        {reportData.map(order => (
+                            <React.Fragment key={order._id}>
+                                <tr className="bg-gray-100 dark:bg-gray-700">
+                                    <td colSpan="5" className="p-3 font-bold text-indigo-600 dark:text-indigo-400">
+                                        Zamówienie: {order.customerName} ({order.orderId})
+                                    </td>
+                                </tr>
+                                {order.shortages.map(item => (
+                                    <tr key={item._id}>
+                                        <td className="p-4 pl-8 font-medium">{item.name}</td>
+                                        <td className="p-4 pl-8">{item.product_code}</td>
+                                        <td className="p-4 text-center font-bold text-red-600">{item.shortage}</td>
+                                    </tr>
+                                ))}
+                            </React.Fragment>
                         ))}
                     </tbody>
                 </table>
-                 {reportData.length === 0 && !isLoading && <p className="p-8 text-center text-gray-500">Kliknij "Generuj Raport", aby wyświetlić braki.</p>}
+                {reportData.length === 0 && !isLoading && (
+                    <p className="p-8 text-center text-gray-500">
+                        Kliknij "Generuj Raport", aby wyświetlić braki pogrupowane według zamówień.
+                    </p>
+                )}
+                {isLoading && (
+                     <p className="p-8 text-center text-gray-500">
+                        Generowanie raportu...
+                    </p>
+                )}
             </div>
         </div>
     );

@@ -69,9 +69,15 @@ const orderSchema = new mongoose.Schema({
     author: String,
     items: Array,
     total: Number,
-    status: String,
+    status: { 
+        type: String, 
+        default: 'Zapisane', 
+        // Dodajemy nowe statusy
+        enum: ['Zapisane', 'Skompletowane', 'Zakończono', 'Braki'] 
+    },
     date: { type: Date, default: Date.now },
     isDirty: { type: Boolean, default: false }
+	
 });
 const Order = mongoose.models.Order || mongoose.model('Order', orderSchema);
 
@@ -242,8 +248,9 @@ app.post('/api/orders/:id/process-completion', authMiddleware, async (req, res) 
                 author: originalOrder.author, // lub req.user.username, zależy od logiki
                 items: unpickedItems,
                 total: shortageOrderTotal,
-                status: 'Zapisane',
-                isDirty: false
+                total: shortageOrderTotal,
+				status: 'Braki', // ZMIANA Z 'Zapisane' NA 'Braki'
+				isDirty: false
             });
             await shortageOrder.save();
         }
@@ -331,6 +338,21 @@ app.post('/api/user/manual-sales', authMiddleware, async (req, res) => {
         res.json({ manualSales: user.manualSales });
     } catch (error) {
         res.status(500).json({ message: 'Błąd podczas dodawania sprzedaży.' });
+    }
+});
+
+app.put('/api/orders/:id/status', authMiddleware, async (req, res) => {
+    try {
+        const { status } = req.body;
+        // Walidacja, czy status jest jednym z dozwolonych
+        if (!['Zapisane', 'Skompletowane', 'Zakończono', 'Braki'].includes(status)) {
+            return res.status(400).json({ message: 'Nieprawidłowy status.' });
+        }
+        const updatedOrder = await Order.findByIdAndUpdate(req.params.id, { status }, { new: true });
+        if (!updatedOrder) return res.status(404).json({ message: 'Nie znaleziono zamówienia.' });
+        res.json({ message: 'Status zamówienia zaktualizowany!', order: updatedOrder });
+    } catch (error) {
+        res.status(400).json({ message: 'Błąd aktualizacji statusu', error: error.message });
     }
 });
 
@@ -579,38 +601,58 @@ app.get('/api/admin/all-products', authMiddleware, adminMiddleware, async (req, 
 
 app.get('/api/reports/shortages', authMiddleware, async (req, res) => {
     try {
-        // 1. Zbierz wszystkie produkty z aktywnych zamówień
-        const requiredQuantities = new Map();
-        const orders = await Order.find({ status: 'Zapisane' });
+        // 1. Znajdź wszystkie zamówienia ze statusem 'Zapisane'
+        const activeOrders = await Order.find({ status: 'Zapisane' }).lean();
 
-        orders.forEach(order => {
-            order.items.forEach(item => {
-                const existingQty = requiredQuantities.get(item.product_code) || 0;
-                requiredQuantities.set(item.product_code, existingQty + item.quantity);
-            });
-        });
+        if (activeOrders.length === 0) {
+            return res.json([]);
+        }
 
-        const productCodes = Array.from(requiredQuantities.keys());
-        const productsInDb = await Product.find({ product_code: { $in: productCodes } });
+        // 2. Zbierz unikalne kody wszystkich produktów z tych zamówień
+        const allProductCodes = [...new Set(
+            activeOrders.flatMap(order => order.items.map(item => item.product_code))
+        )];
+
+        // 3. Pobierz aktualne stany magazynowe dla tych produktów w jednym zapytaniu
+        const productsInDb = await Product.find({ product_code: { $in: allProductCodes } });
+        const productAvailabilityMap = new Map(
+            productsInDb.map(p => [p.product_code, p.quantity || 0])
+        );
         
-        // 2. Porównaj z ilościami w bazie
-        const shortages = [];
-        for (const product of productsInDb) {
-            const required = requiredQuantities.get(product.product_code);
-            const available = product.quantity || 0;
-            if (required > available) {
-                shortages.push({
-                    _id: product._id,
-                    name: product.name,
-                    product_code: product.product_code,
-                    required,
-                    available,
-                    shortage: required - available
+        const reportByOrder = [];
+
+        // 4. Przetwórz każde zamówienie osobno
+        for (const order of activeOrders) {
+            const shortagesForThisOrder = [];
+            for (const item of order.items) {
+                const available = productAvailabilityMap.get(item.product_code) || 0;
+                const required = item.quantity;
+
+                if (required > available) {
+                    shortagesForThisOrder.push({
+                        _id: item._id, // Używamy ID z pozycji zamówienia dla unikalności
+                        name: item.name,
+                        product_code: item.product_code,
+                        required: required,
+                        available: available,
+                        shortage: required - available
+                    });
+                }
+            }
+
+            // 5. Jeśli w zamówieniu są braki, dodaj je do raportu
+            if (shortagesForThisOrder.length > 0) {
+                reportByOrder.push({
+                    _id: order._id,
+                    orderId: order.id,
+                    customerName: order.customerName,
+                    shortages: shortagesForThisOrder
                 });
             }
         }
 
-        res.json(shortages);
+        res.json(reportByOrder);
+
     } catch (error) {
         res.status(500).json({ message: 'Błąd generowania raportu braków.', error: error.message });
     }
