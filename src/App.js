@@ -1105,9 +1105,9 @@ const OrdersListView = ({ onEdit }) => {
                         <div className="flex items-center bg-gray-200 dark:bg-gray-700 rounded-lg p-1 flex-wrap">
                             <button onClick={() => setView('')} className={`px-3 py-1 text-sm font-semibold rounded-md ${view === '' ? 'bg-white dark:bg-gray-900 text-indigo-600' : 'text-gray-500'}`}>Wszystkie</button>
                             <button onClick={() => setView('Zapisane')} className={`px-3 py-1 text-sm font-semibold rounded-md ${view === 'Zapisane' ? 'bg-white dark:bg-gray-900 text-indigo-600' : 'text-gray-500'}`}>Zapisane</button>
-                             <button onClick={() => setView('Braki')} className={`px-3 py-1 text-sm font-semibold rounded-md ${view === 'Braki' ? 'bg-white dark:bg-gray-900 text-indigo-600' : 'text-gray-500'}`}>Braki</button>
+							 <button onClick={() => setView('Zakończono')} className={`px-3 py-1 text-sm font-semibold rounded-md ${view === 'Zakończono' ? 'bg-white dark:bg-gray-900 text-indigo-600' : 'text-gray-500'}`}>Zakończone</button>
                             <button onClick={() => setView('Skompletowane')} className={`px-3 py-1 text-sm font-semibold rounded-md ${view === 'Skompletowane' ? 'bg-white dark:bg-gray-900 text-indigo-600' : 'text-gray-500'}`}>Skompletowane</button>
-                            <button onClick={() => setView('Zakończono')} className={`px-3 py-1 text-sm font-semibold rounded-md ${view === 'Zakończono' ? 'bg-white dark:bg-gray-900 text-indigo-600' : 'text-gray-500'}`}>Zakończone</button>
+                           <button onClick={() => setView('Braki')} className={`px-3 py-1 text-sm font-semibold rounded-md ${view === 'Braki' ? 'bg-white dark:bg-gray-900 text-indigo-600' : 'text-gray-500'}`}>Braki</button>
                         </div>
                     </div>
                 </div>
@@ -1195,7 +1195,7 @@ const PickingView = () => {
     const fetchOrders = useCallback(async () => {
         setIsLoading(true);
         try {
-            const fetchedOrders = await api.getOrders({ status: 'Zapisane' });
+            const fetchedOrders = await api.getOrders({ status: 'Zakończone' });
             setOrders(fetchedOrders);
         } catch (error) { 
             showNotification(error.message, 'error'); 
