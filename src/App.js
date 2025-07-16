@@ -790,10 +790,6 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty }) => {
             showNotification('Zamówienie jest puste.', 'error');
             return;
         }
-
-        // Nagłówek CSV
-        const csvHeader = 'ean;ilosc\n';
-
         // Wiersze CSV
         const csvRows = order.items.map(item => {
             // Używamy pierwszego kodu z listy kodów kreskowych jako EAN
