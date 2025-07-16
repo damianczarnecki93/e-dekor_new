@@ -2613,6 +2613,7 @@ const AdminEmailConfigView = () => {
     });
     const [isLoading, setIsLoading] = useState(true);
     const { showNotification } = useNotification();
+    const [isTesting, setIsTesting] = useState(false); // Dodany stan dla przycisku testowego
 
     useEffect(() => {
         const fetchConfig = async () => {
@@ -2642,24 +2643,21 @@ const AdminEmailConfigView = () => {
             showNotification(error.message, 'error');
         }
     };
+    
+    const handleTestEmail = async () => {
+        setIsTesting(true);
+        try {
+            await api.saveEmailConfig(config);
+            const { message } = await api.testEmailConfig();
+            showNotification(message, 'success');
+        } catch (error) {
+            showNotification(error.message, 'error');
+        } finally {
+            setIsTesting(false);
+        }
+    };
 
     if (isLoading) return <div className="p-8 text-center">Ładowanie...</div>;
-	
-	const [isTesting, setIsTesting] = useState(false);
-
-const handleTestEmail = async () => {
-    setIsTesting(true);
-    try {
-        // Najpierw zapiszmy konfigurację, aby mieć pewność, że testujemy aktualne dane
-        await api.saveEmailConfig(config);
-        const { message } = await api.testEmailConfig();
-        showNotification(message, 'success');
-    } catch (error) {
-        showNotification(error.message, 'error');
-    } finally {
-        setIsTesting(false);
-    }
-};
 
     return (
         <div className="p-4 md:p-8">
@@ -2689,17 +2687,24 @@ const handleTestEmail = async () => {
                     <input type="checkbox" name="secure" checked={config.secure} onChange={handleChange} className="h-4 w-4 rounded" />
                     <label className="ml-2 text-sm">Używaj SSL/TLS (secure)</label>
                 </div>
-				<div className="flex justify-end gap-4">
-    <button 
-        type="button" 
-        onClick={handleTestEmail}
-        disabled={isTesting}
-        className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
-    >
-        {isTesting ? 'Wysyłanie...' : 'Testuj wysyłkę'}
-    </button>
-    <button type="submit" className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Zapisz konfigurację</button>
-</div>
+                
+                {/* --- POCZĄTEK POPRAWKI --- */}
+                <div className="flex justify-end gap-4 pt-4 border-t dark:border-gray-700">
+                    <button 
+                        type="button" 
+                        onClick={handleTestEmail}
+                        disabled={isTesting}
+                        className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+                    >
+                        {isTesting ? 'Wysyłanie...' : 'Testuj wysyłkę'}
+                    </button>
+                    <button type="submit" className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Zapisz konfigurację</button>
+                </div>
+                {/* --- KONIEC POPRAWKI --- */}
+            </form>
+        </div>
+    );
+};
 
 const ShortageReportView = () => {
     const [reportData, setReportData] = useState([]);
