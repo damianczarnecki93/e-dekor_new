@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, createContext, useContext, useCallback, Suspense } from 'react';
-import { Search, List, Wrench, Sun, Moon, LogOut, FileDown, Printer, Save, CheckCircle, AlertTriangle, Upload, Trash2, XCircle, UserPlus, KeyRound, PlusCircle, MessageSquare, Archive, Edit, Home, Menu, Filter, RotateCcw, FileUp, GitMerge, Eye, Trophy, Crown, BarChart2, Users, Package, StickyNote, Settings, ChevronsUpDown, ChevronUp, ChevronDown, ClipboardList, Plane, ListChecks, Zap, LayoutDashboard } from 'lucide-react';
+import { Search, List, Wrench, Sun, Moon, LogOut, FileDown, FileText, Printer, Save, CheckCircle, AlertTriangle, Upload, Trash2, XCircle, UserPlus, KeyRound, PlusCircle, MessageSquare, Archive, Edit, Home, Menu, Filter, RotateCcw, FileUp, GitMerge, Eye, Trophy, Crown, BarChart2, Users, Package, StickyNote, Settings, ChevronsUpDown, ChevronUp, ChevronDown, ClipboardList, Plane, ListChecks, Zap, LayoutDashboard } from 'lucide-react';
 import { format, parseISO, eachDayOfInterval, isValid } from 'date-fns';
 import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 import { pl } from 'date-fns/locale';
@@ -785,11 +785,47 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty }) => {
         event.target.value = null;
     };
     
+	const handleExportCsv = () => {
+        if (!order.items || order.items.length === 0) {
+            showNotification('Zamówienie jest puste.', 'error');
+            return;
+        }
+
+        // Nagłówek CSV
+        const csvHeader = 'ean;ilosc\n';
+
+        // Wiersze CSV
+        const csvRows = order.items.map(item => {
+            // Używamy pierwszego kodu z listy kodów kreskowych jako EAN
+            const ean = item.barcodes && item.barcodes.length > 0 ? item.barcodes[0] : '';
+            const quantity = item.quantity || 0;
+            return `${ean};${quantity}`;
+        }).join('\n');
+
+        const csvContent = csvHeader + csvRows;
+
+        // Tworzenie i pobieranie pliku
+        const blob = new Blob([`\uFEFF${csvContent}`], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a");
+        const url = URL.createObjectURL(blob);
+        
+        link.setAttribute("href", url);
+        const fileName = `zamowienie_${order.customerName.replace(/\s/g, '_') || 'nowe'}_ean.csv`;
+        link.setAttribute("download", fileName);
+        link.style.visibility = 'hidden';
+
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        showNotification('Plik CSV został wygenerowany.', 'success');
+    };
+	
    const handleExportPdf = () => {
         const doc = new jsPDF();
 		doc.addFont('/Roboto-Regular.ttf', 'Roboto', 'normal');
 		doc.setFont('Roboto'); 
-        doc.text(`Zamowienie dla: ${order.customerName}`, 14, 15);
+        doc.text(`Zamówienie dla: ${order.customerName}`, 14, 15);
         doc.text(`Data: ${new Date().toLocaleDateString()}`, 14, 22);
 
         doc.autoTable({
@@ -835,8 +871,8 @@ const handlePrint = () => {
                 <div className="flex flex-wrap gap-2 justify-between items-center mb-4">
                     <h1 className="text-2xl md:text-3xl font-bold text-gray-800 dark:text-white">{order._id ? `Edycja Zamówienia` : 'Nowe Zamówienie'}</h1>
                     <div className="flex gap-2">
-                        <button onClick={handlePrint} className="flex items-center justify-center p-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors">
-                            <Printer className="w-5 h-5"/> <span className="hidden sm:inline ml-2">Drukuj</span>
+                       <button onClick={handleExportCsv} className="flex items-center justify-center p-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
+                            <FileText className="w-5 h-5"/> <span className="hidden sm:inline ml-2">CSV</span>
                         </button>
                         <button onClick={handleExportPdf} className="flex items-center justify-center p-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors">
                             <FileDown className="w-5 h-5"/> <span className="hidden sm:inline ml-2">PDF</span>
