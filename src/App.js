@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, createContext, useContext, useCallback, Suspense } from 'react';
-import { Search, List, Wrench, Sun, Moon, LogOut, FileDown, FileText, Printer, Save, CheckCircle, AlertTriangle, Upload, Trash2, XCircle, UserPlus, KeyRound, PlusCircle, MessageSquare, Archive, Edit, Home, Menu, Filter, RotateCcw, FileUp, GitMerge, Eye, Trophy, Crown, BarChart2, Users, Package, StickyNote, Settings, ChevronsUpDown, ChevronUp, ChevronDown, ClipboardList, Plane, ListChecks, Zap, LayoutDashboard } from 'lucide-react';
+import { Search, List, Wrench, Sun, Moon, LogOut, FileDown, FileText, Printer, Save, CheckCircle, AlertTriangle, Upload, Trash2, XCircle, UserPlus, KeyRound, PlusCircle, MessageSquare, Archive, Edit, Home, Menu, Filter, RotateCcw, FileUp, GitMerge, Eye, Trophy, Crown, BarChart2, Users, Package, StickyNote, Settings, ChevronsUpDown, ChevronUp, ChevronDown, ClipboardList, Plane, ListChecks, Zap, LayoutDashboard, ClipboardCheck } from 'lucide-react';
 import { format, parseISO, eachDayOfInterval, isValid } from 'date-fns';
 import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 import { pl } from 'date-fns/locale';
@@ -133,6 +133,11 @@ const fetchWithAuth = async (url, options = {}) => {
 };
 
 const api = {
+	getShortageReport: async () => {
+		const response = await fetchWithAuth(`${API_BASE_URL}/api/reports/shortages`);
+		if (!response.ok) throw new Error('Błąd pobierania raportu braków');
+		return await response.json();
+	},
     searchProducts: async (searchTerm, filterByQuantity = false) => {
         const response = await fetchWithAuth(`${API_BASE_URL}/api/products?search=${encodeURIComponent(searchTerm)}&filterByQuantity=${filterByQuantity}`);
         if (!response.ok) { const errorData = await response.json(); throw new Error(errorData.message || 'Błąd wyszukiwania produktów'); }
@@ -409,6 +414,17 @@ const api = {
         if (!response.ok) throw new Error('Błąd zakończenia wizyty');
         return await response.json();
     },
+	processCompletion: async (orderId, pickedItems, allItems) => {
+    const response = await fetchWithAuth(`${API_BASE_URL}/api/orders/${orderId}/process-completion`, { 
+        method: 'POST', 
+        body: JSON.stringify({ pickedItems, allItems }) 
+    });
+    if (!response.ok) { 
+        const errorData = await response.json(); 
+        throw new Error(errorData.message || 'Błąd podczas przetwarzania kompletacji'); 
+    }
+    return await response.json();
+	},
 };
 
 // --- Komponenty UI ---
@@ -790,6 +806,8 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty }) => {
             showNotification('Zamówienie jest puste.', 'error');
             return;
         }
+
+
         // Wiersze CSV
         const csvRows = order.items.map(item => {
             // Używamy pierwszego kodu z listy kodów kreskowych jako EAN
@@ -798,7 +816,7 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty }) => {
             return `${ean};${quantity}`;
         }).join('\n');
 
-        const csvContent = csvHeader + csvRows;
+        const csvContent = csvRows;
 
         // Tworzenie i pobieranie pliku
         const blob = new Blob([`\uFEFF${csvContent}`], { type: 'text/csv;charset=utf-8;' });
@@ -806,7 +824,7 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty }) => {
         const url = URL.createObjectURL(blob);
         
         link.setAttribute("href", url);
-        const fileName = `zamowienie_${order.customerName.replace(/\s/g, '_') || 'nowe'}_ean.csv`;
+        const fileName = `zamowienie_${order.customerName.replace(/\s/g, '_') || 'nowe'}.csv`;
         link.setAttribute("download", fileName);
         link.style.visibility = 'hidden';
 
@@ -1192,17 +1210,23 @@ const PickingView = () => {
     };
 
     const handleCompleteOrder = async () => {
-        try {
-            await api.completeOrder(selectedOrder._id, pickedItems);
-            showNotification('Zamówienie zostało skompletowane!', 'success');
-            setSummaryModal({ isOpen: false, discrepancies: [] });
-            const updatedOrders = orders.map(o => o._id === selectedOrder._id ? {...o, status: 'Skompletowane'} : o);
-            setOrders(updatedOrders);
-            setSelectedOrder(null);
-            setToPickItems([]);
-            setPickedItems([]);
-        } catch (error) { showNotification(error.message, 'error'); }
-    };
+    try {
+        // allItems zawiera oryginalne ilości, które są potrzebne do stworzenia zamówienia na braki
+        const allOrderItems = [...pickedItems, ...toPickItems]; 
+
+        await api.processCompletion(selectedOrder._id, pickedItems, allOrderItems);
+
+        showNotification('Zamówienie zostało pomyślnie przetworzone!', 'success');
+        setSummaryModal({ isOpen: false, discrepancies: [] });
+        // Odśwież widok, aby zobaczyć zmiany
+        fetchOrders(); 
+        setSelectedOrder(null);
+        setToPickItems([]);
+        setPickedItems([]);
+    } catch (error) { 
+        showNotification(error.message, 'error'); 
+    }
+};
 
     const exportCompletion = () => {
         const csvData = pickedItems.map(item => `${(item.barcodes && item.barcodes[0]) || ''},${item.pickedQuantity}`).join('\n');
@@ -2471,6 +2495,65 @@ const KanbanView = () => {
     );
 };
 
+const ShortageReportView = () => {
+    const [reportData, setReportData] = useState([]);
+    const [isLoading, setIsLoading] = useState(false);
+    const { showNotification } = useNotification();
+    const { items: sortedData, requestSort, sortConfig } = useSortableData(reportData);
+
+    const generateReport = async () => {
+        setIsLoading(true);
+        try {
+            const data = await api.getShortageReport();
+            setReportData(data);
+            if(data.length === 0) {
+                showNotification('Brak braków w aktywnych zamówieniach!', 'success');
+            }
+        } catch (error) {
+            showNotification(error.message, 'error');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    // Funkcje do sortowania, PDF, itp. można tu dodać analogicznie jak w innych widokach
+
+    return (
+        <div className="p-4 md:p-8">
+            <div className="flex justify-between items-center mb-6">
+                <h1 className="text-3xl font-bold">Raport Braków Magazynowych</h1>
+                <button onClick={generateReport} disabled={isLoading} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-blue-400">
+                    {isLoading ? 'Generowanie...' : 'Generuj Raport'}
+                </button>
+            </div>
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-x-auto">
+                <table className="w-full text-left">
+                    <thead className="bg-gray-50 dark:bg-gray-700">
+                        <tr>
+                            <th className="p-4">Nazwa produktu</th>
+                            <th className="p-4">Kod produktu</th>
+                            <th className="p-4 text-center">Wymagane</th>
+                            <th className="p-4 text-center">Dostępne</th>
+                            <th className="p-4 text-center font-bold">Brak</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                        {sortedData.map(item => (
+                            <tr key={item._id} className="bg-red-50 dark:bg-red-900/20">
+                                <td className="p-4 font-medium">{item.name}</td>
+                                <td className="p-4">{item.product_code}</td>
+                                <td className="p-4 text-center">{item.required}</td>
+                                <td className="p-4 text-center">{item.available}</td>
+                                <td className="p-4 text-center font-bold text-red-600">{item.shortage}</td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+                 {reportData.length === 0 && !isLoading && <p className="p-8 text-center text-gray-500">Kliknij "Generuj Raport", aby wyświetlić braki.</p>}
+            </div>
+        </div>
+    );
+};
 
 const KanbanForm = ({ onSubmit }) => {
     const [content, setContent] = useState('');
@@ -3316,6 +3399,12 @@ function App() {
                 { id: 'delegations', label: 'Delegacje', icon: Plane, roles: ['user', 'administrator'] },
             ]
         },
+		{
+        category: 'Raporty',
+        items: [
+             { id: 'shortage-report', label: 'Raport Braków', icon: ClipboardCheck, roles: ['user', 'administrator'] },
+			]
+		},
         {
             category: 'Administracja',
             items: [
@@ -3361,7 +3450,10 @@ function App() {
             case 'admin': return <AdminView user={user} onNavigate={handleNavigate} />;
             case 'admin-users': return <AdminUsersView user={user} />;
             case 'admin-products': return <AdminProductsView />;
-            default: return <DashboardView user={user} onNavigate={handleNavigate} onUpdateUser={updateUserData}/>;
+			case 'admin-products': return <AdminProductsView />;
+			case 'shortage-report': return <ShortageReportView />; // <-- Dodaj tę linię
+			default: return <DashboardView user={user} onNavigate={handleNavigate} onUpdateUser={updateUserData}/>;
+
         }
     };
 

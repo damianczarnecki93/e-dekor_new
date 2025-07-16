@@ -221,6 +221,47 @@ async function geocodeAddress(address) {
     }
 }
 
+app.post('/api/orders/:id/process-completion', authMiddleware, async (req, res) => {
+    try {
+        const { pickedItems, allItems } = req.body;
+        const originalOrder = await Order.findById(req.params.id);
+
+        if (!originalOrder) {
+            return res.status(404).json({ message: 'Nie znaleziono oryginalnego zamówienia.' });
+        }
+
+        const pickedItemIds = new Set(pickedItems.map(p => p._id));
+        const unpickedItems = allItems.filter(item => !pickedItemIds.has(item._id));
+
+        // 1. Jeśli są niezebrane produkty, utwórz nowe zamówienie na braki
+        if (unpickedItems.length > 0) {
+            const shortageOrderTotal = unpickedItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+            const shortageOrder = new Order({
+                id: `BRAKI-${originalOrder.id}`,
+                customerName: `[BRAKI] ${originalOrder.customerName}`,
+                author: originalOrder.author, // lub req.user.username, zależy od logiki
+                items: unpickedItems,
+                total: shortageOrderTotal,
+                status: 'Zapisane',
+                isDirty: false
+            });
+            await shortageOrder.save();
+        }
+
+        // 2. Zaktualizuj oryginalne zamówienie, aby zawierało tylko zebrane produkty
+        originalOrder.items = pickedItems;
+        originalOrder.total = pickedItems.reduce((sum, item) => sum + (item.price * (item.pickedQuantity || item.quantity)), 0);
+        originalOrder.status = 'Skompletowane';
+        await originalOrder.save();
+        
+        res.status(200).json({ message: 'Kompletacja zakończona. Utworzono zamówienie na braki, jeśli to konieczne.' });
+
+    } catch (error) {
+        res.status(500).json({ message: 'Błąd podczas przetwarzania kompletacji.', error: error.message });
+    }
+});
+
+
 // --- API Endpoints - Uwierzytelnianie ---
 app.post('/api/register', async (req, res) => {
     try {
@@ -536,6 +577,44 @@ app.get('/api/admin/all-products', authMiddleware, adminMiddleware, async (req, 
     }
 });
 
+app.get('/api/reports/shortages', authMiddleware, async (req, res) => {
+    try {
+        // 1. Zbierz wszystkie produkty z aktywnych zamówień
+        const requiredQuantities = new Map();
+        const orders = await Order.find({ status: 'Zapisane' });
+
+        orders.forEach(order => {
+            order.items.forEach(item => {
+                const existingQty = requiredQuantities.get(item.product_code) || 0;
+                requiredQuantities.set(item.product_code, existingQty + item.quantity);
+            });
+        });
+
+        const productCodes = Array.from(requiredQuantities.keys());
+        const productsInDb = await Product.find({ product_code: { $in: productCodes } });
+        
+        // 2. Porównaj z ilościami w bazie
+        const shortages = [];
+        for (const product of productsInDb) {
+            const required = requiredQuantities.get(product.product_code);
+            const available = product.quantity || 0;
+            if (required > available) {
+                shortages.push({
+                    _id: product._id,
+                    name: product.name,
+                    product_code: product.product_code,
+                    required,
+                    available,
+                    shortage: required - available
+                });
+            }
+        }
+
+        res.json(shortages);
+    } catch (error) {
+        res.status(500).json({ message: 'Błąd generowania raportu braków.', error: error.message });
+    }
+});
 
 // --- API Endpoints - Dashboard ---
 app.get('/api/dashboard-stats', authMiddleware, async (req, res) => {
