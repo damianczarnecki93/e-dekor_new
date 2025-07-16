@@ -829,6 +829,7 @@ const OrderView = ({ currentOrder, setCurrentOrder, user }) => {
     };
 
     return (
+	<>
         <div className="flex flex-col h-full">
             <div className="p-4 md:p-8 flex-grow overflow-y-auto pb-56">
                 <div className="flex flex-wrap gap-4 justify-between items-center mb-4">
