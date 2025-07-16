@@ -146,16 +146,16 @@ const delegationSchema = new mongoose.Schema({
 });
 const Delegation = mongoose.models.Delegation || mongoose.model('Delegation', delegationSchema);
 
-// NOWY SCHEMAT KONFIGURACJI POCZTY
 const emailConfigSchema = new mongoose.Schema({
     host: { type: String, required: true },
     port: { type: Number, required: true },
     secure: { type: Boolean, default: true },
     user: { type: String, required: true },
     pass: { type: String, required: true },
+    // Dodajemy to pole
+    recipientEmail: { type: String, required: true }, 
 });
 const EmailConfig = mongoose.models.EmailConfig || mongoose.model('EmailConfig', emailConfigSchema);
-
 
 // --- Middleware ---
 const authMiddleware = (req, res, next) => {
@@ -180,6 +180,37 @@ const adminMiddleware = (req, res, next) => {
         res.status(403).json({ message: 'Brak uprawnień administratora.' });
     }
 };
+
+async function sendNotificationEmail(subject, htmlContent) {
+    try {
+        const config = await EmailConfig.findOne();
+        if (!config) {
+            console.log('Powiadomienie email nie zostało wysłane - brak konfiguracji.');
+            return;
+        }
+
+        let transporter = nodemailer.createTransport({
+            host: config.host,
+            port: config.port,
+            secure: config.secure,
+            auth: {
+                user: config.user,
+                pass: config.pass,
+            },
+        });
+
+        await transporter.sendMail({
+            from: `"System E-Dekor" <${config.user}>`,
+            to: config.recipientEmail,
+            subject: subject,
+            html: htmlContent,
+        });
+
+        console.log(`Wysłano e-mail z powiadomieniem: ${subject}`);
+    } catch (error) {
+        console.error('Błąd podczas wysyłania e-maila:', error);
+    }
+}
 
 // --- Funkcja pomocnicza do importu CSV ---
 const parseCsv = (buffer) => {
@@ -350,6 +381,17 @@ app.put('/api/orders/:id/status', authMiddleware, async (req, res) => {
         }
         const updatedOrder = await Order.findByIdAndUpdate(req.params.id, { status }, { new: true });
         if (!updatedOrder) return res.status(404).json({ message: 'Nie znaleziono zamówienia.' });
+		 if (status === 'Zakończono') {
+            const emailSubject = `Zamówienie ${updatedOrder.id} zostało zakończone`;
+            const emailHtml = `
+                <h1>Status zamówienia został zmieniony na "Zakończono"</h1>
+                <p><strong>Klient:</strong> ${updatedOrder.customerName}</p>
+                <p><strong>ID Zamówienia:</strong> ${updatedOrder.id}</p>
+                <p><strong>Wartość:</strong> ${updatedOrder.total.toFixed(2)} PLN</p>
+                <p>Zamówienie zostało zakończone przez: ${req.user.username}</p>
+            `;
+            sendNotificationEmail(emailSubject, emailHtml).catch(console.error);
+        }
         res.json({ message: 'Status zamówienia zaktualizowany!', order: updatedOrder });
     } catch (error) {
         res.status(400).json({ message: 'Błąd aktualizacji statusu', error: error.message });
@@ -383,6 +425,27 @@ app.put('/api/user/dashboard-layout', authMiddleware, async (req, res) => {
 });
 
 // --- API Endpoints - Admin ---
+app.get('/api/admin/email-config', authMiddleware, adminMiddleware, async (req, res) => {
+    try {
+        // Zawsze szukamy jednego dokumentu konfiguracyjnego
+        const config = await EmailConfig.findOne();
+        res.json(config || {});
+    } catch (error) {
+        res.status(500).json({ message: 'Błąd pobierania konfiguracji email.' });
+    }
+});
+
+app.post('/api/admin/email-config', authMiddleware, adminMiddleware, async (req, res) => {
+    try {
+        // Używamy findOneAndUpdate z opcją 'upsert' aby stworzyć nowy dokument, jeśli nie istnieje,
+        // lub zaktualizować istniejący. To zapewnia, że zawsze jest tylko jedna konfiguracja.
+        const config = await EmailConfig.findOneAndUpdate({}, req.body, { new: true, upsert: true });
+        res.json({ message: 'Konfiguracja email zapisana!', config });
+    } catch (error) {
+        res.status(500).json({ message: 'Błąd zapisywania konfiguracji email.' });
+    }
+});
+
 app.get('/api/admin/users', authMiddleware, adminMiddleware, async (req, res) => {
     try {
         const users = await User.find({}, '-password');
@@ -861,7 +924,14 @@ app.get('/api/orders', authMiddleware, async (req, res) => {
     try {
         const { status, customer, author, dateFrom, dateTo } = req.query;
         let query = {};
-        if (status) query.status = status;
+        if (status) {
+            // Sprawdzamy, czy status jest tablicą i używamy operatora $in
+            if (Array.isArray(status)) {
+                query.status = { $in: status };
+            } else {
+                query.status = status;
+            }
+        }
         if (customer) query.customerName = { $regex: customer, $options: 'i' };
         if (author) query.author = { $regex: author, $options: 'i' };
         if (dateFrom || dateTo) {
@@ -1254,6 +1324,15 @@ app.post('/api/delegations', authMiddleware, async (req, res) => {
             authorId: req.user.userId,
         });
         await newDelegation.save();
+		const emailSubject = `Nowa delegacja do akceptacji: ${newDelegation.destination}`;
+        const emailHtml = `
+            <h1>Nowa delegacja czeka na akceptację</h1>
+            <p><strong>Autor:</strong> ${newDelegation.author}</p>
+            <p><strong>Cel:</strong> ${newDelegation.destination}</p>
+            <p><strong>Termin:</strong> od ${new Date(newDelegation.dateFrom).toLocaleDateString()} do ${new Date(newDelegation.dateTo).toLocaleDateString()}</p>
+            <p>Proszę o weryfikację w panelu.</p>
+        `;
+        sendNotificationEmail(emailSubject, emailHtml).catch(console.error);
         res.status(201).json(newDelegation);
     } catch (error) {
         res.status(500).json({ message: 'Błąd tworzenia delegacji' });

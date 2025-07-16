@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, createContext, useContext, useCallback, Suspense } from 'react';
-import { Search, List, Wrench, Sun, Moon, LogOut, FileDown, FileText, Printer, Save, CheckCircle, AlertTriangle, Upload, Trash2, XCircle, UserPlus, KeyRound, PlusCircle, MessageSquare, Archive, Edit, Home, Menu, Filter, RotateCcw, FileUp, GitMerge, Eye, Trophy, Crown, BarChart2, Users, Package, StickyNote, Settings, ChevronsUpDown, ChevronUp, ChevronDown, ClipboardList, Plane, ListChecks, Zap, LayoutDashboard, ClipboardCheck } from 'lucide-react';
+import { Search, List, Wrench, Sun, Moon, LogOut, FileDown, FileText, Printer, Save, CheckCircle, AlertTriangle, Upload, Trash2, XCircle, UserPlus, KeyRound, PlusCircle, MessageSquare, Archive, Edit, Home, Menu, Filter, RotateCcw, FileUp, GitMerge, Eye, Trophy, Crown, BarChart2, Users, Package, StickyNote, Settings, ChevronsUpDown, ChevronUp, ChevronDown, ClipboardList, Plane, ListChecks, Mail, Zap, LayoutDashboard, ClipboardCheck } from 'lucide-react';
 import { format, parseISO, eachDayOfInterval, isValid } from 'date-fns';
 import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 import { pl } from 'date-fns/locale';
@@ -420,6 +420,20 @@ const api = {
         const response = await fetchWithAuth(`${API_BASE_URL}/api/delegations/${delegationId}/visits/${clientIndex}/start`, { method: 'POST' });
         if (!response.ok) throw new Error('Błąd rozpoczęcia wizyty');
         return await response.json();
+    },
+	getEmailConfig: async () => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/api/admin/email-config`);
+        if (!response.ok) throw new Error('Błąd pobierania konfiguracji email');
+        return await response.json();
+    },
+    saveEmailConfig: async (config) => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/api/admin/email-config`, {
+            method: 'POST',
+            body: JSON.stringify(config)
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.message || 'Błąd zapisywania konfiguracji');
+        return data;
     },
     endClientVisit: async (delegationId, clientIndex, visitData) => {
         const response = await fetchWithAuth(`${API_BASE_URL}/api/delegations/${delegationId}/visits/${clientIndex}/end`, { method: 'POST', body: JSON.stringify(visitData) });
@@ -951,7 +965,7 @@ const handlePrint = () => {
                                 className="h-5 w-5 rounded text-indigo-600 focus:ring-indigo-500"
                                 checked={order.status === 'Zakończono'}
                                 onChange={(e) => {
-                                    const newStatus = e.target.checked ? 'Zakończono' : 'Skompletowane';
+                                    const newStatus = e.target.checked ? 'Zakończono' : 'Zapisane';
                                     handleStatusChange(newStatus);
                                 }}
                             />
@@ -1037,9 +1051,16 @@ const OrdersListView = ({ onEdit }) => {
     const fetchOrders = useCallback(async () => {
         setIsLoading(true);
         try {
-            const queryParams = { status: view, ...filters };
-            const fetchedOrders = await api.getOrders(queryParams);
-            setOrders(fetchedOrders);
+            const ordersToPick = await api.getOrders({ status: ['Zakończono', 'Braki'] });
+            
+            // Sortujemy, aby zamówienia "Braki" były zawsze na górze listy
+            ordersToPick.sort((a, b) => {
+                if (a.status === 'Braki' && b.status !== 'Braki') return -1;
+                if (a.status !== 'Braki' && b.status === 'Braki') return 1;
+                return 0;
+            });
+
+            setOrders(ordersToPick);
         } catch (error) {
             showNotification(error.message, 'error');
         } finally {
@@ -1753,6 +1774,15 @@ const AdminView = ({ user, onNavigate }) => {
                     </div>
                 </div>
                 <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md cursor-pointer hover:shadow-xl transition-shadow" onClick={() => onNavigate('admin-products')}>
+				<div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md cursor-pointer hover:shadow-xl transition-shadow" onClick={() => onNavigate('admin-email')}>
+    <div className="flex items-center">
+        <Mail className="w-10 h-10 text-orange-500 mr-4"/>
+        <div>
+            <h2 className="text-2xl font-semibold">Ustawienia E-mail</h2>
+            <p className="text-gray-500">Zarządzaj konfiguracją wysyłki powiadomień.</p>
+        </div>
+    </div>
+</div>
                     <div className="flex items-center">
                         <Package className="w-10 h-10 text-green-500 mr-4"/>
                         <div>
@@ -2568,6 +2598,80 @@ const KanbanView = () => {
                     ))}
                 </div>
             </DragDropContext>
+        </div>
+    );
+};
+
+const AdminEmailConfigView = () => {
+    const [config, setConfig] = useState({
+        host: '', port: 587, secure: true, user: '', pass: '', recipientEmail: ''
+    });
+    const [isLoading, setIsLoading] = useState(true);
+    const { showNotification } = useNotification();
+
+    useEffect(() => {
+        const fetchConfig = async () => {
+            try {
+                const data = await api.getEmailConfig();
+                if (data) setConfig(prev => ({...prev, ...data}));
+            } catch (error) {
+                showNotification(error.message, 'error');
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        fetchConfig();
+    }, [showNotification]);
+
+    const handleChange = (e) => {
+        const { name, value, type, checked } = e.target;
+        setConfig(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
+    };
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        try {
+            const { message } = await api.saveEmailConfig(config);
+            showNotification(message, 'success');
+        } catch (error) {
+            showNotification(error.message, 'error');
+        }
+    };
+
+    if (isLoading) return <div className="p-8 text-center">Ładowanie...</div>;
+
+    return (
+        <div className="p-4 md:p-8">
+            <h2 className="text-2xl font-semibold mb-4">Konfiguracja serwera E-mail (SMTP)</h2>
+            <form onSubmit={handleSubmit} className="max-w-2xl space-y-4 bg-white dark:bg-gray-800 p-6 rounded-lg shadow">
+                <div>
+                    <label className="block text-sm font-medium">Adres e-mail odbiorcy powiadomień</label>
+                    <input type="email" name="recipientEmail" value={config.recipientEmail || ''} onChange={handleChange} className="mt-1 w-full p-2 border rounded-md" required />
+                </div>
+                <div>
+                    <label className="block text-sm font-medium">Host SMTP</label>
+                    <input type="text" name="host" value={config.host || ''} onChange={handleChange} className="mt-1 w-full p-2 border rounded-md" required />
+                </div>
+                <div>
+                    <label className="block text-sm font-medium">Port</label>
+                    <input type="number" name="port" value={config.port || ''} onChange={handleChange} className="mt-1 w-full p-2 border rounded-md" required />
+                </div>
+                <div>
+                    <label className="block text-sm font-medium">Użytkownik (adres e-mail nadawcy)</label>
+                    <input type="email" name="user" value={config.user || ''} onChange={handleChange} className="mt-1 w-full p-2 border rounded-md" required />
+                </div>
+                 <div>
+                    <label className="block text-sm font-medium">Hasło</label>
+                    <input type="password" name="pass" value={config.pass || ''} onChange={handleChange} className="mt-1 w-full p-2 border rounded-md" placeholder="Wprowadź, jeśli chcesz zmienić" />
+                </div>
+                <div className="flex items-center">
+                    <input type="checkbox" name="secure" checked={config.secure} onChange={handleChange} className="h-4 w-4 rounded" />
+                    <label className="ml-2 text-sm">Używaj SSL/TLS (secure)</label>
+                </div>
+                <div className="text-right">
+                    <button type="submit" className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Zapisz konfigurację</button>
+                </div>
+            </form>
         </div>
     );
 };
@@ -3643,6 +3747,8 @@ function App() {
             case 'admin-users': return <AdminUsersView user={user} />;
 			case 'admin-products': return <AdminProductsView />;
 			case 'shortage-report': return <ShortageReportView />; // <-- Dodaj tę linię
+			case 'admin-products': return <AdminProductsView />;
+			case 'admin-email': return <AdminEmailConfigView />; // <-- DODAJ TĘ LINIĘ
 			default: return <DashboardView user={user} onNavigate={handleNavigate} onUpdateUser={updateUserData}/>;
 
         }
