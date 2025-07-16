@@ -189,21 +189,26 @@ async function sendNotificationEmail(subject, htmlContent) {
             return { success: false, error: 'Brak konfiguracji email.' };
         }
 
+        // --- POCZĄTEK POPRAWKI ---
+        // Automatycznie ustawiamy 'secure' na podstawie portu.
+        // Tylko port 465 używa bezpiecznego połączenia od samego początku.
+        const isSecurePort = parseInt(config.port, 10) === 465;
+        // --- KONIEC POPRAWKI ---
+
         let transporter = nodemailer.createTransport({
             host: config.host,
             port: config.port,
-            secure: config.secure, // true dla portu 465, false dla innych
+            // Używamy naszej nowej zmiennej zamiast wartości z bazy danych
+            secure: isSecurePort,
             auth: {
                 user: config.user,
                 pass: config.pass,
             },
-            // Dodajemy opcje TLS, aby rozwiązać częste problemy z certyfikatami
             tls: {
                 rejectUnauthorized: false
             }
         });
 
-        // Weryfikacja połączenia z serwerem SMTP
         await transporter.verify();
 
         const info = await transporter.sendMail({
@@ -217,7 +222,6 @@ async function sendNotificationEmail(subject, htmlContent) {
         return { success: true };
 
     } catch (error) {
-        // Logujemy cały obiekt błędu, aby uzyskać więcej szczegółów
         console.error('BŁĄD NODEMAILER:', error);
         return { success: false, error: error.message || 'Nieznany błąd podczas wysyłania e-maila.' };
     }
