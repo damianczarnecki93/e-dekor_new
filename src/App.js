@@ -627,6 +627,21 @@ const PinnedInputBar = ({ onProductAdd, onSave, isDirty }) => {
         inputRef.current?.focus();
     };
     
+	 const handleQueryChange = (e) => {
+        const value = e.target.value;
+
+        // Sprawdź, czy długość nie przekracza 13 znaków
+        if (value.length > 13) {
+            // Wyświetl komunikat
+            alert("Kod EAN nie może przekraczać 13 znaków.");
+            // Wyczyść pole tekstowe
+            setQuery('');
+        } else {
+            // Jeśli długość jest prawidłowa, zaktualizuj stan
+            setQuery(value);
+        }
+    };
+	
     const handleKeyDown = async (e) => {
         if (e.key === 'Enter' && query.trim() !== '') {
             e.preventDefault();
@@ -682,7 +697,7 @@ const PinnedInputBar = ({ onProductAdd, onSave, isDirty }) => {
                         ref={inputRef}
                         type="text"
                         value={query}
-                        onChange={(e) => setQuery(e.target.value)}
+                        onChange={handleQueryChange}
                         onKeyDown={handleKeyDown}
                         placeholder="Wyszukaj lub zeskanuj produkt..."
                         className="w-full p-3 bg-gray-100 dark:bg-gray-700 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
