@@ -1195,7 +1195,7 @@ const PickingView = () => {
     const fetchOrders = useCallback(async () => {
         setIsLoading(true);
         try {
-            const fetchedOrders = await api.getOrders({ status: 'Zakończone' });
+            const fetchedOrders = await api.getOrders({ status: 'Zakończono' });
             setOrders(fetchedOrders);
         } catch (error) { 
             showNotification(error.message, 'error'); 
