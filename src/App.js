@@ -867,7 +867,7 @@ const handleStatusChange = async (newStatus) => {
 
         doc.autoTable({
         startY: 30,
-        head: [['Nazwa', 'Kod produktu', 'Ilość', 'Cena', 'Wartość']],
+        head: [['Nazwa', 'Kod produktu', 'Notatka', 'Ilość', 'Cena', 'Wartość']],
         body: order.items.map(item => [
             item.name,
             item.product_code,
