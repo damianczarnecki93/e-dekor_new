@@ -785,29 +785,34 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty }) => {
         event.target.value = null;
     };
     
-    const handleExportPdf = () => {
+   const handleExportPdf = () => {
         const doc = new jsPDF();
+		doc.addFont('public/Roboto-Regular.ttf', 'Roboto', 'normal');
+		doc.setFont('Roboto'); 
         doc.text(`Zamowienie dla: ${order.customerName}`, 14, 15);
         doc.text(`Data: ${new Date().toLocaleDateString()}`, 14, 22);
 
         doc.autoTable({
-            startY: 30,
-            head: [['Nazwa', 'Kod produktu', 'Ilosc', 'Cena', 'Wartosc']],
-            body: order.items.map(item => [
-                item.name,
-                item.product_code,
-                item.quantity,
-                `${item.price.toFixed(2)} PLN`,
-                `${(item.price * item.quantity).toFixed(2)} PLN`,
+        startY: 30,
+        head: [['Nazwa', 'Kod produktu', 'Ilość', 'Cena', 'Wartość']],
+        body: order.items.map(item => [
+            item.name,
+            item.product_code,
+            item.quantity,
+            `${item.price.toFixed(2)} PLN`,
+            `${(item.price * item.quantity).toFixed(2)} PLN`,
             ]),
+			styles: {
+            font: 'Roboto',
+        },
         });
         
         const finalY = doc.lastAutoTable.finalY;
-        doc.setFontSize(14);
-        doc.text(`Suma: ${totalValue.toFixed(2)} PLN`, 14, finalY + 10);
+    doc.setFontSize(14);
+    doc.text(`Suma: ${totalValue.toFixed(2)} PLN`, 14, finalY + 10);
 
-        doc.save(`Zamowienie-${order.customerName.replace(/\s/g, '_') || 'nowe'}.pdf`);
-    };
+    doc.save(`Zamowienie-${order.customerName.replace(/\s/g, '_') || 'nowe'}.pdf`);
+};
 
 const handlePrint = () => {
     const content = printRef.current;
