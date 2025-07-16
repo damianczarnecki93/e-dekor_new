@@ -1115,23 +1115,40 @@ const OrdersListView = ({ onEdit }) => {
                                 <th className="p-2 text-right cursor-pointer" onClick={() => requestSort('total')}>
                                     <div className="flex items-center justify-end">Wartość {getSortIcon('total')}</div>
                                 </th>
+                                {/* --- POCZĄTEK POPRAWKI 1 --- */}
+                                <th className="p-2 text-center">Status</th>
                                 <th className="p-2 text-center">Akcje</th>
+                                {/* --- KONIEC POPRAWKI 1 --- */}
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                            {isLoading ? (<tr><td colSpan="5" className="p-8 text-center text-gray-500">Ładowanie...</td></tr>) : sortedOrders.length > 0 ? (sortedOrders.map(order => (
+                            {isLoading ? (<tr><td colSpan="6" className="p-8 text-center text-gray-500">Ładowanie...</td></tr>) : sortedOrders.length > 0 ? (sortedOrders.map(order => (
                                 <tr key={order._id}>
                                     <td className="p-2 font-medium"><span className="truncate block max-w-[20ch]">{order.customerName}</span></td>
                                     <td className="hidden md:table-cell p-2">{order.author}</td>
                                     <td className="hidden sm:table-cell p-2">{new Date(order.date).toLocaleDateString()}</td>
                                     <td className="p-2 text-right font-semibold">{(order.total || 0).toFixed(2)}</td>
+                                    {/* --- POCZĄTEK POPRAWKI 2 --- */}
+                                    <td className="p-2 text-center">
+                                        <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                                            {
+                                                'Zapisane': 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300',
+                                                'Skompletowane': 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
+                                                'Braki': 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-red-300',
+                                                'Zakończono': 'bg-gray-200 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
+                                            }[order.status] || 'bg-gray-100'
+                                        }`}>
+                                            {order.status}
+                                        </span>
+                                    </td>
+                                    {/* --- KONIEC POPRAWKI 2 --- */}
                                     <td className="p-2 text-center whitespace-nowrap">
                                         <Tooltip text="Edytuj/Pokaż"><button onClick={() => onEdit(order._id)} className="p-2 text-blue-500 hover:text-blue-700"><Edit className="w-5 h-5"/></button></Tooltip>
                                         {view === 'Skompletowane' && <Tooltip text="Cofnij do kompletacji"><button onClick={() => setModalState({ isOpen: true, orderId: order._id, type: 'revert' })} className="p-2 text-orange-500 hover:text-orange-700"><RotateCcw className="w-5 h-5"/></button></Tooltip>}
                                         <Tooltip text="Usuń"><button onClick={() => setModalState({ isOpen: true, orderId: order._id, type: 'delete' })} className="p-2 text-red-500 hover:text-red-700"><Trash2 className="w-5 h-5"/></button></Tooltip>
                                     </td>
                                 </tr>
-                            ))) : (<tr><td colSpan="5" className="p-8 text-center text-gray-500">Brak zamówień pasujących do kryteriów.</td></tr>)}
+                            ))) : (<tr><td colSpan="6" className="p-8 text-center text-gray-500">Brak zamówień pasujących do kryteriów.</td></tr>)}
                         </tbody>
                     </table>
                 </div>
