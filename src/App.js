@@ -1,5 +1,3 @@
-@ -1,3453 +1,3446 @@
-import React, { useState, useEffect, useRef, useMemo, createContext, useContext, useCallback } from 'react';
 import React, { useState, useEffect, useRef, useMemo, createContext, useContext, useCallback, Suspense } from 'react';
 import { Search, List, Wrench, Sun, Moon, LogOut, FileDown, Printer, Save, CheckCircle, AlertTriangle, Upload, Trash2, XCircle, UserPlus, KeyRound, PlusCircle, MessageSquare, Archive, Edit, Home, Menu, Filter, RotateCcw, FileUp, GitMerge, Eye, Trophy, Crown, BarChart2, Users, Package, StickyNote, Settings, ChevronsUpDown, ChevronUp, ChevronDown, ClipboardList, Plane, ListChecks, Zap, LayoutDashboard } from 'lucide-react';
 import { format, parseISO, eachDayOfInterval, isValid } from 'date-fns';
@@ -54,7 +52,6 @@ class ErrorBoundary extends React.Component {
         return this.props.children;
     }
 }
-
 
 // --- Kontekst Powiadomień ---
 
@@ -128,7 +125,6 @@ const fetchWithAuth = async (url, options = {}) => {
     if (response.status === 401) {
         localStorage.removeItem('userToken');
         localStorage.removeItem('userData');
-        window.location.hash = '/login'; // Przekierowanie do logowania
         window.location.hash = '/login';
         window.location.reload();
         throw new Error('Sesja wygasła. Proszę zalogować się ponownie.');
@@ -418,7 +414,6 @@ const api = {
 // --- Komponenty UI ---
 
 const Tooltip = ({ children, text }) => ( <div className="relative flex items-center group">{children}<div className="absolute bottom-full mb-2 w-max px-2 py-1 bg-gray-800 text-white text-xs rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none">{text}</div></div>);
-    const Modal = ({ isOpen, onClose, title, children, maxWidth = 'md' }) => {
 const Modal = ({ isOpen, onClose, title, children, maxWidth = 'md' }) => {
         if (!isOpen) return null;
         const maxWidthClass = { sm: 'max-w-sm', md: 'max-w-md', lg: 'max-w-lg', xl: 'max-w-xl', '2xl': 'max-w-2xl', '4xl': 'max-w-4xl' }[maxWidth];
@@ -485,24 +480,17 @@ const SearchView = ({ onProductSelect }) => {
         setSuggestions([]);
         try {
             const results = await api.searchProducts(searchQuery, filterByQuantity);
-            
-            // Sprawdzenie, czy wprowadzony tekst jest potencjalnym kodem EAN
             const isEanLike = /^\d{8,13}$/.test(searchQuery.trim());
 
             if (isEanLike && results.length > 0) {
                 const matchedProduct = results.find(p => p.barcodes.includes(searchQuery.trim()));
                 if (matchedProduct) {
-                    // Automatyczne dodanie produktu, jeśli znaleziono dokładne dopasowanie EAN
                     onProductSelect(matchedProduct);
-                    setQuery(''); // Wyczyszczenie pola po dodaniu
                     setQuery('');
                     setIsLoading(false);
-                    return; // Zakończenie funkcji, aby nie pokazywać sugestii
                     return;
                 }
             }
-            
-            // Domyślne zachowanie - pokazuj sugestie
             setSuggestions(results);
 
         } catch (error) {
@@ -513,7 +501,6 @@ const SearchView = ({ onProductSelect }) => {
     }, [filterByQuantity, onProductSelect, showNotification]);
 
     useEffect(() => {
-        // Użycie timeoutu, aby uniknąć wysyłania zapytań przy każdym naciśnięciu klawisza
         const handler = setTimeout(() => {
             if (query.trim().length > 2) {
                 handleSearch(query);
@@ -826,7 +813,6 @@ const handlePrint = () => {
     const content = printRef.current;
     if (content) {
         const printWindow = window.open('', '_blank');
-        // --- POPRAWKA: Dodano <meta charset="UTF-8"> ---
         printWindow.document.write('<html><head><meta charset="UTF-8"><title>Wydruk Zamówienia</title><script src="https://cdn.tailwindcss.com"></script><style>.print-header { display: block !important; } body { padding: 2rem; }</style></head><body>');
         printWindow.document.write(content.innerHTML);
         printWindow.document.write('</body></html>');
@@ -1685,7 +1671,6 @@ const AdminUsersView = ({ user }) => {
         try {
             await api.updateUserModules(userId, updatedModules);
             showNotification('Uprawnienia zaktualizowane', 'success');
-            // Aktualizuj stan lokalnie, aby uniknąć ponownego pobierania danych
             setUsers(users.map(u => u._id === userId ? {...u, visibleModules: updatedModules} : u));
         } catch (error) {
             showNotification(error.message, 'error');
@@ -1796,7 +1781,6 @@ const AdminProductsView = () => {
         try {
             const result = await api.uploadProductsFile(file, importMode);
             showNotification(result.message, 'success');
-            fetchProducts(); // Odśwież listę
             fetchProducts();
         } catch (error) {
             showNotification(error.message, 'error');
@@ -1812,7 +1796,6 @@ const AdminProductsView = () => {
             try {
                 const result = await api.mergeProducts();
                 showNotification(result.message, 'success');
-                fetchProducts(); // Odśwież listę
                 fetchProducts();
             } catch (error) {
                 showNotification(error.message, 'error');
@@ -2103,7 +2086,6 @@ const SalesGoalsWidget = ({ stats, user, onUpdate }) => {
         try {
             await api.setUserGoal(goalValue);
             showNotification('Cel miesięczny został zaktualizowany!', 'success');
-            onUpdate(); // Odśwież dane pulpitu
             onUpdate();
         } catch (error) {
             showNotification(error.message, 'error');
@@ -2121,7 +2103,6 @@ const SalesGoalsWidget = ({ stats, user, onUpdate }) => {
             await api.addManualSales(saleValue);
             showNotification('Sprzedaż została dodana!', 'success');
             setManualSaleInput('');
-            onUpdate(); // Odśwież dane pulpitu
             onUpdate();
         } catch (error) {
             showNotification(error.message, 'error');
@@ -2246,7 +2227,6 @@ const CustomizeDashboardModal = ({ isOpen, onClose, availableWidgets, currentLay
     );
 };
 
-
 const NotesWidget = () => {
     const [notes, setNotes] = useState([]);
     const [newNote, setNewNote] = useState('');
@@ -2308,22 +2288,6 @@ const NotesWidget = () => {
 
 // --- Moduł tabeli zadań ---
 
-// --- Główny Komponent Aplikacji ---
-function App() {
-    const [user, setUser] = useState(null);
-    const [activeView, setActiveView] = useState({ view: 'dashboard', params: {} });
-    const [currentOrder, setCurrentOrder] = useState({ customerName: '', items: [], isDirty: false });
-    const [isDirty, setIsDirty] = useState(false);
-    const [isDarkMode, setIsDarkMode] = useState(false);
-    const [isLoading, setIsLoading] = useState(true);
-    const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
-    const [isNavOpen, setIsNavOpen] = useState(false);
-    const [expandedCategories, setExpandedCategories] = useState(['Główne']);
-
-    const updateUserData = (newUserData) => {
-        setUser(newUserData);
-        localStorage.setItem('userData', JSON.stringify(newUserData));
-    };
 const KanbanView = () => {
     const [columns, setColumns] = useState({
         'todo': {
@@ -2342,18 +2306,10 @@ const KanbanView = () => {
     const [newTaskContent, setNewTaskContent] = useState('');
     const [newTaskPriority, setNewTaskPriority] = useState('Niski');
 
-    useEffect(() => {
-        const savedTheme = localStorage.getItem('theme');
-        if (savedTheme === 'dark') setIsDarkMode(true);
-    }, []);
     const onDragEnd = (result) => {
         if (!result.destination) return;
         const { source, destination } = result;
 
-    useEffect(() => {
-        if (isDarkMode) {
-            document.documentElement.classList.add('dark');
-            localStorage.setItem('theme', 'dark');
         if (source.droppableId === destination.droppableId) {
             const column = columns[source.droppableId];
             const copiedItems = [...column.items];
@@ -2367,8 +2323,6 @@ const KanbanView = () => {
                 }
             });
         } else {
-            document.documentElement.classList.remove('dark');
-            localStorage.setItem('theme', 'light');
             const sourceColumn = columns[source.droppableId];
             const destColumn = columns[destination.droppableId];
             const sourceItems = [...sourceColumn.items];
@@ -2387,29 +2341,8 @@ const KanbanView = () => {
                 }
             });
         }
-    }, [isDarkMode]);
-
-    const handleLogout = useCallback(() => {
-        localStorage.removeItem('userToken');
-        localStorage.removeItem('userData');
-        setUser(null);
-        setIsLoading(false);
-        setActiveView({ view: 'dashboard', params: {} });
-    }, []);
-
-    const handleLogin = useCallback((data) => {
-        localStorage.setItem('userToken', data.token);
-        localStorage.setItem('userData', JSON.stringify(data.user));
-        setUser(data.user);
-        setIsLoading(false);
-        setActiveView({ view: 'dashboard', params: {} });
-    }, []);
     };
 
-    const handleNavigate = (view, params = {}) => {
-        if (isDirty) {
-            if (!window.confirm("Masz niezapisane zmiany. Czy na pewno chcesz opuścić tę stronę? Zmiany zostaną utracone.")) {
-                return;
     const handleAddTask = () => {
         if (!newTaskContent) return;
         const newTask = {
@@ -2425,40 +2358,11 @@ const KanbanView = () => {
                 ...todoColumn,
                 items: updatedItems
             }
-        }
-        setIsDirty(false);
-        setActiveView({ view, params });
-        setIsNavOpen(false);
         });
         setNewTaskContent('');
         setNewTaskPriority('Niski');
     };
 
-    useEffect(() => {
-        const token = localStorage.getItem('userToken');
-        const userData = localStorage.getItem('userData');
-        if (token && userData) {
-            try {
-                const userObj = JSON.parse(userData);
-                if (userObj && userObj.id) {
-                    setUser(userObj);
-                } else {
-                    handleLogout();
-                }
-            } catch (e) {
-                handleLogout();
-            }
-        }
-        setIsLoading(false);
-    }, [handleLogout]);
-    
-    const loadOrderForEditing = async (orderId) => {
-        try {
-            const order = await api.getOrderById(orderId);
-            setCurrentOrder(order);
-            handleNavigate('order');
-        } catch (error) {
-            console.error("Błąd ładowania zamówienia", error);
     const getPriorityClass = (priority) => {
         switch (priority) {
             case 'Wysoki': return 'border-l-4 border-red-500';
@@ -2467,15 +2371,6 @@ const KanbanView = () => {
         }
     };
 
-    const handleNewOrder = () => {
-        if (isDirty) {
-            if (!window.confirm("Masz niezapisane zmiany. Czy na pewno chcesz opuścić tę stronę? Zmiany zostaną utracone.")) {
-                return;
-            }
-        }
-        setIsDirty(false);
-        setCurrentOrder({ customerName: '', items: [], isDirty: false });
-        handleNavigate('order');
     return (
         <div className="p-4 md:p-8">
             <h1 className="text-3xl font-bold mb-6">Tablica Kanban</h1>
@@ -2553,57 +2448,18 @@ const KanbanForm = ({ onSubmit }) => {
         setNewSubtask('');
     };
     
-    const toggleCategory = (category) => {
-        setExpandedCategories(prev => 
-            prev.includes(category) ? prev.filter(c => c !== category) : [...prev, category]
-        );
     const removeSubtask = (index) => {
         const newSubtasks = [...subtasks];
         newSubtasks.splice(index, 1);
         setSubtasks(newSubtasks);
     };
 
-    const navConfig = useMemo(() => [
-        {
-            category: 'Główne',
-            items: [
-                { id: 'dashboard', label: 'Panel Główny', icon: Home, roles: ['user', 'administrator'], alwaysVisible: true },
-                { id: 'search', label: 'Wyszukiwarka', icon: Search, roles: ['user', 'administrator'] },
-            ]
-        },
-        {
-            category: 'Sprzedaż',
-            items: [
-                { id: 'order', label: 'Nowe Zamówienie', icon: PlusCircle, roles: ['user', 'administrator'], action: handleNewOrder },
-                { id: 'orders', label: 'Zamówienia', icon: Archive, roles: ['user', 'administrator'] },
-            ]
-        },
-        {
-            category: 'Magazyn',
-            items: [
-                { id: 'picking', label: 'Kompletacja', icon: List, roles: ['user', 'administrator'] },
-                { id: 'inventory', label: 'Inwentaryzacja', icon: Wrench, roles: ['user', 'administrator'] },
-            ]
-        },
-        {
-            category: 'Organizacyjne',
-            items: [
-                { id: 'kanban', label: 'Tablica Zadań', icon: ClipboardList, roles: ['user', 'administrator'] },
-                { id: 'delegations', label: 'Delegacje', icon: Plane, roles: ['user', 'administrator'] },
-            ]
-        },
-        {
-            category: 'Administracja',
-            items: [
-                 { id: 'admin', label: 'Panel Admina', icon: Settings, roles: ['administrator'] },
-            ]
     const handleSubmit = (e) => {
         e.preventDefault();
         if (!content) {
             alert('Treść zadania jest wymagana.');
             return;
         }
-    ], [handleNewOrder]);
         onSubmit({ content, details, subtasks, priority });
         setContent('');
         setDetails('');
@@ -2611,24 +2467,6 @@ const KanbanForm = ({ onSubmit }) => {
         setPriority('normal');
     };
 
-    const availableNav = useMemo(() => {
-        if (!user) return [];
-        return navConfig
-            .map(category => {
-                const visibleItems = category.items.filter(item => {
-                    if (!item.roles.includes(user.role)) {
-                        return false;
-                    }
-                    if (user.role === 'administrator') {
-                        return true;
-                    }
-                    return item.alwaysVisible || user.visibleModules?.includes(item.id);
-                });
-                return { ...category, items: visibleItems };
-            })
-            .filter(category => category.items.length > 0);
-    }, [user, navConfig]);
-    
     return (
         <form onSubmit={handleSubmit} className="space-y-4">
             <div><label className="block text-sm font-medium">Treść zadania</label><textarea value={content} onChange={(e) => setContent(e.target.value)} className="w-full p-2 border rounded-md" required /></div>
@@ -2653,8 +2491,6 @@ const KanbanForm = ({ onSubmit }) => {
     );
 };
 
-    if (isLoading) { return <div className="flex items-center justify-center h-screen bg-gray-100 dark:bg-gray-900">Ładowanie...</div> }
-    if (!user) { return <AuthPage onLogin={handleLogin} />; }
 const TaskDetails = ({ task, onSave }) => {
     const [content, setContent] = useState(task.content || '');
     const [details, setDetails] = useState(task.details || '');
@@ -2662,23 +2498,6 @@ const TaskDetails = ({ task, onSave }) => {
     const [newSubtask, setNewSubtask] = useState('');
     const [priority, setPriority] = useState(task.priority || 'normal');
 
-    const renderView = () => {
-        const { view, params } = activeView;
-        switch (view) {
-            case 'dashboard': return <DashboardView user={user} onNavigate={handleNavigate} onUpdateUser={updateUserData}/>;
-            case 'search': return <MainSearchView />;
-            case 'order': return <OrderView currentOrder={currentOrder} setCurrentOrder={setCurrentOrder} user={user} setDirty={setIsDirty} />;
-            case 'orders': return <OrdersListView onEdit={loadOrderForEditing} />;
-            case 'picking': return <PickingView />;
-            case 'inventory': return <InventoryView user={user} onNavigate={handleNavigate} isDirty={isDirty} setIsDirty={setIsDirty} />;
-            case 'inventory-sheet': return <NewInventorySheet user={user} onSave={() => handleNavigate('inventory')} inventoryId={params.inventoryId} setDirty={setIsDirty} />;
-            case 'kanban': return <KanbanView user={user} />;
-            case 'delegations': return <DelegationsView user={user} onNavigate={handleNavigate} setCurrentOrder={setCurrentOrder} />;
-            case 'admin': return <AdminView user={user} onNavigate={handleNavigate} />;
-            case 'admin-users': return <AdminUsersView user={user} />;
-            case 'admin-products': return <AdminProductsView />;
-            default: return <DashboardView user={user} onNavigate={handleNavigate} onUpdateUser={updateUserData}/>;
-        }
     const handleAddSubtask = () => {
         if (!newSubtask.trim()) return;
         setSubtasks([...subtasks, { content: newSubtask, isDone: false, _id: `new-${Date.now()}` }]);
@@ -2702,37 +2521,6 @@ const TaskDetails = ({ task, onSave }) => {
     };
 
     return (
-        <>
-            <div className="flex h-screen bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-sans">
-                <nav className={`w-64 bg-white dark:bg-gray-800 shadow-lg flex flex-col flex-shrink-0 transition-transform duration-300 ease-in-out z-40 fixed lg:static h-full ${isNavOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}>
-                    <div className="flex items-center justify-center h-20 border-b border-gray-200 dark:border-gray-700">
-                         <img src={isDarkMode ? "/logo-dark.png" : "/logo.png"} onError={(e) => { e.currentTarget.src = 'https://placehold.co/120x40/4f46e5/ffffff?text=Logo'; }} alt="Dekor-Art-Serwis" loading="lazy" className="h-10" />
-                    </div>
-                    <ul className="flex-grow overflow-y-auto">
-                        {availableNav.map(category => (
-                            <div key={category.category} className="my-2">
-                                <h3 onClick={() => toggleCategory(category.category)} className="px-6 mt-4 mb-2 text-xs font-semibold text-gray-400 uppercase flex justify-between items-center cursor-pointer">
-                                    {category.category}
-                                    {expandedCategories.includes(category.category) ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                                </h3>
-                                {expandedCategories.includes(category.category) && category.items.map(item => (
-                                     <li key={item.id}>
-                                        <button onClick={() => { item.action ? item.action() : handleNavigate(item.id); }} className={`w-full flex items-center justify-start h-12 px-6 text-base transition-colors duration-200 text-left ${activeView.view.startsWith(item.id) ? 'bg-indigo-50 dark:bg-gray-700 text-indigo-600 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'}`}>
-                                            <item.icon className="h-5 w-5" />
-                                            <span className="ml-4">{item.label}</span>
-                                        </button>
-                                    </li>
-                                ))}
-                            </div>
-                        ))}
-                    </ul>
-                    <div className="p-4 border-t border-gray-200 dark:border-gray-700">
-                        <div className="flex items-center justify-between mb-4">
-                            <div><p className="font-semibold">{user.username}</p><p className="text-sm text-gray-500">{user.role}</p></div>
-                             <div className="flex items-center">
-                                <Tooltip text="Zmień hasło"><button onClick={() => setIsPasswordModalOpen(true)} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600"><KeyRound className="h-6 w-6 text-gray-500" /></button></Tooltip>
-                                <Tooltip text="Wyloguj"><button onClick={handleLogout} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600"><LogOut className="h-6 w-6 text-gray-500" /></button></Tooltip>
-                             </div>
         <div className="space-y-4">
              <div><label className="block text-sm font-medium">Tytuł zadania</label><input type="text" value={content} onChange={(e) => setContent(e.target.value)} className="w-full p-2 border rounded-md"/></div>
              <div><label className="block text-sm font-medium">Priorytet</label><select value={priority} onChange={(e) => setPriority(e.target.value)} className="w-full p-2 border rounded-md"><option value="normal">Normalny</option><option value="high">Wysoki</option><option value="critical">Krytyczny</option></select></div>
@@ -2746,16 +2534,6 @@ const TaskDetails = ({ task, onSave }) => {
                             <span className={st.isDone ? 'line-through text-gray-500' : ''}>{st.content}</span>
                             <button onClick={() => removeSubtask(index)} className="ml-auto p-1 text-red-500 hover:text-red-700"><Trash2 className="w-4 h-4"/></button>
                         </div>
-                        <Tooltip text="Zmień motyw"><button onClick={() => setIsDarkMode(!isDarkMode)} className="w-full flex justify-center p-2 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600">{isDarkMode ? <Sun className="h-6 w-6 text-yellow-400" /> : <Moon className="h-6 w-6 text-indigo-500" />}</button></Tooltip>
-                    </div>
-                </nav>
-                <main className="flex-1 flex flex-col overflow-hidden">
-                    <div className="lg:hidden p-2 bg-white dark:bg-gray-800 border-b dark:border-gray-700 flex justify-between items-center">
-                        <button onClick={() => setIsNavOpen(!isNavOpen)} className="p-2 rounded-md"><Menu className="w-6 w-6" /></button>
-                        <span className="font-semibold">{navConfig.flatMap(c => c.items).find(item => item.id === activeView.view)?.label}</span>
-                    </div>
-                    <div className="flex-1 overflow-x-hidden overflow-y-auto">{renderView()}</div>
-                </main>
                     ))}
                 </div>
                 <div className="flex gap-2 mt-2">
@@ -2763,34 +2541,16 @@ const TaskDetails = ({ task, onSave }) => {
                     <button type="button" onClick={handleAddSubtask} className="px-3 py-1 bg-gray-200 rounded-md">Dodaj</button>
                 </div>
             </div>
-            <UserChangePasswordModal isOpen={isPasswordModalOpen} onClose={() => setIsPasswordModalOpen(false)} />
-        </>
             <div className="flex justify-end pt-4">
                 <button onClick={handleSave} className="px-4 py-2 bg-blue-600 text-white rounded-lg">Zapisz szczegóły</button>
             </div>
         </div>
     );
-}
-
 };
 
-const UserChangePasswordModal = ({ isOpen, onClose }) => {
-    const [currentPassword, setCurrentPassword] = useState('');
-    const [newPassword, setNewPassword] = useState('');
-    const [error, setError] = useState('');
-    const { showNotification } = useNotification();
 const TaskCard = ({ task, user, onDelete, onEdit }) => {
     const [isExpanded, setIsExpanded] = useState(false);
 
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        setError('');
-        if (newPassword.length < 6) { setError('Nowe hasło musi mieć co najmniej 6 znaków.'); return; }
-        try {
-            await api.userChangeOwnPassword(currentPassword, newPassword);
-            showNotification('Hasło zostało zmienione pomyślnie!', 'success');
-            onClose();
-        } catch (err) { setError(err.message); }
     const priorityClass = {
         high: 'bg-yellow-100 dark:bg-yellow-900/30',
         critical: 'bg-red-100 dark:bg-red-900/30',
@@ -2798,14 +2558,6 @@ const TaskCard = ({ task, user, onDelete, onEdit }) => {
     };
 
     return (
-        <Modal isOpen={isOpen} onClose={onClose} title="Zmień swoje hasło">
-            <form onSubmit={handleSubmit} className="space-y-4">
-                <div><label className="block mb-2 text-sm font-medium">Aktualne hasło</label><input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} className="w-full p-3 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg" required /></div>
-                <div><label className="block mb-2 text-sm font-medium">Nowe hasło</label><input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="w-full p-3 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg" required /></div>
-                {error && <p className="text-sm text-red-500">{error}</p>}
-                <div className="flex justify-end gap-4 pt-4"><button type="button" onClick={onClose} className="px-4 py-2 bg-gray-200 dark:bg-gray-600 rounded-lg">Anuluj</button><button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg">Zmień hasło</button></div>
-            </form>
-        </Modal>
         <div 
             draggable 
             onDragStart={(e) => e.dataTransfer.setData("taskId", task._id)}
@@ -2836,26 +2588,8 @@ const TaskCard = ({ task, user, onDelete, onEdit }) => {
     );
 };
 
-// --- Nowe Komponenty (Kanban i Delegacje) ---
 // --- Moduł delegacji ---
 
-const KanbanView = () => {
-    const [columns, setColumns] = useState({
-        'todo': {
-            name: 'Do zrobienia',
-            items: []
-        },
-        'in-progress': {
-            name: 'W trakcie',
-            items: []
-        },
-        'done': {
-            name: 'Gotowe',
-            items: []
-        }
-    });
-    const [newTaskContent, setNewTaskContent] = useState('');
-    const [newTaskPriority, setNewTaskPriority] = useState('Niski');
 const DelegationsView = ({ user, onNavigate, setCurrentOrder }) => {
     const [delegations, setDelegations] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -2883,387 +2617,6 @@ const DelegationsView = ({ user, onNavigate, setCurrentOrder }) => {
             return sortableItems;
         }, [items, sortConfig]);
 
-    const onDragEnd = (result) => {
-        if (!result.destination) return;
-        const { source, destination } = result;
-        const requestSort = (key) => {
-            let direction = 'ascending';
-            if (sortConfig && sortConfig.key === key && sortConfig.direction === 'ascending') {
-                direction = 'descending';
-            }
-            setSortConfig({ key, direction });
-        };
-
-        if (source.droppableId === destination.droppableId) {
-            const column = columns[source.droppableId];
-            const copiedItems = [...column.items];
-            const [removed] = copiedItems.splice(source.index, 1);
-            copiedItems.splice(destination.index, 0, removed);
-            setColumns({
-                ...columns,
-                [source.droppableId]: {
-                    ...column,
-                    items: copiedItems
-                }
-            });
-        } else {
-            const sourceColumn = columns[source.droppableId];
-            const destColumn = columns[destination.droppableId];
-            const sourceItems = [...sourceColumn.items];
-            const destItems = [...destColumn.items];
-            const [removed] = sourceItems.splice(source.index, 1);
-            destItems.splice(destination.index, 0, removed);
-            setColumns({
-                ...columns,
-                [source.droppableId]: {
-                    ...sourceColumn,
-                    items: sourceItems
-                },
-                [destination.droppableId]: {
-                    ...destColumn,
-                    items: destItems
-                }
-            });
-        }
-        return { items: sortedItems, requestSort, sortConfig };
-    };
-
-    const handleAddTask = () => {
-        if (!newTaskContent) return;
-        const newTask = {
-            id: `task-${Date.now()}`,
-            content: newTaskContent,
-            priority: newTaskPriority
-        };
-        const todoColumn = columns['todo'];
-        const updatedItems = [...todoColumn.items, newTask];
-        setColumns({
-            ...columns,
-            'todo': {
-                ...todoColumn,
-                items: updatedItems
-            }
-        });
-        setNewTaskContent('');
-        setNewTaskPriority('Niski');
-    };
-    const { items: sortedDelegations, requestSort, sortConfig } = useSortableData(delegations);
-
-    const getPriorityClass = (priority) => {
-        switch (priority) {
-            case 'Wysoki': return 'border-l-4 border-red-500';
-            case 'Średni': return 'border-l-4 border-yellow-500';
-            default: return 'border-l-4 border-green-500';
-    const LIBRARIES = useMemo(() => ['places', 'geocoding'], []);
-    const { isLoaded, loadError } = useLoadScript({
-        googleMapsApiKey: "AIzaSyDMr9jJIDp0M52-pvwJjehyXShfHmQ0AYE", // <-- WAŻNE: ZASTĄP SWOIM KLUCZEM
-        libraries: LIBRARIES,
-    });
-
-    const getSortIcon = (name) => {
-        if (!sortConfig || sortConfig.key !== name) {
-            return <ChevronsUpDown className="w-4 h-4 ml-1 opacity-40" />;
-        }
-        return sortConfig.direction === 'ascending' ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />;
-    };
-
-    return (
-        <div className="p-4 md:p-8">
-            <h1 className="text-3xl font-bold mb-6">Tablica Kanban</h1>
-            <div className="mb-6 p-4 bg-white dark:bg-gray-800 rounded-lg shadow-md">
-                <h2 className="text-xl font-semibold mb-2">Nowe zadanie</h2>
-                <div className="flex flex-col sm:flex-row gap-4">
-                    <input
-                        type="text"
-                        value={newTaskContent}
-                        onChange={(e) => setNewTaskContent(e.target.value)}
-                        placeholder="Opis zadania..."
-                        className="form-input flex-grow"
-                    />
-                    <select
-                        value={newTaskPriority}
-                        onChange={(e) => setNewTaskPriority(e.target.value)}
-                        className="form-select sm:w-48"
-                    >
-                        <option>Niski</option>
-                        <option>Średni</option>
-                        <option>Wysoki</option>
-                    </select>
-                    <button onClick={handleAddTask} className="btn btn-primary">Dodaj zadanie</button>
-                </div>
-            </div>
-            <DragDropContext onDragEnd={onDragEnd}>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    {Object.entries(columns).map(([columnId, column]) => (
-                        <div key={columnId} className="bg-gray-100 dark:bg-gray-900 rounded-lg p-4">
-                            <h2 className="text-lg font-bold mb-4 text-center">{column.name}</h2>
-                            <Droppable droppableId={columnId}>
-                                {(provided, snapshot) => (
-                                    <div
-                                        {...provided.droppableProps}
-                                        ref={provided.innerRef}
-                                        className={`min-h-[400px] p-2 rounded-md transition-colors ${snapshot.isDraggingOver ? 'bg-blue-50 dark:bg-blue-900/30' : ''}`}
-                                    >
-                                        {column.items.map((item, index) => (
-                                            <Draggable key={item.id} draggableId={item.id} index={index}>
-                                                {(provided, snapshot) => (
-                                                    <div
-                                                        ref={provided.innerRef}
-                                                        {...provided.draggableProps}
-                                                        {...provided.dragHandleProps}
-                                                        className={`p-3 mb-3 rounded-lg shadow-md bg-white dark:bg-gray-800 ${getPriorityClass(item.priority)} ${snapshot.isDragging ? 'shadow-lg' : ''}`}
-                                                    >
-                                                        {item.content}
-                                                    </div>
-                                                )}
-                                            </Draggable>
-                                        ))}
-                                        {provided.placeholder}
-                                    </div>
-                                )}
-                            </Droppable>
-                        </div>
-                    ))}
-                </div>
-            </DragDropContext>
-        </div>
-    );
-};
-    const fetchDelegations = useCallback(async () => {
-        setIsLoading(true);
-        try {
-            const data = await api.getDelegations();
-            setDelegations(data);
-        } catch (error) {
-            showNotification(error.message, 'error');
-        } finally {
-            setIsLoading(false);
-        }
-    }, [showNotification]);
-
-    useEffect(() => {
-        fetchDelegations();
-    }, [fetchDelegations]);
-
-const KanbanForm = ({ onSubmit }) => {
-    const [content, setContent] = useState('');
-    const [details, setDetails] = useState('');
-    const [subtasks, setSubtasks] = useState([]);
-    const [newSubtask, setNewSubtask] = useState('');
-    const [priority, setPriority] = useState('normal');
-    const handleAddOrUpdateDelegation = async (delegationData) => {
-        try {
-            await api.saveDelegation(delegationData);
-            showNotification(`Delegacja pomyślnie ${delegationData._id ? 'zaktualizowana' : 'dodana'}.`, 'success');
-            setIsFormModalOpen(false);
-            fetchDelegations();
-        } catch (error) {
-            showNotification(error.message, 'error');
-        }
-    };
-
-    const handleAddSubtask = () => {
-        if (!newSubtask.trim()) return;
-        setSubtasks([...subtasks, { content: newSubtask, isDone: false }]);
-        setNewSubtask('');
-    const handleStatusUpdate = async (id, status) => {
-        try {
-            await api.updateDelegationStatus(id, status);
-            showNotification('Status delegacji został zaktualizowany.', 'success');
-            fetchDelegations();
-        } catch (error) {
-            showNotification(error.message, 'error');
-        }
-    };
-    
-    const removeSubtask = (index) => {
-        const newSubtasks = [...subtasks];
-        newSubtasks.splice(index, 1);
-        setSubtasks(newSubtasks);
-    const handleDelete = async (id) => {
-        if(window.confirm("Czy na pewno chcesz usunąć tę delegację?")) {
-            try {
-                await api.deleteDelegation(id);
-                showNotification("Delegacja usunięta", "success");
-                fetchDelegations();
-            } catch (error) {
-                showNotification(error.message, "error");
-            }
-        }
-    };
-
-    const handleSubmit = (e) => {
-        e.preventDefault();
-        if (!content) {
-            alert('Treść zadania jest wymagana.');
-            return;
-        }
-        onSubmit({ content, details, subtasks, priority });
-        setContent('');
-        setDetails('');
-        setSubtasks([]);
-        setPriority('normal');
-    };
-
-    return (
-        <form onSubmit={handleSubmit} className="space-y-4">
-            <div><label className="block text-sm font-medium">Treść zadania</label><textarea value={content} onChange={(e) => setContent(e.target.value)} className="w-full p-2 border rounded-md" required /></div>
-            <div><label className="block text-sm font-medium">Priorytet</label><select value={priority} onChange={(e) => setPriority(e.target.value)} className="w-full p-2 border rounded-md"><option value="normal">Normalny</option><option value="high">Wysoki</option><option value="critical">Krytyczny</option></select></div>
-            <div><label className="block text-sm font-medium">Szczegóły (opcjonalnie)</label><textarea value={details} onChange={(e) => setDetails(e.target.value)} className="w-full p-2 border rounded-md min-h-[100px]"/></div>
-             <div>
-                <h4 className="font-semibold">Podzadania (opcjonalnie)</h4>
-                <div className="space-y-2 mt-2">
-                    {subtasks.map((st, index) => (
-                        <div key={index} className="flex items-center gap-2"><span>{st.content}</span><button type="button" onClick={() => removeSubtask(index)} className="ml-auto p-1 text-red-500 hover:text-red-700"><Trash2 className="w-4 h-4"/></button></div>
-                    ))}
-                </div>
-                <div className="flex gap-2 mt-2">
-                    <input type="text" value={newSubtask} onChange={(e) => setNewSubtask(e.target.value)} placeholder="Dodaj podzadanie..." className="w-full p-2 border rounded-md"/>
-                    <button type="button" onClick={handleAddSubtask} className="px-3 py-1 bg-gray-200 rounded-md">Dodaj</button>
-                </div>
-            </div>
-            <div className="flex justify-end pt-4">
-                <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg">Dodaj zadanie</button>
-            </div>
-        </form>
-    );
-};
-
-const TaskDetails = ({ task, onSave }) => {
-    const [content, setContent] = useState(task.content || '');
-    const [details, setDetails] = useState(task.details || '');
-    const [subtasks, setSubtasks] = useState(task.subtasks || []);
-    const [newSubtask, setNewSubtask] = useState('');
-    const [priority, setPriority] = useState(task.priority || 'normal');
-
-    const handleAddSubtask = () => {
-        if (!newSubtask.trim()) return;
-        setSubtasks([...subtasks, { content: newSubtask, isDone: false, _id: `new-${Date.now()}` }]);
-        setNewSubtask('');
-    };
-
-    const toggleSubtask = (index) => {
-        const newSubtasks = [...subtasks];
-        newSubtasks[index].isDone = !newSubtasks[index].isDone;
-        setSubtasks(newSubtasks);
-    };
-
-    const removeSubtask = (index) => {
-        const newSubtasks = [...subtasks];
-        newSubtasks.splice(index, 1);
-        setSubtasks(newSubtasks);
-    };
-    
-    const handleSave = () => {
-        onSave(task._id, { content, details, subtasks, priority });
-    };
-
-    return (
-        <div className="space-y-4">
-             <div><label className="block text-sm font-medium">Tytuł zadania</label><input type="text" value={content} onChange={(e) => setContent(e.target.value)} className="w-full p-2 border rounded-md"/></div>
-             <div><label className="block text-sm font-medium">Priorytet</label><select value={priority} onChange={(e) => setPriority(e.target.value)} className="w-full p-2 border rounded-md"><option value="normal">Normalny</option><option value="high">Wysoki</option><option value="critical">Krytyczny</option></select></div>
-            <div><label className="block text-sm font-medium">Szczegóły</label><textarea value={details} onChange={(e) => setDetails(e.target.value)} className="w-full p-2 border rounded-md min-h-[100px]"/></div>
-            <div>
-                <h4 className="font-semibold">Podzadania</h4>
-                <div className="space-y-2 mt-2">
-                    {subtasks.map((st, index) => (
-                        <div key={st._id || index} className="flex items-center gap-2">
-                            <input type="checkbox" checked={st.isDone} onChange={() => toggleSubtask(index)} />
-                            <span className={st.isDone ? 'line-through text-gray-500' : ''}>{st.content}</span>
-                            <button onClick={() => removeSubtask(index)} className="ml-auto p-1 text-red-500 hover:text-red-700"><Trash2 className="w-4 h-4"/></button>
-                        </div>
-                    ))}
-                </div>
-                <div className="flex gap-2 mt-2">
-                    <input type="text" value={newSubtask} onChange={(e) => setNewSubtask(e.target.value)} placeholder="Dodaj podzadanie..." className="w-full p-2 border rounded-md"/>
-                    <button type="button" onClick={handleAddSubtask} className="px-3 py-1 bg-gray-200 rounded-md">Dodaj</button>
-                </div>
-            </div>
-            <div className="flex justify-end pt-4">
-                <button onClick={handleSave} className="px-4 py-2 bg-blue-600 text-white rounded-lg">Zapisz szczegóły</button>
-            </div>
-        </div>
-    );
-};
-
-const TaskCard = ({ task, user, onDelete, onEdit }) => {
-    const [isExpanded, setIsExpanded] = useState(false);
-
-    const priorityClass = {
-        high: 'bg-yellow-100 dark:bg-yellow-900/30',
-        critical: 'bg-red-100 dark:bg-red-900/30',
-        normal: 'bg-white dark:bg-gray-700',
-    };
-
-    return (
-        <div 
-            draggable 
-            onDragStart={(e) => e.dataTransfer.setData("taskId", task._id)}
-            onClick={() => setIsExpanded(!isExpanded)}
-            className={`${priorityClass[task.priority]} p-4 rounded-md shadow group relative cursor-pointer`}
-        >
-            <p>{task.content}</p>
-            <p className="text-xs text-gray-400 mt-1">{format(parseISO(task.date), 'd MMM, HH:mm')}</p>
-            {(user.id === task.authorId || user.role === 'administrator') && (
-                <button onClick={(e) => { e.stopPropagation(); onDelete(task._id); }} className="absolute top-1 right-1 p-1 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <Trash2 className="w-4 h-4"/>
-                </button>
-            )}
-            {isExpanded && (
-                <div className="mt-2 text-sm space-y-2">
-                    {task.details && <p className="p-2 bg-gray-50 dark:bg-gray-600 rounded-md whitespace-pre-wrap">{task.details}</p>}
-                    {task.subtasks?.length > 0 && (
-                        <ul className="list-disc list-inside">
-                            {task.subtasks.map((st, i) => (
-                                <li key={i} className={st.isDone ? 'line-through text-gray-500' : ''}>{st.content}</li>
-                            ))}
-                        </ul>
-                    )}
-                    <button onClick={(e) => {e.stopPropagation(); onEdit();}} className="text-xs font-bold text-blue-600 hover:underline">Edytuj</button>
-                </div>
-            )}
-        </div>
-    );
-};
-
-
-    const LIBRARIES = ["places"];
-    const MAP_CONTAINER_STYLE = {
-      width: '100%',
-      height: '400px',
-      borderRadius: '0.5rem'
-    };
-    const CENTER = {
-      lat: 52.237049,
-      lng: 21.017532
-    };
-    
-const DelegationsView = ({ user, onNavigate, setCurrentOrder }) => {
-    const [delegations, setDelegations] = useState([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [isFormModalOpen, setIsFormModalOpen] = useState(false);
-    const [detailsModal, setDetailsModal] = useState({ isOpen: false, delegation: null });
-    const { showNotification } = useNotification();
-    
-    // Prosty hook do sortowania
-    const useSortableData = (items, config = null) => {
-        const [sortConfig, setSortConfig] = useState(config);
-        const sortedItems = useMemo(() => {
-            let sortableItems = [...items];
-            if (sortConfig !== null) {
-                sortableItems.sort((a, b) => {
-                    if (a[sortConfig.key] < b[sortConfig.key]) {
-                        return sortConfig.direction === 'ascending' ? -1 : 1;
-                    }
-                    if (a[sortConfig.key] > b[sortConfig.key]) {
-                        return sortConfig.direction === 'ascending' ? 1 : -1;
-                    }
-                    return 0;
-                });
-            }
-            return sortableItems;
-        }, [items, sortConfig]);
-
         const requestSort = (key) => {
             let direction = 'ascending';
             if (sortConfig && sortConfig.key === key && sortConfig.direction === 'ascending') {
@@ -3339,13 +2692,6 @@ const DelegationsView = ({ user, onNavigate, setCurrentOrder }) => {
         }
     };
 
-    const getStatusClass = (status) => {
-        switch (status) {
-            case 'Zaakceptowana': return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300';
-            case 'Odrzucona': return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300';
-            case 'W trakcie': return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300';
-            case 'Zakończona': return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300';
-            default: return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300';
     const getStatusClass = (status) => {
         switch (status) {
             case 'Zaakceptowana': return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300';
@@ -3425,11 +2771,9 @@ const DelegationForm = ({ onSubmit, delegationData }) => {
     });
     const [previewModal, setPreviewModal] = useState(false);
 
-    // Efekt do inicjalizacji formularza (edycja)
     useEffect(() => {
         if (delegationData) {
             const initialClientsByDay = {};
-            // Poprawne grupowanie klientów według daty z delegacji
             (delegationData.clients || []).forEach(client => {
                 const day = client.date && isValid(parseISO(client.date)) 
                     ? format(parseISO(client.date), 'yyyy-MM-dd') 
@@ -3438,7 +2782,6 @@ const DelegationForm = ({ onSubmit, delegationData }) => {
                 if (!initialClientsByDay[day]) {
                     initialClientsByDay[day] = [];
                 }
-                // Upewniamy się, że każdy klient ma unikalne ID dla drag-n-drop
                 initialClientsByDay[day].push({ ...client, id: client.id || `client-${Math.random()}` });
             });
 
@@ -3456,7 +2799,6 @@ const DelegationForm = ({ onSubmit, delegationData }) => {
         }
     }, [delegationData]);
     
-    // Efekt do tworzenia sekcji dni przy zmianie zakresu dat
     useEffect(() => {
         const { dateFrom, dateTo } = formData;
         if (dateFrom && dateTo && isValid(new Date(dateFrom)) && isValid(new Date(dateTo)) && new Date(dateFrom) <= new Date(dateTo)) {
@@ -3467,11 +2809,9 @@ const DelegationForm = ({ onSubmit, delegationData }) => {
                 newClientsByDay[dayString] = formData.clientsByDay[dayString] || [];
             });
             setFormData(prev => ({ ...prev, clientsByDay: newClientsByDay }));
-        } else if (!delegationData) { // Czyść tylko dla nowych delegacji, jeśli daty są nieprawidłowe
         } else if (!delegationData) {
             setFormData(prev => ({ ...prev, clientsByDay: {} }));
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [formData.dateFrom, formData.dateTo, delegationData]);
 
 
@@ -3505,7 +2845,6 @@ const DelegationForm = ({ onSubmit, delegationData }) => {
             alert('Proszę wypełnić wszystkie wymagane pola.');
             return;
         }
-        // Spłaszczenie struktury przed wysłaniem, z dodaniem daty do każdego klienta
         const flatClients = Object.entries(formData.clientsByDay).flatMap(([date, clients]) => 
             clients.map(client => ({ ...client, date }))
         );
@@ -3539,7 +2878,6 @@ const DelegationForm = ({ onSubmit, delegationData }) => {
     return (
         <>
             <form onSubmit={handleSubmit} className="space-y-6 p-1">
-                {/* --- Sekcja głównych informacji o delegacji --- */}
                 <div className="space-y-4">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
@@ -3573,7 +2911,6 @@ const DelegationForm = ({ onSubmit, delegationData }) => {
                     </div>
                 </div>
 
-                {/* --- Sekcja planowania wizyt (Drag-and-Drop) --- */}
                 <DragDropContext onDragEnd={onDragEnd}>
                     <div className="space-y-6">
                         {Object.keys(formData.clientsByDay).sort().map(day => (
