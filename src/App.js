@@ -684,20 +684,20 @@ const PinnedInputBar = ({ onProductAdd, onSave, isDirty }) => {
 const OrderView = ({ currentOrder, setCurrentOrder, user }) => {
     const [order, setOrder] = useState(currentOrder);
     const [noteModal, setNoteModal] = useState({ isOpen: false, itemIndex: null, text: '' });
-    const [isFinished, setIsFinished] = useState(false);
     const listEndRef = useRef(null);
     const printRef = useRef(null);
     const importFileRef = useRef(null);
     const { showNotification } = useNotification();
     const [isDirty, setIsDirty] = useState(false);
-
+    
+    // Inicjalizacja stanu na podstawie przekazanego zamówienia
     useEffect(() => {
         const initialStatus = currentOrder.status || 'Nowe';
-        setIsFinished(initialStatus === 'Zakończono');
         setOrder({ ...currentOrder, status: initialStatus });
         setIsDirty(false);
     }, [currentOrder]);
 
+    // Ostrzeżenie przed wyjściem z niezapisanymi zmianami
     useEffect(() => {
         const handleBeforeUnload = (e) => {
             if (isDirty) {
@@ -712,9 +712,10 @@ const OrderView = ({ currentOrder, setCurrentOrder, user }) => {
     const scrollToBottom = () => listEndRef.current?.scrollIntoView({ behavior: "smooth" });
     useEffect(scrollToBottom, [order.items]);
 
+    // Funkcja do aktualizacji stanu zamówienia i oznaczania go jako "brudne"
     const updateOrderState = (newOrderData) => {
         setOrder(newOrderData);
-        setCurrentOrder(newOrderData);
+        setCurrentOrder(newOrderData); // Aktualizuj stan w komponencie nadrzędnym
         setIsDirty(true);
     };
 
@@ -727,7 +728,7 @@ const OrderView = ({ currentOrder, setCurrentOrder, user }) => {
             newItems.push({ ...product, quantity: 1, note: '' });
         }
         
-        const newStatus = isFinished ? 'Zakończono' : 'W trakcie';
+        const newStatus = order.status === 'Nowe' ? 'W trakcie' : order.status;
         updateOrderState({ ...order, items: newItems, status: newStatus });
     };
 
@@ -735,8 +736,12 @@ const OrderView = ({ currentOrder, setCurrentOrder, user }) => {
         const newItems = [...order.items];
         newItems.splice(itemIndex, 1);
         
-        const newStatus = isFinished ? 'Zakończono' : (newItems.length > 0 ? 'W trakcie' : 'Nowe');
-        updateOrderState({ ...order, items: newItems, status: newStatus });
+        const newStatus = newItems.length > 0 ? 'W trakcie' : 'Nowe';
+        updateOrderState({ ...order, items: newItems, status: order.status === 'Zakończono' ? 'Zakończono' : newStatus });
+    };
+    
+    const handleCustomerNameChange = (e) => {
+        updateOrderState({ ...order, customerName: e.target.value });
     };
 
     const handleNoteSave = () => {
@@ -746,7 +751,7 @@ const OrderView = ({ currentOrder, setCurrentOrder, user }) => {
         setNoteModal({ isOpen: false, itemIndex: null, text: '' });
     };
 
-    const totalValue = useMemo(() => (order.items || []).reduce((sum, item) => sum + item.price * item.quantity, 0), [order.items]);
+    const totalValue = useMemo(() => (order.items || []).reduce((sum, item) => sum + (item.price * item.quantity), 0), [order.items]);
 
     const handleSaveOrder = async () => {
         if (!order.customerName) {
@@ -808,7 +813,8 @@ const OrderView = ({ currentOrder, setCurrentOrder, user }) => {
         if (!file) return;
         try {
             const { items, notFound } = await api.importOrderFromCsv(file);
-            updateOrderState({ ...order, items: items });
+            const newStatus = 'W trakcie';
+            updateOrderState({ ...order, items: items, status: newStatus });
             showNotification(`Zaimportowano ${items.length} pozycji.`, 'success');
             if (notFound.length > 0) {
                 showNotification(`Nie znaleziono produktów dla kodów: ${notFound.join(', ')}`, 'error');
@@ -819,16 +825,15 @@ const OrderView = ({ currentOrder, setCurrentOrder, user }) => {
         event.target.value = null;
     };
     
-    const handleFinishToggle = () => {
-        const newIsFinished = !isFinished;
-        setIsFinished(newIsFinished);
-        const newStatus = newIsFinished ? 'Zakończono' : (order.items && order.items.length > 0 ? 'W trakcie' : 'Nowe');
+    const handleFinishToggle = (e) => {
+        const isChecked = e.target.checked;
+        const newStatus = isChecked ? 'Zakończono' : (order.items && order.items.length > 0 ? 'W trakcie' : 'Nowe');
         updateOrderState({ ...order, status: newStatus });
     };
 
     return (
-        <>
-            <div className="p-4 md:p-8">
+        <div className="flex flex-col h-full">
+            <div className="p-4 md:p-8 flex-grow overflow-y-auto pb-48">
                 <div className="flex flex-wrap gap-4 justify-between items-center mb-4">
                     <h1 className="text-3xl font-bold text-gray-800 dark:text-white">{order._id ? `Edycja Zamówienia` : 'Nowe Zamówienie'}</h1>
                     <div className="flex gap-2">
@@ -841,12 +846,8 @@ const OrderView = ({ currentOrder, setCurrentOrder, user }) => {
                         </button>
                     </div>
                 </div>
-                <input type="text" value={order.customerName || ''} onChange={(e) => updateOrderState({ ...order, customerName: e.target.value })} placeholder="Wprowadź nazwę klienta" className="w-full max-w-lg p-3 mb-6 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                <input type="text" value={order.customerName || ''} onChange={handleCustomerNameChange} placeholder="Wprowadź nazwę klienta" className="w-full max-w-lg p-3 mb-6 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
                 
-                <div className="mb-6">
-                    <SearchView onProductSelect={addProductToOrder} />
-                </div>
-
                 <div ref={printRef} className="flex-grow bg-gray-50 dark:bg-gray-900 p-4 rounded-lg shadow-inner mb-4 mt-6">
                     <div className="print-header hidden p-4"><h2 className="text-2xl font-bold">Zamówienie dla: {order.customerName}</h2><p>Data: {new Date().toLocaleDateString()}</p></div>
                     <div className="overflow-x-auto">
@@ -872,18 +873,22 @@ const OrderView = ({ currentOrder, setCurrentOrder, user }) => {
                     {(!order.items || order.items.length === 0) && <p className="text-center text-gray-500 py-8">Brak pozycji na zamówieniu.</p>}
                     <div ref={listEndRef} />
                 </div>
-                <div className="flex flex-wrap justify-end items-center gap-4 mt-4">
-                    <span className="text-lg font-bold text-gray-700 dark:text-gray-300">Suma:</span>
-                    <span className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">{totalValue.toFixed(2)} PLN</span>
-                </div>
-                 <div className="flex flex-wrap justify-end items-center space-x-3 mt-4">
-                    <label className="flex items-center cursor-pointer">
-                        <input type="checkbox" checked={isFinished} onChange={handleFinishToggle} className="h-5 w-5 rounded text-indigo-600 focus:ring-indigo-500" />
-                        <span className="ml-2 text-gray-700 dark:text-gray-300">Zakończono</span>
-                    </label>
-                    <button onClick={handleSaveOrder} className="flex items-center justify-center px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"><Save className="w-5 h-5 mr-2"/> Zapisz</button>
-                    <button onClick={handleExportCsv} className="flex items-center justify-center px-5 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"><FileDown className="w-5 h-5 mr-2"/> CSV</button>
-                    <button onClick={handlePrint} className="flex items-center justify-center px-5 py-2.5 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"><Printer className="w-5 h-5 mr-2"/> Drukuj</button>
+            </div>
+
+            <div className="fixed bottom-0 left-0 lg:left-64 right-0 p-4 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 shadow-top z-20">
+                <div className="max-w-5xl mx-auto">
+                    <SearchView onProductSelect={addProductToOrder} />
+                    <div className="flex flex-wrap justify-end items-center gap-4 mt-4">
+                        <span className="text-lg font-bold text-gray-700 dark:text-gray-300">Suma:</span>
+                        <span className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">{totalValue.toFixed(2)} PLN</span>
+                        <label className="flex items-center cursor-pointer">
+                            <input type="checkbox" checked={order.status === 'Zakończono'} onChange={handleFinishToggle} className="h-5 w-5 rounded text-indigo-600 focus:ring-indigo-500" />
+                            <span className="ml-2 text-gray-700 dark:text-gray-300">Zakończono</span>
+                        </label>
+                        <button onClick={handleSaveOrder} className="flex items-center justify-center px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"><Save className="w-5 h-5 mr-2"/> Zapisz</button>
+                        <button onClick={handleExportCsv} className="flex items-center justify-center px-5 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"><FileDown className="w-5 h-5 mr-2"/> CSV</button>
+                        <button onClick={handlePrint} className="flex items-center justify-center px-5 py-2.5 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"><Printer className="w-5 h-5 mr-2"/> Drukuj</button>
+                    </div>
                 </div>
             </div>
             <Modal isOpen={noteModal.isOpen} onClose={() => setNoteModal({ isOpen: false, itemIndex: null, text: '' })} title="Dodaj notatkę do pozycji">
@@ -894,10 +899,13 @@ const OrderView = ({ currentOrder, setCurrentOrder, user }) => {
     );
 };
 
+c
+
+
 
 // --- Moduł Listy zamówień ---
 
-const OrdersListView = ({ onEdit }) => {
+onst OrdersListView = ({ onEdit }) => {
     const [orders, setOrders] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [view, setView] = useState('Zapisane');
@@ -909,7 +917,11 @@ const OrdersListView = ({ onEdit }) => {
     const fetchOrders = useCallback(async () => {
         setIsLoading(true);
         try {
-            const queryParams = { status: view, ...filters };
+            // Zmieniamy logikę pobierania: "Zapisane" obejmuje teraz wszystkie statusy oprócz "Skompletowane"
+            const queryParams = view === 'Zapisane' 
+                ? { ...filters, status: { $ne: 'Skompletowane' } } 
+                : { ...filters, status: 'Skompletowane' };
+            
             const fetchedOrders = await api.getOrders(queryParams);
             setOrders(fetchedOrders);
         } catch (error) {
@@ -965,7 +977,7 @@ const OrdersListView = ({ onEdit }) => {
                     <div className="flex items-center gap-2">
                         <button onClick={() => setShowFilters(!showFilters)} className="flex items-center px-4 py-2 bg-gray-200 dark:bg-gray-700 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600"><Filter className="w-5 h-5 mr-2"/> Filtry</button>
                         <div className="flex items-center bg-gray-200 dark:bg-gray-700 rounded-lg p-1">
-                            <button onClick={() => setView('Zapisane')} className={`px-4 py-2 text-sm font-semibold rounded-md ${view === 'Zapisane' ? 'bg-white dark:bg-gray-900 text-indigo-600' : 'text-gray-500'}`}>Zapisane</button>
+                            <button onClick={() => setView('Zapisane')} className={`px-4 py-2 text-sm font-semibold rounded-md ${view === 'Zapisane' ? 'bg-white dark:bg-gray-900 text-indigo-600' : 'text-gray-500'}`}>Bieżące</button>
                             <button onClick={() => setView('Skompletowane')} className={`px-4 py-2 text-sm font-semibold rounded-md ${view === 'Skompletowane' ? 'bg-white dark:bg-gray-900 text-indigo-600' : 'text-gray-500'}`}>Skompletowane</button>
                         </div>
                     </div>
