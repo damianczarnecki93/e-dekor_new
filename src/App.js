@@ -1743,6 +1743,7 @@ const AdminUsersView = ({ user }) => {
         { id: 'inventory', label: 'Inwentaryzacja' },
         { id: 'kanban', label: 'Tablica Zadań' },
         { id: 'delegations', label: 'Delegacje' }
+		{ id: 'shortage-report', label: 'Raport braków' }
     ];
 
     const fetchUsers = useCallback(async () => {
