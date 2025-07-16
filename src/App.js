@@ -712,17 +712,9 @@ const OrderView = ({ currentOrder, setCurrentOrder, user }) => {
     const scrollToBottom = () => listEndRef.current?.scrollIntoView({ behavior: "smooth" });
     useEffect(scrollToBottom, [order.items]);
 
-    const updateOrder = (updatedOrder) => {
-        let newStatus = 'Nowe';
-        if (isFinished) {
-            newStatus = 'Zakończono';
-        } else if (updatedOrder.items && updatedOrder.items.length > 0) {
-            newStatus = 'W trakcie';
-        }
-
-        const finalOrder = { ...updatedOrder, status: newStatus };
-        setOrder(finalOrder);
-        setCurrentOrder(finalOrder);
+    const updateOrderState = (newOrderData) => {
+        setOrder(newOrderData);
+        setCurrentOrder(newOrderData);
         setIsDirty(true);
     };
 
@@ -734,19 +726,23 @@ const OrderView = ({ currentOrder, setCurrentOrder, user }) => {
         } else {
             newItems.push({ ...product, quantity: 1, note: '' });
         }
-        updateOrder({ ...order, items: newItems });
+        
+        const newStatus = isFinished ? 'Zakończono' : 'W trakcie';
+        updateOrderState({ ...order, items: newItems, status: newStatus });
     };
 
     const removeItemFromOrder = (itemIndex) => {
         const newItems = [...order.items];
         newItems.splice(itemIndex, 1);
-        updateOrder({ ...order, items: newItems });
+        
+        const newStatus = isFinished ? 'Zakończono' : (newItems.length > 0 ? 'W trakcie' : 'Nowe');
+        updateOrderState({ ...order, items: newItems, status: newStatus });
     };
 
     const handleNoteSave = () => {
         const newItems = [...order.items];
         newItems[noteModal.itemIndex].note = noteModal.text;
-        updateOrder({ ...order, items: newItems });
+        updateOrderState({ ...order, items: newItems });
         setNoteModal({ isOpen: false, itemIndex: null, text: '' });
     };
 
@@ -761,7 +757,7 @@ const OrderView = ({ currentOrder, setCurrentOrder, user }) => {
             const orderToSave = { ...order, author: user.username };
             const { message, order: savedOrder } = await api.saveOrder(orderToSave);
             showNotification(message, 'success');
-            setCurrentOrder(savedOrder); // Ustawienie aktualnego zamówienia na to zwrócone z API
+            setCurrentOrder(savedOrder);
             setIsDirty(false);
         } catch (error) {
             showNotification(error.message, 'error');
@@ -812,7 +808,7 @@ const OrderView = ({ currentOrder, setCurrentOrder, user }) => {
         if (!file) return;
         try {
             const { items, notFound } = await api.importOrderFromCsv(file);
-            updateOrder({ ...order, items: items });
+            updateOrderState({ ...order, items: items });
             showNotification(`Zaimportowano ${items.length} pozycji.`, 'success');
             if (notFound.length > 0) {
                 showNotification(`Nie znaleziono produktów dla kodów: ${notFound.join(', ')}`, 'error');
@@ -827,7 +823,7 @@ const OrderView = ({ currentOrder, setCurrentOrder, user }) => {
         const newIsFinished = !isFinished;
         setIsFinished(newIsFinished);
         const newStatus = newIsFinished ? 'Zakończono' : (order.items && order.items.length > 0 ? 'W trakcie' : 'Nowe');
-        updateOrder({ ...order, status: newStatus });
+        updateOrderState({ ...order, status: newStatus });
     };
 
     return (
@@ -845,7 +841,7 @@ const OrderView = ({ currentOrder, setCurrentOrder, user }) => {
                         </button>
                     </div>
                 </div>
-                <input type="text" value={order.customerName || ''} onChange={(e) => updateOrder({ ...order, customerName: e.target.value })} placeholder="Wprowadź nazwę klienta" className="w-full max-w-lg p-3 mb-6 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                <input type="text" value={order.customerName || ''} onChange={(e) => updateOrderState({ ...order, customerName: e.target.value })} placeholder="Wprowadź nazwę klienta" className="w-full max-w-lg p-3 mb-6 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
                 
                 <div className="mb-6">
                     <SearchView onProductSelect={addProductToOrder} />
@@ -897,6 +893,7 @@ const OrderView = ({ currentOrder, setCurrentOrder, user }) => {
         </>
     );
 };
+
 
 // --- Moduł Listy zamówień ---
 
@@ -1010,6 +1007,7 @@ const OrdersListView = ({ onEdit }) => {
         </>
     );
 };
+
 
 
 // --- Moduł kompletacji ---
