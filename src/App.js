@@ -1213,15 +1213,21 @@ const PickingView = () => {
     const [suggestions, setSuggestions] = useState([]);
     const searchInputRef = useRef(null);
 
-const fetchOrders = useCallback(async () => {
+    const fetchOrders = useCallback(async () => {
         setIsLoading(true);
         try {
-            // --- POCZĄTEK POPRAWKI ---
-            // Pobieramy zamówienia z dwoma statusami
-            const savedOrders = await api.getOrders({ status: 'Zakończono' });
-            const shortageOrders = await api.getOrders({ status: 'Braki' });
-            setOrders([...shortageOrders, ...savedOrders]); // Najpierw braki, potem nowe
-            // --- KONIEC POPRAWKI ---
+            // Pobieramy zamówienia z obydwoma statusami za jednym razem
+            const ordersToPick = await api.getOrders({ status: ['Zakończono', 'Braki'] });
+            
+            // Sortujemy, aby zamówienia "Braki" były zawsze na górze listy
+            ordersToPick.sort((a, b) => {
+                if (a.status === 'Braki' && b.status !== 'Braki') return -1;
+                if (a.status !== 'Braki' && b.status === 'Braki') return 1;
+                // Sortuj po dacie malejąco jako drugi poziom
+                return new Date(b.date) - new Date(a.date);
+            });
+
+            setOrders(ordersToPick);
         } catch (error) { 
             showNotification(error.message, 'error'); 
         } finally { 
@@ -1302,29 +1308,23 @@ const fetchOrders = useCallback(async () => {
                     diff: pickedQuantity - item.originalQuantity
                 };
             })
-            .filter(item => item.diff !== 0);
+            .filter(item => item.diff !== 0 || !pickedItems.find(p => p._id === item._id));
     
         setSummaryModal({ isOpen: true, discrepancies });
     };
 
     const handleCompleteOrder = async () => {
-    try {
-        // allItems zawiera oryginalne ilości, które są potrzebne do stworzenia zamówienia na braki
-        const allOrderItems = [...pickedItems, ...toPickItems]; 
-
-        await api.processCompletion(selectedOrder._id, pickedItems, allOrderItems);
-
-        showNotification('Zamówienie zostało pomyślnie przetworzone!', 'success');
-        setSummaryModal({ isOpen: false, discrepancies: [] });
-        // Odśwież widok, aby zobaczyć zmiany
-        fetchOrders(); 
-        setSelectedOrder(null);
-        setToPickItems([]);
-        setPickedItems([]);
-    } catch (error) { 
-        showNotification(error.message, 'error'); 
-    }
-};
+        try {
+            const allOrderItems = [...pickedItems, ...toPickItems]; 
+            await api.processCompletion(selectedOrder._id, pickedItems, allOrderItems);
+            showNotification('Zamówienie zostało pomyślnie przetworzone!', 'success');
+            setSummaryModal({ isOpen: false, discrepancies: [] });
+            fetchOrders(); 
+            setSelectedOrder(null);
+            setToPickItems([]);
+            setPickedItems([]);
+        } catch (error) { showNotification(error.message, 'error'); }
+    };
 
     const exportCompletion = () => {
         const csvData = pickedItems.map(item => `${(item.barcodes && item.barcodes[0]) || ''},${item.pickedQuantity}`).join('\n');
@@ -1351,20 +1351,33 @@ const fetchOrders = useCallback(async () => {
             <div className="p-4 md:p-8">
                 <h1 className="text-3xl font-bold mb-6 text-gray-800 dark:text-white">Kompletacja Zamówień</h1>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {orders.map(order => (
-                        <div key={order._id} onClick={() => order.status === 'Zapisane' && handleSelectOrder(order)} 
-                             className={`p-4 rounded-lg shadow-md transition-all ${order.status === 'Zapisane' ? 'bg-white dark:bg-gray-800 cursor-pointer hover:shadow-lg hover:scale-105' : 'bg-green-100 dark:bg-green-900/30 cursor-not-allowed'}`}>
-                            <p className="font-bold text-lg text-indigo-600 dark:text-indigo-400">{order.customerName}</p>
-                            <p className="text-sm text-gray-500 dark:text-gray-400">Autor: {order.author}</p>
-                            <p className="text-sm text-gray-500 dark:text-gray-400">{new Date(order.date).toLocaleDateString()}</p>
-                            {order.status === 'Skompletowane' && <div className="mt-2 text-green-600 font-bold flex items-center"><CheckCircle className="w-4 h-4 mr-1"/> Zatwierdzona kompletacja</div>}
-                        </div>
-                    ))}
+                    {orders.map(order => {
+                        const isClickable = order.status === 'Zakończono' || order.status === 'Braki';
+                        const bgColor = order.status === 'Braki' 
+                            ? 'bg-yellow-50 dark:bg-yellow-900/40' 
+                            : 'bg-white dark:bg-gray-800';
+                        return (
+                            <div 
+                                key={order._id} 
+                                onClick={() => isClickable && handleSelectOrder(order)} 
+                                className={`p-4 rounded-lg shadow-md transition-all ${bgColor} ${isClickable ? 'cursor-pointer hover:shadow-lg hover:scale-105' : 'opacity-60 cursor-not-allowed'}`}
+                            >
+                                <p className="font-bold text-lg text-indigo-600 dark:text-indigo-400">{order.customerName}</p>
+                                <p className="text-sm text-gray-500 dark:text-gray-400">Autor: {order.author}</p>
+                                <p className="text-sm text-gray-500 dark:text-gray-400">{new Date(order.date).toLocaleDateString()}</p>
+                                <div className={`mt-2 text-xs font-semibold px-2 py-1 inline-block rounded-full ${order.status === 'Braki' ? 'bg-yellow-200 text-yellow-800' : 'bg-blue-100 text-blue-800'}`}>
+                                    {order.status}
+                                </div>
+                            </div>
+                        );
+                    })}
                 </div>
+                {orders.length === 0 && <p className="text-center text-gray-500 mt-8">Brak zamówień do kompletacji.</p>}
             </div>
         );
     }
     
+    // Widok wybranego zamówienia (reszta komponentu) pozostaje bez zmian
     return (
         <div className="p-4 md:p-8">
             <button onClick={() => setSelectedOrder(null)} className="mb-4 text-indigo-600 dark:text-indigo-400 hover:underline">&larr; Powrót do listy zamówień</button>
@@ -1774,23 +1787,25 @@ const AdminView = ({ user, onNavigate }) => {
                     </div>
                 </div>
                 <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md cursor-pointer hover:shadow-xl transition-shadow" onClick={() => onNavigate('admin-products')}>
-				<div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md cursor-pointer hover:shadow-xl transition-shadow" onClick={() => onNavigate('admin-email')}>
-    <div className="flex items-center">
-        <Mail className="w-10 h-10 text-orange-500 mr-4"/>
-        <div>
-            <h2 className="text-2xl font-semibold">Ustawienia E-mail</h2>
-            <p className="text-gray-500">Zarządzaj konfiguracją wysyłki powiadomień.</p>
-        </div>
-    </div>
-</div>
-                    <div className="flex items-center">
+				<div className="flex items-center">
                         <Package className="w-10 h-10 text-green-500 mr-4"/>
                         <div>
                             <h2 className="text-2xl font-semibold">Zarządzanie Produktami</h2>
                             <p className="text-gray-500">Przeglądaj, importuj i synchronizuj bazę produktów.</p>
                         </div>
                     </div>
-                </div>
+				</div>
+				<div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md cursor-pointer hover:shadow-xl transition-shadow" onClick={() => onNavigate('admin-email')}>
+				<div className="flex items-center">
+						<Mail className="w-10 h-10 text-orange-500 mr-4"/>
+						<div>
+							<h2 className="text-2xl font-semibold">Ustawienia E-mail</h2>
+							<p className="text-gray-500">Zarządzaj konfiguracją wysyłki powiadomień.</p>
+						</div>
+					</div>
+				</div>
+                    
+                
             </div>
         </div>
     );
@@ -2723,12 +2738,10 @@ const ShortageReportView = () => {
 
             doc.autoTable({
                 startY: finalY,
-                head: [['Nazwa produktu', 'Kod produktu', 'Wymagane', 'Dostępne', 'Brak']],
+                head: [['Nazwa produktu', 'Kod produktu', 'Brak']],
                 body: order.shortages.map(item => [
                     item.name,
                     item.product_code,
-                    item.required,
-                    item.available,
                     item.shortage
                 ]),
                 styles: {
@@ -2810,8 +2823,6 @@ const ShortageReportView = () => {
                         <tr>
                             <th className="p-4">Nazwa produktu</th>
                             <th className="p-4">Kod produktu</th>
-                            <th className="p-4 text-center">Wymagane</th>
-                            <th className="p-4 text-center">Dostępne</th>
                             <th className="p-4 text-center font-bold">Brak</th>
                         </tr>
                     </thead>
@@ -2820,15 +2831,13 @@ const ShortageReportView = () => {
                             <React.Fragment key={order._id}>
                                 <tr className="bg-gray-100 dark:bg-gray-700">
                                     <td colSpan="5" className="p-3 font-bold text-indigo-600 dark:text-indigo-400">
-                                        Zamówienie: {order.customerName} ({order.orderId})
+                                        Zamówienie: {order.customerName}
                                     </td>
                                 </tr>
                                 {order.shortages.map(item => (
                                     <tr key={item._id}>
                                         <td className="p-4 pl-8 font-medium">{item.name}</td>
                                         <td className="p-4 pl-8">{item.product_code}</td>
-                                        <td className="p-4 text-center">{item.required}</td>
-                                        <td className="p-4 text-center">{item.available}</td>
                                         <td className="p-4 text-center font-bold text-red-600">{item.shortage}</td>
                                     </tr>
                                 ))}

@@ -924,8 +924,7 @@ app.get('/api/orders', authMiddleware, async (req, res) => {
     try {
         const { status, customer, author, dateFrom, dateTo } = req.query;
         let query = {};
-        if (status) {
-            // Sprawdzamy, czy status jest tablicą i używamy operatora $in
+		if (status && status.length > 0) {
             if (Array.isArray(status)) {
                 query.status = { $in: status };
             } else {
