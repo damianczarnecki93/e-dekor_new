@@ -998,10 +998,13 @@ const handlePrint = () => {
 
 // --- Moduł Listy zamówień ---
 
+// Plik App.js
+// ZASTĄP CAŁY KOMPONENT OrdersListView TYM KODEM:
+
 const OrdersListView = ({ onEdit }) => {
     const [orders, setOrders] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [view, setView] = useState('Zapisane');
+    const [view, setView] = useState(''); // Domyślnie pokazuj 'Wszystkie'
     const [modalState, setModalState] = useState({ isOpen: false, orderId: null, type: '' });
     const { showNotification } = useNotification();
     const [filters, setFilters] = useState({ customer: '', author: '', dateFrom: '', dateTo: '' });
@@ -1074,6 +1077,8 @@ const OrdersListView = ({ onEdit }) => {
     };
     
     return (
+        // Używamy fragmentu (<>...</>), aby opakować wszystkie elementy zwracane przez komponent.
+        // Jest to wymagane przez składnię JSX, gdy zwracamy więcej niż jeden element na najwyższym poziomie.
         <>
             <div className="p-4 md:p-8">
                 <div className="flex flex-wrap gap-2 justify-between items-center mb-4">
@@ -1082,13 +1087,13 @@ const OrdersListView = ({ onEdit }) => {
                         <input type="file" ref={importMultipleRef} onChange={handleMultipleFileImport} className="hidden" accept=".csv" multiple />
                         <button onClick={() => importMultipleRef.current.click()} className="flex items-center p-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600"><FileUp className="w-5 h-5"/><span className="hidden sm:inline ml-2">Importuj</span></button>
                         <button onClick={() => setShowFilters(!showFilters)} className="flex items-center p-2 bg-gray-200 dark:bg-gray-700 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600"><Filter className="w-5 h-5"/><span className="hidden sm:inline ml-2">Filtry</span></button>
-<button onClick={() => setView('')} className={`px-3 py-1 text-sm font-semibold rounded-md ${view === '' ? 'bg-white dark:bg-gray-900 text-indigo-600' : 'text-gray-500'}`}>Wszystkie</button>
-    
-    <button onClick={() => setView('Zapisane')} className={`px-3 py-1 text-sm font-semibold rounded-md ${view === 'Zapisane' ? 'bg-white dark:bg-gray-900 text-indigo-600' : 'text-gray-500'}`}>W trakcie</button>
-    <button onClick={() => setView('Skompletowane')} className={`px-3 py-1 text-sm font-semibold rounded-md ${view === 'Skompletowane' ? 'bg-white dark:bg-gray-900 text-indigo-600' : 'text-gray-500'}`}>Skompletowane</button>
-    <button onClick={() => setView('Braki')} className={`px-3 py-1 text-sm font-semibold rounded-md ${view === 'Braki' ? 'bg-white dark:bg-gray-900 text-indigo-600' : 'text-gray-500'}`}>Braki</button>
-    <button onClick={() => setView('Zakończono')} className={`px-3 py-1 text-sm font-semibold rounded-md ${view === 'Zakończono' ? 'bg-white dark:bg-gray-900 text-indigo-600' : 'text-gray-500'}`}>Zakończone</button>
-</div>
+                        <div className="flex items-center bg-gray-200 dark:bg-gray-700 rounded-lg p-1 flex-wrap">
+                            <button onClick={() => setView('')} className={`px-3 py-1 text-sm font-semibold rounded-md ${view === '' ? 'bg-white dark:bg-gray-900 text-indigo-600' : 'text-gray-500'}`}>Wszystkie</button>
+                            <button onClick={() => setView('Zapisane')} className={`px-3 py-1 text-sm font-semibold rounded-md ${view === 'Zapisane' ? 'bg-white dark:bg-gray-900 text-indigo-600' : 'text-gray-500'}`}>Zapisane</button>
+                             <button onClick={() => setView('Braki')} className={`px-3 py-1 text-sm font-semibold rounded-md ${view === 'Braki' ? 'bg-white dark:bg-gray-900 text-indigo-600' : 'text-gray-500'}`}>Braki</button>
+                            <button onClick={() => setView('Skompletowane')} className={`px-3 py-1 text-sm font-semibold rounded-md ${view === 'Skompletowane' ? 'bg-white dark:bg-gray-900 text-indigo-600' : 'text-gray-500'}`}>Skompletowane</button>
+                            <button onClick={() => setView('Zakończono')} className={`px-3 py-1 text-sm font-semibold rounded-md ${view === 'Zakończono' ? 'bg-white dark:bg-gray-900 text-indigo-600' : 'text-gray-500'}`}>Zakończone</button>
+                        </div>
                     </div>
                 </div>
                 {showFilters && (
@@ -1106,22 +1111,12 @@ const OrdersListView = ({ onEdit }) => {
                     <table className="w-full text-left text-sm">
                         <thead className="bg-gray-50 dark:bg-gray-700">
                             <tr>
-                                <th className="p-2 cursor-pointer" onClick={() => requestSort('customerName')}>
-                                    <div className="flex items-center">Klient {getSortIcon('customerName')}</div>
-                                </th>
-                                <th className="hidden md:table-cell p-2 cursor-pointer" onClick={() => requestSort('author')}>
-                                    <div className="flex items-center">Autor {getSortIcon('author')}</div>
-                                </th>
-                                <th className="hidden sm:table-cell p-2 cursor-pointer" onClick={() => requestSort('date')}>
-                                    <div className="flex items-center">Data {getSortIcon('date')}</div>
-                                </th>
-                                <th className="p-2 text-right cursor-pointer" onClick={() => requestSort('total')}>
-                                    <div className="flex items-center justify-end">Wartość {getSortIcon('total')}</div>
-                                </th>
-                                {/* --- POCZĄTEK POPRAWKI 1 --- */}
+                                <th className="p-2 cursor-pointer" onClick={() => requestSort('customerName')}><div className="flex items-center">Klient {getSortIcon('customerName')}</div></th>
+                                <th className="hidden md:table-cell p-2 cursor-pointer" onClick={() => requestSort('author')}><div className="flex items-center">Autor {getSortIcon('author')}</div></th>
+                                <th className="hidden sm:table-cell p-2 cursor-pointer" onClick={() => requestSort('date')}><div className="flex items-center">Data {getSortIcon('date')}</div></th>
+                                <th className="p-2 text-right cursor-pointer" onClick={() => requestSort('total')}><div className="flex items-center justify-end">Wartość {getSortIcon('total')}</div></th>
                                 <th className="p-2 text-center">Status</th>
                                 <th className="p-2 text-center">Akcje</th>
-                                {/* --- KONIEC POPRAWKI 1 --- */}
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
@@ -1131,20 +1126,18 @@ const OrdersListView = ({ onEdit }) => {
                                     <td className="hidden md:table-cell p-2">{order.author}</td>
                                     <td className="hidden sm:table-cell p-2">{new Date(order.date).toLocaleDateString()}</td>
                                     <td className="p-2 text-right font-semibold">{(order.total || 0).toFixed(2)}</td>
-                                    {/* --- POCZĄTEK POPRAWKI 2 --- */}
                                     <td className="p-2 text-center">
                                         <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
                                             {
                                                 'Zapisane': 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300',
                                                 'Skompletowane': 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
-                                                'Braki': 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-red-300',
+                                                'Braki': 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
                                                 'Zakończono': 'bg-gray-200 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
                                             }[order.status] || 'bg-gray-100'
                                         }`}>
                                             {order.status}
                                         </span>
                                     </td>
-                                    {/* --- KONIEC POPRAWKI 2 --- */}
                                     <td className="p-2 text-center whitespace-nowrap">
                                         <Tooltip text="Edytuj/Pokaż"><button onClick={() => onEdit(order._id)} className="p-2 text-blue-500 hover:text-blue-700"><Edit className="w-5 h-5"/></button></Tooltip>
                                         {view === 'Skompletowane' && <Tooltip text="Cofnij do kompletacji"><button onClick={() => setModalState({ isOpen: true, orderId: order._id, type: 'revert' })} className="p-2 text-orange-500 hover:text-orange-700"><RotateCcw className="w-5 h-5"/></button></Tooltip>}
