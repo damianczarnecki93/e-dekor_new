@@ -1082,10 +1082,13 @@ const OrdersListView = ({ onEdit }) => {
                         <input type="file" ref={importMultipleRef} onChange={handleMultipleFileImport} className="hidden" accept=".csv" multiple />
                         <button onClick={() => importMultipleRef.current.click()} className="flex items-center p-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600"><FileUp className="w-5 h-5"/><span className="hidden sm:inline ml-2">Importuj</span></button>
                         <button onClick={() => setShowFilters(!showFilters)} className="flex items-center p-2 bg-gray-200 dark:bg-gray-700 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600"><Filter className="w-5 h-5"/><span className="hidden sm:inline ml-2">Filtry</span></button>
-                        <div className="flex items-center bg-gray-200 dark:bg-gray-700 rounded-lg p-1">
-                            <button onClick={() => setView('Zapisane')} className={`px-3 py-1 text-sm font-semibold rounded-md ${view === 'Zapisane' ? 'bg-white dark:bg-gray-900 text-indigo-600' : 'text-gray-500'}`}>Zapisane</button>
-                            <button onClick={() => setView('Skompletowane')} className={`px-3 py-1 text-sm font-semibold rounded-md ${view === 'Skompletowane' ? 'bg-white dark:bg-gray-900 text-indigo-600' : 'text-gray-500'}`}>Skompletowane</button>
-                        </div>
+<button onClick={() => setView('')} className={`px-3 py-1 text-sm font-semibold rounded-md ${view === '' ? 'bg-white dark:bg-gray-900 text-indigo-600' : 'text-gray-500'}`}>Wszystkie</button>
+    
+    <button onClick={() => setView('Zapisane')} className={`px-3 py-1 text-sm font-semibold rounded-md ${view === 'Zapisane' ? 'bg-white dark:bg-gray-900 text-indigo-600' : 'text-gray-500'}`}>Zapisane</button>
+    <button onClick={() => setView('Skompletowane')} className={`px-3 py-1 text-sm font-semibold rounded-md ${view === 'Skompletowane' ? 'bg-white dark:bg-gray-900 text-indigo-600' : 'text-gray-500'}`}>Skompletowane</button>
+    <button onClick={() => setView('Braki')} className={`px-3 py-1 text-sm font-semibold rounded-md ${view === 'Braki' ? 'bg-white dark:bg-gray-900 text-indigo-600' : 'text-gray-500'}`}>Braki</button>
+    <button onClick={() => setView('Zakończono')} className={`px-3 py-1 text-sm font-semibold rounded-md ${view === 'Zakończono' ? 'bg-white dark:bg-gray-900 text-indigo-600' : 'text-gray-500'}`}>Zakończone</button>
+</div>
                     </div>
                 </div>
                 {showFilters && (
