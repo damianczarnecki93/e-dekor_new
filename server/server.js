@@ -17,7 +17,7 @@ const app = express();
 const corsOptions = {
   origin: '*', // Pozwala na żądania z dowolnego źródła
   methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
-  credentials: true,
+  preflightContinue: false,
   optionsSuccessStatus: 204
 };
 app.use(cors(corsOptions));
