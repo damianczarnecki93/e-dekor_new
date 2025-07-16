@@ -921,24 +921,29 @@ const handlePrint = () => {
                         </button>
                     </div>
                 </div>
-                <input type="text" 
-				value={order.customerName || ''} 
-				onChange={(e) => updateOrder({ customerName: e.target.value })} placeholder="Wprowadź nazwę klienta" className="w-full max-w-lg p-3 mb-6 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-                {order._id && ( // Pokaż tylko dla zapisanych zamówień
-        <label className="flex items-center gap-2 cursor-pointer p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
-            <input 
-                type="checkbox"
-                className="h-5 w-5 rounded text-indigo-600 focus:ring-indigo-500"
-                checked={order.status === 'Zakończono'}
-                onChange={(e) => {
-                    const newStatus = e.target.checked ? 'Zakończono' : 'Skompletowane'; // Po odznaczeniu wraca do 'Skompletowane'
-                    handleStatusChange(newStatus);
-                }}
-            />
-            <span className="font-medium">Oznacz jako zakończone</span>
-        </label>
-    )}
-</div>
+					<div className="flex flex-wrap items-center gap-4 mb-6">
+                    <input 
+                        type="text" 
+                        value={order.customerName || ''} 
+                        onChange={(e) => updateOrder({ customerName: e.target.value })} 
+                        placeholder="Wprowadź nazwę klienta" 
+                        className="w-full max-w-lg p-3 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                    {order._id && (
+                        <label className="flex items-center gap-2 cursor-pointer p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
+                            <input 
+                                type="checkbox"
+                                className="h-5 w-5 rounded text-indigo-600 focus:ring-indigo-500"
+                                checked={order.status === 'Zakończono'}
+                                onChange={(e) => {
+                                    const newStatus = e.target.checked ? 'Zakończono' : 'Skompletowane';
+                                    handleStatusChange(newStatus);
+                                }}
+                            />
+                            <span className="font-medium">Oznacz jako zakończone</span>
+                        </label>
+                    )}
+                </div>
                 <div ref={printRef} className="flex-grow bg-gray-50 dark:bg-gray-900 p-2 sm:p-4 rounded-lg shadow-inner mt-6">
                     <div className="print-header hidden p-4"><h2 className="text-2xl font-bold">Zamówienie dla: {order.customerName}</h2><p>Data: {new Date().toLocaleDateString()}</p></div>
                     <div className="overflow-x-auto">
@@ -981,7 +986,7 @@ const handlePrint = () => {
                 </div>
             </div>
             
-            <PinnedInputBar onProductAdd={addProductToOrder} onSave={handleSaveOrder} isDirty={order.isDirty} </>
+            <PinnedInputBar onProductAdd={addProductToOrder} onSave={handleSaveOrder} isDirty={order.isDirty} />
 
             <Modal isOpen={noteModal.isOpen} onClose={() => setNoteModal({ isOpen: false, itemIndex: null, text: '' })} title="Dodaj notatkę do pozycji">
                 <textarea value={noteModal.text} onChange={(e) => setNoteModal({...noteModal, text: e.target.value})} className="w-full p-2 border rounded-md min-h-[100px] bg-white dark:bg-gray-700"></textarea>
