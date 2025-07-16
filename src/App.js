@@ -689,13 +689,15 @@ const OrderView = ({ currentOrder, setCurrentOrder, user }) => {
     const importFileRef = useRef(null);
     const { showNotification } = useNotification();
     const [isDirty, setIsDirty] = useState(false);
-
-    useEffect(() => { 
+    
+    // Inicjalizacja stanu na podstawie przekazanego zamówienia
+    useEffect(() => {
         const initialStatus = currentOrder.status || 'Nowe';
         setOrder({ ...currentOrder, status: initialStatus });
-        setIsDirty(false); 
+        setIsDirty(false);
     }, [currentOrder]);
-    
+
+    // Ostrzeżenie przed wyjściem z niezapisanymi zmianami
     useEffect(() => {
         const handleBeforeUnload = (e) => {
             if (isDirty) {
@@ -710,9 +712,10 @@ const OrderView = ({ currentOrder, setCurrentOrder, user }) => {
     const scrollToBottom = () => listEndRef.current?.scrollIntoView({ behavior: "smooth" });
     useEffect(scrollToBottom, [order.items]);
 
+    // Funkcja do aktualizacji stanu zamówienia i oznaczania go jako "brudne"
     const updateOrderState = (newOrderData) => {
         setOrder(newOrderData);
-        setCurrentOrder(newOrderData);
+        setCurrentOrder(newOrderData); // Aktualizuj stan w komponencie nadrzędnym
         setIsDirty(true);
     };
 
@@ -892,11 +895,9 @@ const OrderView = ({ currentOrder, setCurrentOrder, user }) => {
                 <textarea value={noteModal.text} onChange={(e) => setNoteModal({...noteModal, text: e.target.value})} className="w-full p-2 border rounded-md min-h-[100px] bg-white dark:bg-gray-700"></textarea>
                 <div className="flex justify-end gap-4 mt-4"><button onClick={() => setNoteModal({ isOpen: false, itemIndex: null, text: '' })} className="px-4 py-2 bg-gray-200 dark:bg-gray-600 rounded-lg">Anuluj</button><button onClick={handleNoteSave} className="px-4 py-2 bg-blue-600 text-white rounded-lg">Zapisz notatkę</button></div>
             </Modal>
-        </>
+        </div>
     );
 };
-
-
 
 // --- Moduł Listy zamówień ---
 
