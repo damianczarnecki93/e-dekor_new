@@ -171,6 +171,12 @@ const api = {
         if (!response.ok) throw new Error(data.message || 'Błąd importu plików');
         return data;
     },
+	testEmailConfig: async () => {
+    const response = await fetchWithAuth(`${API_BASE_URL}/api/admin/test-email`, { method: 'POST' });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || 'Błąd podczas wysyłki testowej');
+    return data;
+	},
     saveOrder: async (order) => {
         const url = order._id ? `${API_BASE_URL}/api/orders/${order._id}` : `${API_BASE_URL}/api/orders`;
         const method = order._id ? 'PUT' : 'POST';
@@ -2638,6 +2644,22 @@ const AdminEmailConfigView = () => {
     };
 
     if (isLoading) return <div className="p-8 text-center">Ładowanie...</div>;
+	
+	const [isTesting, setIsTesting] = useState(false);
+
+const handleTestEmail = async () => {
+    setIsTesting(true);
+    try {
+        // Najpierw zapiszmy konfigurację, aby mieć pewność, że testujemy aktualne dane
+        await api.saveEmailConfig(config);
+        const { message } = await api.testEmailConfig();
+        showNotification(message, 'success');
+    } catch (error) {
+        showNotification(error.message, 'error');
+    } finally {
+        setIsTesting(false);
+    }
+};
 
     return (
         <div className="p-4 md:p-8">
@@ -2667,11 +2689,17 @@ const AdminEmailConfigView = () => {
                     <input type="checkbox" name="secure" checked={config.secure} onChange={handleChange} className="h-4 w-4 rounded" />
                     <label className="ml-2 text-sm">Używaj SSL/TLS (secure)</label>
                 </div>
-                <div className="text-right">
-                    <button type="submit" className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Zapisz konfigurację</button>
-                </div>
-            </form>
-        </div>
+				<div className="flex justify-end gap-4">
+				<button 
+        type="button" 
+        onClick={handleTestEmail}
+        disabled={isTesting}
+        className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+    >
+        {isTesting ? 'Wysyłanie...' : 'Testuj wysyłkę'}
+    </button>
+    <button type="submit" className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Zapisz konfigurację</button>
+</div>
     );
 };
 

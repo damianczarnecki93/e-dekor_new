@@ -184,31 +184,42 @@ const adminMiddleware = (req, res, next) => {
 async function sendNotificationEmail(subject, htmlContent) {
     try {
         const config = await EmailConfig.findOne();
-        if (!config) {
-            console.log('Powiadomienie email nie zostało wysłane - brak konfiguracji.');
-            return;
+        if (!config || !config.host || !config.recipientEmail) {
+            console.log('Powiadomienie email pominięte - brak pełnej konfiguracji w bazie danych.');
+            return { success: false, error: 'Brak konfiguracji email.' };
         }
 
         let transporter = nodemailer.createTransport({
             host: config.host,
             port: config.port,
-            secure: config.secure,
+            secure: config.secure, // true dla portu 465, false dla innych
             auth: {
                 user: config.user,
                 pass: config.pass,
             },
+            // Dodajemy opcje TLS, aby rozwiązać częste problemy z certyfikatami
+            tls: {
+                rejectUnauthorized: false
+            }
         });
 
-        await transporter.sendMail({
+        // Weryfikacja połączenia z serwerem SMTP
+        await transporter.verify();
+
+        const info = await transporter.sendMail({
             from: `"System E-Dekor" <${config.user}>`,
             to: config.recipientEmail,
             subject: subject,
             html: htmlContent,
         });
 
-        console.log(`Wysłano e-mail z powiadomieniem: ${subject}`);
+        console.log(`Wysłano e-mail z powiadomieniem: ${subject}, Message ID: ${info.messageId}`);
+        return { success: true };
+
     } catch (error) {
-        console.error('Błąd podczas wysyłania e-maila:', error);
+        // Logujemy cały obiekt błędu, aby uzyskać więcej szczegółów
+        console.error('BŁĄD NODEMAILER:', error);
+        return { success: false, error: error.message || 'Nieznany błąd podczas wysyłania e-maila.' };
     }
 }
 
@@ -432,6 +443,19 @@ app.get('/api/admin/email-config', authMiddleware, adminMiddleware, async (req, 
         res.json(config || {});
     } catch (error) {
         res.status(500).json({ message: 'Błąd pobierania konfiguracji email.' });
+    }
+});
+
+app.post('/api/admin/test-email', authMiddleware, adminMiddleware, async (req, res) => {
+    const testSubject = 'E-mail testowy z systemu E-Dekor';
+    const testHtml = '<h1>Wiadomość testowa</h1><p>Jeśli to widzisz, konfiguracja Twojej poczty e-mail działa poprawnie.</p>';
+    
+    const result = await sendNotificationEmail(testSubject, testHtml);
+
+    if (result.success) {
+        res.json({ message: 'E-mail testowy został wysłany!' });
+    } else {
+        res.status(500).json({ message: 'Nie udało się wysłać e-maila.', error: result.error });
     }
 });
 
