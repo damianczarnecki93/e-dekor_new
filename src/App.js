@@ -1815,6 +1815,7 @@ const AdminUsersView = ({ user }) => {
         { id: 'inventory', label: 'Inwentaryzacja' },
         { id: 'kanban', label: 'Tablica Zadań' },
         { id: 'delegations', label: 'Delegacje' }
+		{ id: 'shortage-report', label: 'Raport Braków' }
     ];
 
     const fetchUsers = useCallback(async () => {
@@ -3720,15 +3721,19 @@ function App() {
             ]
         },
 		{
-        category: 'Raporty',
-        items: [
-             { id: 'shortage-report', label: 'Raport Braków', icon: ClipboardCheck, roles: ['user', 'administrator'] },
-			]
-		},
+            category: 'Raporty',
+            items: [
+                 // --- POCZĄTEK POPRAWKI ---
+                 { id: 'shortage-report', label: 'Raport Braków', icon: ClipboardCheck, roles: ['user', 'administrator'] },
+                 // --- KONIEC POPRAWKI ---
+            ]
+        },
         {
             category: 'Administracja',
             items: [
                  { id: 'admin', label: 'Panel Admina', icon: Settings, roles: ['administrator'] },
+				 
+				 
             ]
         }
     ], [handleNewOrder]);
