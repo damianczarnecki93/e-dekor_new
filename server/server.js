@@ -447,27 +447,38 @@ app.post('/api/user/manual-sales', authMiddleware, async (req, res) => {
 
 app.put('/api/orders/:id/status', authMiddleware, async (req, res) => {
     try {
-        const { status } = req.body;
-        // Walidacja, czy status jest jednym z dozwolonych
-        if (!['Zapisane', 'Skompletowane', 'Zakończono', 'Braki'].includes(status)) {
-            return res.status(400).json({ message: 'Nieprawidłowy status.' });
+        // Odbieramy status oraz opcjonalny załącznik z ciała zapytania
+        const { status, pdfAttachment } = req.body;
+
+        // Sprawdzamy, czy status jest jednym z dozwolonych
+        const allowedStatuses = ['Zapisane', 'Skompletowane', 'Zakończono', 'Braki'];
+        if (!allowedStatuses.includes(status)) {
+            return res.status(400).json({ message: 'Nieprawidłowy status zamówienia.' });
         }
-        const updatedOrder = await Order.findByIdAndUpdate(req.params.id, { status }, { new: true });
-        if (!updatedOrder) return res.status(404).json({ message: 'Nie znaleziono zamówienia.' });
-		 if (status === 'Zakończono') {
-            const emailSubject = `Zamówienie ${updatedOrder.id} zostało zakończone`;
-            const emailHtml = `
-                <h1>Status zamówienia został zmieniony na "Zakończono"</h1>
-                <p><strong>Klient:</strong> ${updatedOrder.customerName}</p>
-                <p><strong>ID Zamówienia:</strong> ${updatedOrder.id}</p>
-                <p><strong>Wartość:</strong> ${updatedOrder.total.toFixed(2)} PLN</p>
-                <p>Zamówienie zostało zakończone przez: ${req.user.username}</p>
-            `;
-            sendNotificationEmail(emailSubject, emailHtml).catch(console.error);
+
+        // Znajdujemy zamówienie, aby sprawdzić jego poprzedni status
+        const order = await Order.findById(req.params.id);
+        if (!order) {
+            return res.status(404).json({ message: 'Nie znaleziono zamówienia.' });
         }
+
+        const oldStatus = order.status; // Zapisujemy stary status
+
+        // Aktualizujemy status i zapisujemy zmiany
+        order.status = status;
+        const updatedOrder = await order.save();
+
+        // Wyślij e-mail tylko, jeśli status zmienił się NA "Zakończono" z innego statusu
+        if (status === 'Zakończono' && oldStatus !== 'Zakończono') {
+            // Wywołujemy funkcję powiadomień, przekazując jej dane zamówienia i załącznik
+            sendNotification('orderCompleted', updatedOrder, pdfAttachment);
+        }
+
+        // Zwracamy pomyślną odpowiedź do frontendu
         res.json({ message: 'Status zamówienia zaktualizowany!', order: updatedOrder });
     } catch (error) {
-        res.status(400).json({ message: 'Błąd aktualizacji statusu', error: error.message });
+        console.error('Błąd w /api/orders/:id/status:', error);
+        res.status(500).json({ message: 'Wewnętrzny błąd serwera podczas aktualizacji statusu.', error: error.message });
     }
 });
 
@@ -512,7 +523,13 @@ app.post('/api/admin/test-email', authMiddleware, adminMiddleware, async (req, r
     const testSubject = 'E-mail testowy z systemu E-Dekor';
     const testHtml = '<h1>Wiadomość testowa</h1><p>Jeśli to widzisz, konfiguracja Twojej poczty e-mail działa poprawnie.</p>';
     
-    const result = await sendNotificationEmail(testSubject, testHtml);
+    // --- POCZĄTEK POPRAWKI ---
+    // Używamy nowej, uniwersalnej funkcji sendNotification
+    const result = await sendNotification('orderCompleted', { 
+        id: 'TESTOWE', 
+        customerName: 'Klient Testowy' 
+    }); 
+    // --- KONIEC POPRAWKI ---
 
     if (result.success) {
         res.json({ message: 'E-mail testowy został wysłany!' });
@@ -1420,17 +1437,9 @@ app.post('/api/delegations', authMiddleware, async (req, res) => {
             author: req.user.username,
             authorId: req.user.userId,
         });
-        await newDelegation.save();
-		const emailSubject = `Nowa delegacja do akceptacji: ${newDelegation.destination}`;
-        const emailHtml = `
-            <h1>Nowa delegacja czeka na akceptację</h1>
-            <p><strong>Autor:</strong> ${newDelegation.author}</p>
-            <p><strong>Cel:</strong> ${newDelegation.destination}</p>
-            <p><strong>Termin:</strong> od ${new Date(newDelegation.dateFrom).toLocaleDateString()} do ${new Date(newDelegation.dateTo).toLocaleDateString()}</p>
-            <p>Proszę o weryfikację w panelu.</p>
-        `;
-        sendNotificationEmail(emailSubject, emailHtml).catch(console.error);
-        res.status(201).json(newDelegation);
+await newDelegation.save();
+sendNotification('newDelegation', newDelegation); // Powinno być sendNotification
+res.status(201).json(newDelegation);
     } catch (error) {
         res.status(500).json({ message: 'Błąd tworzenia delegacji' });
     }
