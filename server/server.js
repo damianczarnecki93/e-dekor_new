@@ -15,28 +15,39 @@ const axios = require('axios');
 
 const app = express();
 const corsOptions = {
-  origin: '*', // Pozwala na żądania z dowolnego źródła
+  origin: '*', // W produkcji warto zawęzić do domeny frontendu
   methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+  allowedHeaders: ['Content-Type', 'Authorization'], // Jawnie zezwól na potrzebne nagłówki
   credentials: true,
-  optionsSuccessStatus: 204
 };
-app.use(cors(corsOptions));
-app.options('*', cors(corsOptions)); // Umożliwia obsługę zapytań preflight (OPTIONS)
 
-app.use(express.json());
+// 2. Użycie middleware CORS
+app.use(cors(corsOptions));
+
+// 3. Jawna obsługa zapytań preflight (OPTIONS) dla wszystkich tras
+// To zapewnia, że przeglądarka otrzyma poprawne nagłówki CORS przed wysłaniem właściwego żądania.
+app.options('*', cors(corsOptions));
+
+// 4. Middleware do parsowania JSON i URL-encoded
+// Zwiększamy limit, aby obsłużyć przesyłanie PDF jako Data URI
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
+
+// --- KONIEC POPRAWKI ---
 
 // --- Konfiguracja i połączenie z bazą danych ---
 const dbUrl = process.env.DATABASE_URL;
-const jwtSecret = process.env.JWT_SECRET || 'domyslny-sekret-jwt-zmien-to-w-produkcji';
-
 if (!dbUrl) {
-    console.error('BŁĄD KRYTYCZNY: Zmienna środowiskowa DATABASE_URL nie jest ustawiona!');
-    process.exit(1);
+    console.error('BŁĄD KRYTYCZNY: Zmienna środowiskowa DATABASE_URL nie jest ustawiona! Aplikacja nie może się uruchomić.');
+    process.exit(1); // Zatrzymujemy aplikację, jeśli brakuje kluczowej konfiguracji
 }
 
 mongoose.connect(dbUrl)
     .then(() => console.log('Połączono z MongoDB Atlas!'))
-    .catch(err => console.error('Błąd połączenia z MongoDB:', err));
+    .catch(err => {
+        console.error('KRYTYCZNY BŁĄD POŁĄCZENIA Z MONGODB:', err);
+        process.exit(1); // Zatrzymujemy aplikację przy błędzie połączenia z bazą
+    });
 
 // --- Definicje schematów i modeli ---
 
