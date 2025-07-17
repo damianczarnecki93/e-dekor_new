@@ -139,17 +139,6 @@ const delegationSchema = new mongoose.Schema({
 const Delegation = mongoose.models.Delegation || mongoose.model('Delegation', delegationSchema);
 
 
-const emailConfigSchema = new mongoose.Schema({
-    host: { type: String, required: true },
-    port: { type: Number, required: true },
-    secure: { type: Boolean, default: true },
-    user: { type: String, required: true },
-    pass: { type: String, required: true },
-    // Dodajemy to pole
-    recipientEmail: { type: String, required: true }, 
-});
-const EmailConfig = mongoose.models.EmailConfig || mongoose.model('EmailConfig', emailConfigSchema);
-
 // --- Middleware ---
 const authMiddleware = (req, res, next) => {
     const authHeader = req.headers.authorization;
