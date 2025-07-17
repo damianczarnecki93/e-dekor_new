@@ -2462,148 +2462,277 @@ const NotesWidget = () => {
 
 // --- Moduł tabeli zadań ---
 
-const KanbanView = () => {
-    const [columns, setColumns] = useState({
-        'todo': {
-            name: 'Do zrobienia',
-            items: []
-        },
-        'in-progress': {
-            name: 'W trakcie',
-            items: []
-        },
-        'done': {
-            name: 'Gotowe',
-            items: []
-        }
+const TaskModal = ({ isOpen, onClose, onSave, task, users, currentUser }) => {
+    const [formData, setFormData] = useState({
+        title: '', content: '', subtasks: [], priority: 'Normalny', deadline: '', assignedToId: ''
     });
-    const [newTaskContent, setNewTaskContent] = useState('');
-    const [newTaskPriority, setNewTaskPriority] = useState('Niski');
+    const [newSubtask, setNewSubtask] = useState('');
 
-    const onDragEnd = (result) => {
-        if (!result.destination) return;
-        const { source, destination } = result;
-
-        if (source.droppableId === destination.droppableId) {
-            const column = columns[source.droppableId];
-            const copiedItems = [...column.items];
-            const [removed] = copiedItems.splice(source.index, 1);
-            copiedItems.splice(destination.index, 0, removed);
-            setColumns({
-                ...columns,
-                [source.droppableId]: {
-                    ...column,
-                    items: copiedItems
-                }
+    useEffect(() => {
+        if (task) {
+            setFormData({
+                title: task.title || '',
+                content: task.content || '',
+                subtasks: task.subtasks || [],
+                priority: task.priority || 'Normalny',
+                deadline: task.deadline ? format(parseISO(task.deadline), "yyyy-MM-dd'T'HH:mm") : '',
+                assignedToId: task.assignedToId?._id || task.assignedToId || ''
             });
         } else {
-            const sourceColumn = columns[source.droppableId];
-            const destColumn = columns[destination.droppableId];
-            const sourceItems = [...sourceColumn.items];
-            const destItems = [...destColumn.items];
-            const [removed] = sourceItems.splice(source.index, 1);
-            destItems.splice(destination.index, 0, removed);
-            setColumns({
-                ...columns,
-                [source.droppableId]: {
-                    ...sourceColumn,
-                    items: sourceItems
-                },
-                [destination.droppableId]: {
-                    ...destColumn,
-                    items: destItems
-                }
+            setFormData({
+                title: '', content: '', subtasks: [], priority: 'Normalny', deadline: '', assignedToId: currentUser.id
             });
         }
+    }, [task, isOpen, currentUser.id]);
+
+    const handleChange = e => setFormData({ ...formData, [e.target.name]: e.target.value });
+
+    const handleAddSubtask = () => {
+        if (newSubtask.trim()) {
+            setFormData({ ...formData, subtasks: [...formData.subtasks, { content: newSubtask, isDone: false }] });
+            setNewSubtask('');
+        }
+    };
+    
+    const handleRemoveSubtask = index => {
+        const newSubtasks = formData.subtasks.filter((_, i) => i !== index);
+        setFormData({ ...formData, subtasks: newSubtasks });
     };
 
-    const handleAddTask = () => {
-        if (!newTaskContent) return;
-        const newTask = {
-            id: `task-${Date.now()}`,
-            content: newTaskContent,
-            priority: newTaskPriority
-        };
-        const todoColumn = columns['todo'];
-        const updatedItems = [...todoColumn.items, newTask];
-        setColumns({
-            ...columns,
-            'todo': {
-                ...todoColumn,
-                items: updatedItems
+    const handleSubmit = e => {
+        e.preventDefault();
+        onSave({ ...formData, _id: task?._id });
+        onClose();
+    };
+
+    return (
+        <Modal isOpen={isOpen} onClose={onClose} title={task ? 'Edytuj zadanie' : 'Nowe zadanie'} maxWidth="2xl">
+            <form onSubmit={handleSubmit} className="space-y-4">
+                <div>
+                    <label className="font-semibold">Tytuł zadania *</label>
+                    <input type="text" name="title" value={formData.title} onChange={handleChange} className="w-full p-2 border rounded-md" required />
+                </div>
+                 <div>
+                    <label className="font-semibold">Treść (opcjonalnie)</label>
+                    <textarea name="content" value={formData.content} onChange={handleChange} className="w-full p-2 border rounded-md min-h-[100px]"/>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label className="font-semibold">Priorytet</label>
+                        <select name="priority" value={formData.priority} onChange={handleChange} className="w-full p-2 border rounded-md">
+                            <option>Niski</option>
+                            <option>Normalny</option>
+                            <option>Wysoki</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label className="font-semibold">Deadline (opcjonalnie)</label>
+                        <input type="datetime-local" name="deadline" value={formData.deadline} onChange={handleChange} className="w-full p-2 border rounded-md" />
+                    </div>
+                </div>
+                 {currentUser.role === 'administrator' && (
+                    <div>
+                        <label className="font-semibold">Przypisz do</label>
+                        <select name="assignedToId" value={formData.assignedToId} onChange={handleChange} className="w-full p-2 border rounded-md">
+                            {users.map(u => <option key={u._id} value={u._id}>{u.username}</option>)}
+                        </select>
+                    </div>
+                )}
+                <div>
+                    <label className="font-semibold">Podpunkty</label>
+                    {formData.subtasks.map((st, i) => (
+                        <div key={i} className="flex items-center gap-2 mt-1">
+                            <span className="flex-grow p-2 bg-gray-100 dark:bg-gray-700 rounded-md">{st.content}</span>
+                            <button type="button" onClick={() => handleRemoveSubtask(i)} className="text-red-500"><Trash2 size={16}/></button>
+                        </div>
+                    ))}
+                    <div className="flex gap-2 mt-2">
+                        <input type="text" value={newSubtask} onChange={e => setNewSubtask(e.target.value)} placeholder="Dodaj nowy podpunkt..." className="w-full p-2 border rounded-md" />
+                        <button type="button" onClick={handleAddSubtask} className="px-3 bg-gray-200 dark:bg-gray-600 rounded-md">Dodaj</button>
+                    </div>
+                </div>
+                <div className="flex justify-end gap-4 pt-4">
+                    <button type="button" onClick={onClose} className="px-4 py-2 bg-gray-300 dark:bg-gray-600 rounded-lg">Anuluj</button>
+                    <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg">Zapisz zadanie</button>
+                </div>
+            </form>
+        </Modal>
+    );
+};
+
+const TaskCard = ({ task, onEdit }) => {
+    const isOverdue = task.deadline && new Date(task.deadline) < new Date();
+    const priorityClass = {
+        'Wysoki': 'border-red-500',
+        'Normalny': 'border-yellow-500',
+        'Niski': 'border-green-500',
+    };
+    
+    return (
+        <div onClick={onEdit} className={`p-3 mb-3 rounded-lg shadow-md bg-white dark:bg-gray-800 border-l-4 ${isOverdue ? 'border-purple-600' : priorityClass[task.priority]} cursor-pointer`}>
+            <p className="font-semibold">{task.title}</p>
+            {task.deadline && (
+                <p className={`text-xs mt-1 ${isOverdue ? 'text-purple-600 font-bold' : 'text-gray-400'}`}>
+                    Termin: {format(parseISO(task.deadline), 'dd.MM.yyyy HH:mm')}
+                </p>
+            )}
+            <p className="text-xs text-gray-400 mt-1">Autor: {task.authorId?.username}</p>
+        </div>
+    );
+};
+
+const KanbanColumn = ({ status, column, tasks, onEditTask }) => (
+    <div className="bg-gray-100 dark:bg-gray-900 rounded-lg p-4">
+        <h2 className="text-lg font-bold mb-4 text-center">{column.name} ({tasks.length})</h2>
+        <Droppable droppableId={status}>
+            {(provided, snapshot) => (
+                <div
+                    {...provided.droppableProps}
+                    ref={provided.innerRef}
+                    className={`min-h-[400px] p-2 rounded-md transition-colors ${snapshot.isDraggingOver ? 'bg-blue-50 dark:bg-blue-900/30' : ''}`}
+                >
+                    {tasks.map((task, index) => (
+                        <Draggable key={task._id} draggableId={task._id} index={index}>
+                            {(provided) => (
+                                <div
+                                    ref={provided.innerRef}
+                                    {...provided.draggableProps}
+                                    {...provided.dragHandleProps}
+                                >
+                                    <TaskCard task={task} onEdit={() => onEditTask(task)} />
+                                </div>
+                            )}
+                        </Draggable>
+                    ))}
+                    {provided.placeholder}
+                </div>
+            )}
+        </Droppable>
+    </div>
+);
+
+
+const KanbanView = ({ user }) => {
+    const [tasks, setTasks] = useState([]);
+    const [users, setUsers] = useState([]);
+    const [selectedUserId, setSelectedUserId] = useState(user.id);
+    const [isLoading, setIsLoading] = useState(true);
+    const [modalState, setModalState] = useState({ isOpen: false, task: null });
+    const { showNotification } = useNotification();
+
+    const fetchUsers = useCallback(async () => {
+        if (user.role === 'administrator') {
+            try {
+                const userList = await api.getUsersList();
+                setUsers(userList);
+            } catch (error) {
+                showNotification(error.message, 'error');
             }
-        });
-        setNewTaskContent('');
-        setNewTaskPriority('Niski');
-    };
+        }
+    }, [user.role, showNotification]);
+    
+    const fetchTasks = useCallback(async () => {
+        setIsLoading(true);
+        try {
+            const userIdToFetch = user.role === 'administrator' ? (selectedUserId === 'all' ? '' : selectedUserId) : user.id;
+            const data = await api.getKanbanTasks(userIdToFetch);
+            setTasks(data);
+        } catch (error) {
+            showNotification(error.message, 'error');
+        } finally {
+            setIsLoading(false);
+        }
+    }, [user.role, user.id, selectedUserId, showNotification]);
 
-    const getPriorityClass = (priority) => {
-        switch (priority) {
-            case 'Wysoki': return 'border-l-4 border-red-500';
-            case 'Średni': return 'border-l-4 border-yellow-500';
-            default: return 'border-l-4 border-green-500';
+    useEffect(() => {
+        fetchUsers();
+        fetchTasks();
+    }, [fetchUsers, fetchTasks]);
+
+    const columns = useMemo(() => ({
+        todo: { name: 'Do zrobienia', items: tasks.filter(t => t.status === 'todo') },
+        inprogress: { name: 'W trakcie', items: tasks.filter(t => t.status === 'inprogress') },
+        done: { name: 'Gotowe', items: tasks.filter(t => t.status === 'done') },
+    }), [tasks]);
+
+    const handleDragEnd = async (result) => {
+        if (!result.destination) return;
+        const { source, destination, draggableId } = result;
+        if (source.droppableId === destination.droppableId) return;
+
+        try {
+            const taskToUpdate = tasks.find(t => t._id === draggableId);
+            const updatedTask = { ...taskToUpdate, status: destination.droppableId };
+            
+            // Optimistic UI update
+            setTasks(prev => prev.map(t => t._id === draggableId ? updatedTask : t));
+
+            await api.updateKanbanTask(draggableId, { status: destination.droppableId });
+            showNotification('Status zadania zaktualizowany', 'success');
+        } catch (error) {
+            showNotification(error.message, 'error');
+            fetchTasks(); // Revert on error
+        }
+    };
+    
+    const handleSaveTask = async (taskData) => {
+        try {
+            if (taskData._id) { // Edycja
+                await api.updateKanbanTask(taskData._id, taskData);
+            } else { // Nowe zadanie
+                await api.addKanbanTask(taskData);
+            }
+            showNotification('Zadanie zapisane!', 'success');
+            fetchTasks();
+        } catch (error) {
+            showNotification(error.message, 'error');
         }
     };
 
     return (
         <div className="p-4 md:p-8">
-            <h1 className="text-3xl font-bold mb-6">Tablica Kanban</h1>
-            <div className="mb-6 p-4 bg-white dark:bg-gray-800 rounded-lg shadow-md">
-                <h2 className="text-xl font-semibold mb-2">Nowe zadanie</h2>
-                <div className="flex flex-col sm:flex-row gap-4">
-                    <input
-                        type="text"
-                        value={newTaskContent}
-                        onChange={(e) => setNewTaskContent(e.target.value)}
-                        placeholder="Opis zadania..."
-                        className="form-input flex-grow"
-                    />
-                    <select
-                        value={newTaskPriority}
-                        onChange={(e) => setNewTaskPriority(e.target.value)}
-                        className="form-select sm:w-48"
-                    >
-                        <option>Niski</option>
-                        <option>Średni</option>
-                        <option>Wysoki</option>
-                    </select>
-                    <button onClick={handleAddTask} className="btn btn-primary">Dodaj zadanie</button>
+            <div className="flex flex-wrap justify-between items-center mb-6 gap-4">
+                <h1 className="text-3xl font-bold">Tablica Zadań</h1>
+                <div className="flex items-center gap-4">
+                    {user.role === 'administrator' && (
+                        <select
+                            value={selectedUserId}
+                            onChange={(e) => setSelectedUserId(e.target.value)}
+                            className="p-2 border rounded-md bg-white dark:bg-gray-700"
+                        >
+                            <option value="all">Wszyscy użytkownicy</option>
+                            {users.map(u => <option key={u._id} value={u._id}>{u.username}</option>)}
+                        </select>
+                    )}
+                    <button onClick={() => setModalState({ isOpen: true, task: null })} className="px-4 py-2 bg-blue-600 text-white rounded-lg flex items-center gap-2">
+                        <PlusCircle size={20} /> Nowe zadanie
+                    </button>
                 </div>
             </div>
-            <DragDropContext onDragEnd={onDragEnd}>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    {Object.entries(columns).map(([columnId, column]) => (
-                        <div key={columnId} className="bg-gray-100 dark:bg-gray-900 rounded-lg p-4">
-                            <h2 className="text-lg font-bold mb-4 text-center">{column.name}</h2>
-                            <Droppable droppableId={columnId}>
-                                {(provided, snapshot) => (
-                                    <div
-                                        {...provided.droppableProps}
-                                        ref={provided.innerRef}
-                                        className={`min-h-[400px] p-2 rounded-md transition-colors ${snapshot.isDraggingOver ? 'bg-blue-50 dark:bg-blue-900/30' : ''}`}
-                                    >
-                                        {column.items.map((item, index) => (
-                                            <Draggable key={item.id} draggableId={item.id} index={index}>
-                                                {(provided, snapshot) => (
-                                                    <div
-                                                        ref={provided.innerRef}
-                                                        {...provided.draggableProps}
-                                                        {...provided.dragHandleProps}
-                                                        className={`p-3 mb-3 rounded-lg shadow-md bg-white dark:bg-gray-800 ${getPriorityClass(item.priority)} ${snapshot.isDragging ? 'shadow-lg' : ''}`}
-                                                    >
-                                                        {item.content}
-                                                    </div>
-                                                )}
-                                            </Draggable>
-                                        ))}
-                                        {provided.placeholder}
-                                    </div>
-                                )}
-                            </Droppable>
-                        </div>
-                    ))}
-                </div>
-            </DragDropContext>
+            {isLoading ? <div className="text-center">Ładowanie zadań...</div> : (
+                <DragDropContext onDragEnd={handleDragEnd}>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        {Object.entries(columns).map(([status, column]) => (
+                            <KanbanColumn 
+                                key={status}
+                                status={status} 
+                                column={column}
+                                tasks={column.items}
+                                onEditTask={(task) => setModalState({ isOpen: true, task })}
+                            />
+                        ))}
+                    </div>
+                </DragDropContext>
+            )}
+            
+            <TaskModal 
+                isOpen={modalState.isOpen}
+                onClose={() => setModalState({ isOpen: false, task: null })}
+                onSave={handleSaveTask}
+                task={modalState.task}
+                users={users}
+                currentUser={user}
+            />
         </div>
     );
 };
