@@ -2560,28 +2560,74 @@ const TaskModal = ({ isOpen, onClose, onSave, task, users, currentUser }) => {
     );
 };
 
-const TaskCard = ({ task, onEdit }) => {
+const TaskCard = ({ task, onEdit, onDelete, onUpdateSubtask }) => {
+    const [isExpanded, setIsExpanded] = useState(false);
+
     const isOverdue = task.deadline && new Date(task.deadline) < new Date();
     const priorityClass = {
         'Wysoki': 'border-red-500',
         'Normalny': 'border-yellow-500',
         'Niski': 'border-green-500',
     };
-    
+
+    const handleSubtaskToggle = (e, index) => {
+        e.stopPropagation(); // Zapobiega rozwijaniu/zwijaniu kafelka
+        const newSubtasks = [...task.subtasks];
+        newSubtasks[index].isDone = !newSubtasks[index].isDone;
+        onUpdateSubtask(task._id, { subtasks: newSubtasks });
+    };
+
     return (
-        <div onClick={onEdit} className={`p-3 mb-3 rounded-lg shadow-md bg-white dark:bg-gray-800 border-l-4 ${isOverdue ? 'border-purple-600' : priorityClass[task.priority]} cursor-pointer`}>
-            <p className="font-semibold">{task.title}</p>
-            {task.deadline && (
-                <p className={`text-xs mt-1 ${isOverdue ? 'text-purple-600 font-bold' : 'text-gray-400'}`}>
-                    Termin: {format(parseISO(task.deadline), 'dd.MM.yyyy HH:mm')}
-                </p>
+        <div 
+            onClick={() => setIsExpanded(!isExpanded)} 
+            className={`p-3 mb-3 rounded-lg shadow-md bg-white dark:bg-gray-800 border-l-4 ${isOverdue ? 'border-purple-600' : priorityClass[task.priority]} cursor-pointer group`}
+        >
+            <div className="flex justify-between items-start">
+                <div className="flex-grow">
+                    <p className="font-semibold">{task.title}</p>
+                    {task.deadline && (
+                        <p className={`text-xs mt-1 ${isOverdue ? 'text-purple-600 font-bold' : 'text-gray-400'}`}>
+                            Termin: {format(parseISO(task.deadline), 'dd.MM.yyyy HH:mm')}
+                        </p>
+                    )}
+                </div>
+                {/* Ikonki akcji w rogu */}
+                <div className="flex-shrink-0 flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Tooltip text="Edytuj"><button onClick={(e) => { e.stopPropagation(); onEdit(); }} className="p-1 text-gray-500 hover:text-blue-500"><Edit size={16}/></button></Tooltip>
+                    <Tooltip text="Usuń"><button onClick={(e) => { e.stopPropagation(); onDelete(); }} className="p-1 text-gray-500 hover:text-red-500"><Trash2 size={16}/></button></Tooltip>
+                </div>
+            </div>
+
+            {/* Rozwijane szczegóły */}
+            {isExpanded && (
+                <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700 space-y-2">
+                    {task.content && (
+                        <p className="text-sm text-gray-600 dark:text-gray-300 whitespace-pre-wrap">{task.content}</p>
+                    )}
+                    {task.subtasks && task.subtasks.length > 0 && (
+                        <div className="space-y-1">
+                            {task.subtasks.map((subtask, index) => (
+                                <label key={index} className="flex items-center gap-2 cursor-pointer text-sm">
+                                    <input 
+                                        type="checkbox"
+                                        checked={subtask.isDone}
+                                        onChange={(e) => handleSubtaskToggle(e, index)}
+                                        className="h-4 w-4 rounded text-indigo-600 focus:ring-indigo-500"
+                                    />
+                                    <span className={subtask.isDone ? 'line-through text-gray-400' : ''}>
+                                        {subtask.content}
+                                    </span>
+                                </label>
+                            ))}
+                        </div>
+                    )}
+                </div>
             )}
-            <p className="text-xs text-gray-400 mt-1">Autor: {task.authorId?.username}</p>
         </div>
     );
 };
 
-const KanbanColumn = ({ status, column, tasks, onEditTask }) => (
+const KanbanColumn = ({ status, column, tasks, onEditTask, onDeleteTask, onUpdateTask }) => (
     <div className="bg-gray-100 dark:bg-gray-900 rounded-lg p-4">
         <h2 className="text-lg font-bold mb-4 text-center">{column.name} ({tasks.length})</h2>
         <Droppable droppableId={status}>
@@ -2599,7 +2645,12 @@ const KanbanColumn = ({ status, column, tasks, onEditTask }) => (
                                     {...provided.draggableProps}
                                     {...provided.dragHandleProps}
                                 >
-                                    <TaskCard task={task} onEdit={() => onEditTask(task)} />
+                                    <TaskCard 
+                                        task={task} 
+                                        onEdit={() => onEditTask(task)}
+                                        onDelete={() => onDeleteTask(task._id)}
+                                        onUpdateSubtask={(taskId, subtaskData) => onUpdateTask(taskId, subtaskData)}
+                                    />
                                 </div>
                             )}
                         </Draggable>
@@ -2688,6 +2739,31 @@ const KanbanView = ({ user }) => {
             showNotification(error.message, 'error');
         }
     };
+	
+	const handleDeleteTask = async (taskId) => {
+        if (window.confirm("Czy na pewno chcesz usunąć to zadanie?")) {
+            try {
+                // Optimistic UI update
+                setTasks(prev => prev.filter(t => t._id !== taskId));
+                await api.deleteKanbanTask(taskId);
+                showNotification('Zadanie usunięte', 'success');
+            } catch (error) {
+                showNotification(error.message, 'error');
+                fetchTasks(); // Revert on error
+            }
+        }
+    };
+    
+    const handleUpdateTask = async (taskId, updateData) => {
+        try {
+            // Optimistic UI update for subtasks
+            setTasks(prev => prev.map(t => t._id === taskId ? {...t, ...updateData} : t));
+            await api.updateKanbanTask(taskId, updateData);
+        } catch (error) {
+            showNotification('Błąd aktualizacji zadania', 'error');
+            fetchTasks(); // Revert on error
+        }
+    };
 
     return (
         <div className="p-4 md:p-8">
@@ -2719,6 +2795,8 @@ const KanbanView = ({ user }) => {
                                 column={column}
                                 tasks={column.items}
                                 onEditTask={(task) => setModalState({ isOpen: true, task })}
+								onDeleteTask={handleDeleteTask}
+                                onUpdateTask={handleUpdateTask}
                             />
                         ))}
                     </div>
