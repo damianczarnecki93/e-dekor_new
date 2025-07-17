@@ -292,7 +292,7 @@ async function generateOrderPdfBuffer(order) {
         body: order.items.map(item => [
             item.name,
             item.product_code,
-			item.note
+			item.note,
             item.quantity,
             `${item.price.toFixed(2)} PLN`,
             `${(item.price * item.quantity).toFixed(2)} PLN`,
