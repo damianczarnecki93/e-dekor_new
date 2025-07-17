@@ -45,12 +45,8 @@ const userSchema = new mongoose.Schema({
     password: { type: String, required: true },
     role: { type: String, default: 'user', enum: ['user', 'administrator'] },
     status: { type: String, enum: ['oczekujący', 'zaakceptowany'], default: 'oczekujący' },
-    salesGoal: { type: Number, default: 0 },
-    manualSales: { type: Number, default: 0 },
     visibleModules: { type: [String], default: [] },
-	dashboardLayout: { type: [String], default: ['stats_products', 'stats_pending_orders', 'stats_completed_orders', 'quick_actions', 'my_tasks'] }
 });
-
 const User = mongoose.models.User || mongoose.model('User', userSchema);
 
 const productSchema = new mongoose.Schema({
@@ -59,7 +55,6 @@ const productSchema = new mongoose.Schema({
     barcodes: { type: [String], index: true },
     price: Number,
     quantity: Number,
-    availability: Boolean
 });
 const Product = mongoose.models.Product || mongoose.model('Product', productSchema);
 
@@ -69,18 +64,41 @@ const orderSchema = new mongoose.Schema({
     author: String,
     items: Array,
     total: Number,
-    status: { 
-        type: String, 
-        default: 'Zapisane', 
-        // Dodajemy nowe statusy
-        enum: ['Zapisane', 'Skompletowane', 'Zakończono', 'Braki'] 
-    },
-    date: { type: Date, default: Date.now },
-    isDirty: { type: Boolean, default: false }
-	
-});
+    status: { type: String, default: 'Zapisane', enum: ['Zapisane', 'Skompletowane', 'Zakończono', 'Braki'] },
+}, { timestamps: true });
 const Order = mongoose.models.Order || mongoose.model('Order', orderSchema);
 
+const emailConfigSchema = new mongoose.Schema({
+    host: String,
+    port: Number,
+    secure: Boolean,
+    user: String,
+    pass: String,
+    notifications: {
+        orderCompleted: { enabled: { type: Boolean, default: false }, recipients: { type: String, default: '' } },
+        newDelegation: { enabled: { type: Boolean, default: false }, recipients: { type: String, default: '' } },
+        dailyOrderSummary: { enabled: { type: Boolean, default: false }, recipients: { type: String, default: '' } },
+        dailyDelegationSummary: { enabled: { type: Boolean, default: false }, recipients: { type: String, default: '' } },
+    }
+});
+const EmailConfig = mongoose.models.EmailConfig || mongoose.model('EmailConfig', emailConfigSchema);
+
+const kanbanTaskSchema = new mongoose.Schema({
+    title: { type: String, required: true },
+    content: { type: String, default: '' },
+    status: { type: String, required: true, enum: ['todo', 'inprogress', 'done'], default: 'todo' },
+    priority: { type: String, required: true, enum: ['Niski', 'Normalny', 'Wysoki'], default: 'Normalny' },
+    deadline: { type: Date },
+    authorId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    assignedToId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    subtasks: [{
+        content: String,
+        isDone: { type: Boolean, default: false }
+    }]
+}, { timestamps: true }); // Dodajemy timestamps (createdAt, updatedAt)
+const KanbanTask = mongoose.models.KanbanTask || mongoose.model('KanbanTask', kanbanTaskSchema);
+
+// Upewnij się, że masz również te schematy, jeśli ich używasz
 const inventorySchema = new mongoose.Schema({
     name: { type: String, required: true },
     author: String,
@@ -91,40 +109,6 @@ const inventorySchema = new mongoose.Schema({
     isDirty: { type: Boolean, default: false }
 });
 const Inventory = mongoose.models.Inventory || mongoose.model('Inventory', inventorySchema);
-
-const noteSchema = new mongoose.Schema({
-    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-    content: String,
-    color: String,
-    position: { x: Number, y: Number },
-    date: { type: Date, default: Date.now }
-});
-const Note = mongoose.models.Note || mongoose.model('Note', noteSchema);
-
-const kanbanTaskSchema = new mongoose.Schema({
-    content: { type: String, required: true },
-    title: { type: String, required: true },
-    content: { type: String, default: '' },
-    status: { type: String, required: true, enum: ['todo', 'inprogress', 'done'], default: 'todo' },
-    author: String,
-    authorId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-    assignedTo: String,
-    assignedToId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-    date: { type: Date, default: Date.now },
-    isAccepted: { type: Boolean, default: false },
-    details: { type: String, default: '' },
-    priority: { type: String, required: true, enum: ['Niski', 'Normalny', 'Wysoki'], default: 'Normalny' },
-    deadline: { type: Date },
-    authorId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-    assignedToId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-    subtasks: [{
-        content: String,
-        isDone: { type: Boolean, default: false }
-    }]
-});
-}, { timestamps: true }); // Dodajemy timestamps (createdAt, updatedAt)
-
-const KanbanTask = mongoose.models.KanbanTask || mongoose.model('KanbanTask', kanbanTaskSchema);
 
 const delegationSchema = new mongoose.Schema({
     destination: { type: String, required: true },
@@ -151,8 +135,9 @@ const delegationSchema = new mongoose.Schema({
     }],
     startTime: Date,
     endTime: Date
-});
+}, { timestamps: true });
 const Delegation = mongoose.models.Delegation || mongoose.model('Delegation', delegationSchema);
+
 
 const emailConfigSchema = new mongoose.Schema({
     host: { type: String, required: true },
