@@ -1814,7 +1814,7 @@ const AdminUsersView = ({ user }) => {
         { id: 'picking', label: 'Kompletacja' },
         { id: 'inventory', label: 'Inwentaryzacja' },
         { id: 'kanban', label: 'Tablica Zadań' },
-        { id: 'delegations', label: 'Delegacje' }
+        { id: 'delegations', label: 'Delegacje' },
 		{ id: 'shortage-report', label: 'Raport Braków' }
     ];
 
