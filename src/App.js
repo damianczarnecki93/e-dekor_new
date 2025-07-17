@@ -2498,6 +2498,12 @@ const TaskModal = ({ isOpen, onClose, onSave, task, users, currentUser }) => {
         const newSubtasks = formData.subtasks.filter((_, i) => i !== index);
         setFormData({ ...formData, subtasks: newSubtasks });
     };
+	
+	const handleToggleSubtask = (index) => {
+        const newSubtasks = [...formData.subtasks];
+        newSubtasks[index].isDone = !newSubtasks[index].isDone;
+        setFormData({ ...formData, subtasks: newSubtasks });
+    };
 
     const handleSubmit = e => {
         e.preventDefault();
@@ -2541,8 +2547,17 @@ const TaskModal = ({ isOpen, onClose, onSave, task, users, currentUser }) => {
                 <div>
                     <label className="font-semibold">Podpunkty</label>
                     {formData.subtasks.map((st, i) => (
+                        {formData.subtasks.map((st, i) => (
                         <div key={i} className="flex items-center gap-2 mt-1">
-                            <span className="flex-grow p-2 bg-gray-100 dark:bg-gray-700 rounded-md">{st.content}</span>
+                            <input 
+                                type="checkbox"
+                                checked={st.isDone}
+                                onChange={() => handleToggleSubtask(i)}
+                                className="h-4 w-4 rounded text-indigo-600 focus:ring-indigo-500"
+                            />
+                            <span className={`flex-grow p-2 bg-gray-100 dark:bg-gray-700 rounded-md ${st.isDone ? 'line-through text-gray-500' : ''}`}>
+                                {st.content}
+                            </span>
                             <button type="button" onClick={() => handleRemoveSubtask(i)} className="text-red-500"><Trash2 size={16}/></button>
                         </div>
                     ))}
@@ -2560,18 +2575,14 @@ const TaskModal = ({ isOpen, onClose, onSave, task, users, currentUser }) => {
     );
 };
 
-const TaskCard = ({ task, onEdit, onDelete, onUpdateSubtask }) => {
-    const [isExpanded, setIsExpanded] = useState(false);
-
+const TaskCard = ({ task, isExpanded, onToggleExpand, onEdit, onDelete, onUpdateSubtask }) => {
     const isOverdue = task.deadline && new Date(task.deadline) < new Date();
     const priorityClass = {
-        'Wysoki': 'border-red-500',
-        'Normalny': 'border-yellow-500',
-        'Niski': 'border-green-500',
+        'Wysoki': 'border-red-500', 'Normalny': 'border-yellow-500', 'Niski': 'border-green-500',
     };
 
     const handleSubtaskToggle = (e, index) => {
-        e.stopPropagation(); // Zapobiega rozwijaniu/zwijaniu kafelka
+        e.stopPropagation(); // Kluczowe, aby nie zwijać/rozwijać kafelka
         const newSubtasks = [...task.subtasks];
         newSubtasks[index].isDone = !newSubtasks[index].isDone;
         onUpdateSubtask(task._id, { subtasks: newSubtasks });
@@ -2579,7 +2590,7 @@ const TaskCard = ({ task, onEdit, onDelete, onUpdateSubtask }) => {
 
     return (
         <div 
-            onClick={() => setIsExpanded(!isExpanded)} 
+            onClick={onToggleExpand} 
             className={`p-3 mb-3 rounded-lg shadow-md bg-white dark:bg-gray-800 border-l-4 ${isOverdue ? 'border-purple-600' : priorityClass[task.priority]} cursor-pointer group`}
         >
             <div className="flex justify-between items-start">
@@ -2591,20 +2602,16 @@ const TaskCard = ({ task, onEdit, onDelete, onUpdateSubtask }) => {
                         </p>
                     )}
                 </div>
-                {/* Ikonki akcji w rogu */}
                 <div className="flex-shrink-0 flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
                     <Tooltip text="Edytuj"><button onClick={(e) => { e.stopPropagation(); onEdit(); }} className="p-1 text-gray-500 hover:text-blue-500"><Edit size={16}/></button></Tooltip>
                     <Tooltip text="Usuń"><button onClick={(e) => { e.stopPropagation(); onDelete(); }} className="p-1 text-gray-500 hover:text-red-500"><Trash2 size={16}/></button></Tooltip>
                 </div>
             </div>
 
-            {/* Rozwijane szczegóły */}
             {isExpanded && (
                 <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700 space-y-2">
-                    {task.content && (
-                        <p className="text-sm text-gray-600 dark:text-gray-300 whitespace-pre-wrap">{task.content}</p>
-                    )}
-                    {task.subtasks && task.subtasks.length > 0 && (
+                    {task.content && <p className="text-sm text-gray-600 dark:text-gray-300 whitespace-pre-wrap">{task.content}</p>}
+                    {task.subtasks?.length > 0 && (
                         <div className="space-y-1">
                             {task.subtasks.map((subtask, index) => (
                                 <label key={index} className="flex items-center gap-2 cursor-pointer text-sm">
@@ -2614,9 +2621,7 @@ const TaskCard = ({ task, onEdit, onDelete, onUpdateSubtask }) => {
                                         onChange={(e) => handleSubtaskToggle(e, index)}
                                         className="h-4 w-4 rounded text-indigo-600 focus:ring-indigo-500"
                                     />
-                                    <span className={subtask.isDone ? 'line-through text-gray-400' : ''}>
-                                        {subtask.content}
-                                    </span>
+                                    <span className={subtask.isDone ? 'line-through text-gray-400' : ''}>{subtask.content}</span>
                                 </label>
                             ))}
                         </div>
@@ -2627,7 +2632,7 @@ const TaskCard = ({ task, onEdit, onDelete, onUpdateSubtask }) => {
     );
 };
 
-const KanbanColumn = ({ status, column, tasks, onEditTask, onDeleteTask, onUpdateTask }) => (
+const KanbanColumn = ({ status, column, tasks, expandedTasks, onToggleExpand, onEditTask, onDeleteTask, onUpdateTask }) => (
     <div className="bg-gray-100 dark:bg-gray-900 rounded-lg p-4">
         <h2 className="text-lg font-bold mb-4 text-center">{column.name} ({tasks.length})</h2>
         <Droppable droppableId={status}>
@@ -2647,6 +2652,8 @@ const KanbanColumn = ({ status, column, tasks, onEditTask, onDeleteTask, onUpdat
                                 >
                                     <TaskCard 
                                         task={task} 
+                                        isExpanded={expandedTasks.has(task._id)}
+                                        onToggleExpand={() => onToggleExpand(task._id)}
                                         onEdit={() => onEditTask(task)}
                                         onDelete={() => onDeleteTask(task._id)}
                                         onUpdateSubtask={(taskId, subtaskData) => onUpdateTask(taskId, subtaskData)}
@@ -2670,6 +2677,7 @@ const KanbanView = ({ user }) => {
     const [isLoading, setIsLoading] = useState(true);
     const [modalState, setModalState] = useState({ isOpen: false, task: null });
     const { showNotification } = useNotification();
+	const [expandedTasks, setExpandedTasks] = useState(new Set());
 
     const fetchUsers = useCallback(async () => {
         if (user.role === 'administrator') {
@@ -2681,6 +2689,18 @@ const KanbanView = ({ user }) => {
             }
         }
     }, [user.role, showNotification]);
+	
+	const handleToggleExpand = (taskId) => {
+        setExpandedTasks(prev => {
+            const newSet = new Set(prev);
+            if (newSet.has(taskId)) {
+                newSet.delete(taskId);
+            } else {
+                newSet.add(taskId);
+            }
+            return newSet;
+        });
+    };
     
     const fetchTasks = useCallback(async () => {
         setIsLoading(true);
@@ -2787,19 +2807,21 @@ const KanbanView = ({ user }) => {
             </div>
             {isLoading ? <div className="text-center">Ładowanie zadań...</div> : (
                 <DragDropContext onDragEnd={handleDragEnd}>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        {Object.entries(columns).map(([status, column]) => (
-                            <KanbanColumn 
-                                key={status}
-                                status={status} 
-                                column={column}
-                                tasks={column.items}
-                                onEditTask={(task) => setModalState({ isOpen: true, task })}
-								onDeleteTask={handleDeleteTask}
-                                onUpdateTask={handleUpdateTask}
-                            />
-                        ))}
-                    </div>
+<div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {Object.entries(columns).map(([status, column]) => (
+            <KanbanColumn 
+                key={status}
+                status={status} 
+                column={column}
+                tasks={column.items}
+                expandedTasks={expandedTasks}         // <-- NOWY PROP
+                onToggleExpand={handleToggleExpand} // <-- NOWY PROP
+                onEditTask={(task) => setModalState({ isOpen: true, task })}
+                onDeleteTask={handleDeleteTask}
+                onUpdateTask={handleUpdateTask}
+            />
+        ))}
+    </div>
                 </DragDropContext>
             )}
             
