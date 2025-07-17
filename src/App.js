@@ -3118,46 +3118,6 @@ const TaskDetails = ({ task, onSave }) => {
     );
 };
 
-const TaskCard = ({ task, user, onDelete, onEdit }) => {
-    const [isExpanded, setIsExpanded] = useState(false);
-
-    const priorityClass = {
-        high: 'bg-yellow-100 dark:bg-yellow-900/30',
-        critical: 'bg-red-100 dark:bg-red-900/30',
-        normal: 'bg-white dark:bg-gray-700',
-    };
-
-    return (
-        <div 
-            draggable 
-            onDragStart={(e) => e.dataTransfer.setData("taskId", task._id)}
-            onClick={() => setIsExpanded(!isExpanded)}
-            className={`${priorityClass[task.priority]} p-4 rounded-md shadow group relative cursor-pointer`}
-        >
-            <p>{task.content}</p>
-            <p className="text-xs text-gray-400 mt-1">{format(parseISO(task.date), 'd MMM, HH:mm')}</p>
-            {(user.id === task.authorId || user.role === 'administrator') && (
-                <button onClick={(e) => { e.stopPropagation(); onDelete(task._id); }} className="absolute top-1 right-1 p-1 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <Trash2 className="w-4 h-4"/>
-                </button>
-            )}
-            {isExpanded && (
-                <div className="mt-2 text-sm space-y-2">
-                    {task.details && <p className="p-2 bg-gray-50 dark:bg-gray-600 rounded-md whitespace-pre-wrap">{task.details}</p>}
-                    {task.subtasks?.length > 0 && (
-                        <ul className="list-disc list-inside">
-                            {task.subtasks.map((st, i) => (
-                                <li key={i} className={st.isDone ? 'line-through text-gray-500' : ''}>{st.content}</li>
-                            ))}
-                        </ul>
-                    )}
-                    <button onClick={(e) => {e.stopPropagation(); onEdit();}} className="text-xs font-bold text-blue-600 hover:underline">Edytuj</button>
-                </div>
-            )}
-        </div>
-    );
-};
-
 // --- Moduł delegacji ---
 
 const DelegationsView = ({ user, onNavigate, setCurrentOrder }) => {
