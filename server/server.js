@@ -1217,19 +1217,15 @@ app.delete('/api/notes/:id', authMiddleware, async (req, res) => {
 app.get('/api/kanban/tasks', authMiddleware, async (req, res) => {
     try {
         let query = {};
-        if (req.user.role === 'administrator' && req.query.userId) {
-            query = { authorId: req.query.userId };
         // Admin może filtrować zadania po użytkowniku, w przeciwnym razie widzi wszystkie
         if (req.user.role === 'administrator') {
             if (req.query.userId) {
                 query.assignedToId = req.query.userId;
             }
         } else {
-            query = { authorId: req.user.userId };
             // Zwykły użytkownik widzi tylko zadania przypisane do siebie
             query.assignedToId = req.user.userId;
         }
-        const tasks = await KanbanTask.find(query).sort({ date: -1 });
         
         const tasks = await KanbanTask.find(query)
             .populate('authorId', 'username')
@@ -1238,7 +1234,7 @@ app.get('/api/kanban/tasks', authMiddleware, async (req, res) => {
             
         res.json(tasks);
     } catch (error) {
-        res.status(500).json({ message: 'Błąd pobierania zadań' });
+        console.error('Błąd w GET /api/kanban/tasks:', error);
         res.status(500).json({ message: 'Błąd pobierania zadań', error: error.message });
     }
 });
@@ -1246,8 +1242,6 @@ app.get('/api/kanban/tasks', authMiddleware, async (req, res) => {
 // Tworzenie nowego zadania
 app.post('/api/kanban/tasks', authMiddleware, async (req, res) => {
     try {
-        const { content, details, subtasks, priority, authorId, author } = req.body;
-        
         const { title, content, priority, deadline, subtasks, assignedToId } = req.body;
 
         if (!title || !assignedToId) {
@@ -1257,31 +1251,22 @@ app.post('/api/kanban/tasks', authMiddleware, async (req, res) => {
         const newTask = new KanbanTask({
             title,
             content,
-            details: details || '',
-            subtasks: subtasks || [],
-            priority: priority || 'normal',
             priority,
             deadline: deadline ? new Date(deadline) : null,
             subtasks,
             assignedToId,
             authorId: req.user.userId,
             status: 'todo',
-            author: author,
-            authorId: authorId,
-            assignedTo: author, 
-            assignedToId: authorId,
-            isAccepted: true 
         });
 
         await newTask.save();
-        res.status(201).json(newTask);
         const populatedTask = await KanbanTask.findById(newTask._id)
             .populate('authorId', 'username')
             .populate('assignedToId', 'username');
 
         res.status(201).json(populatedTask);
     } catch (error) {
-        res.status(500).json({ message: 'Błąd tworzenia zadania' });
+        console.error('Błąd w POST /api/kanban/tasks:', error);
         res.status(500).json({ message: 'Błąd tworzenia zadania', error: error.message });
     }
 });
@@ -1289,38 +1274,27 @@ app.post('/api/kanban/tasks', authMiddleware, async (req, res) => {
 // Aktualizacja zadania (w tym statusu)
 app.put('/api/kanban/tasks/:id', authMiddleware, async (req, res) => {
     try {
-        const { content, status, details, subtasks, priority } = req.body;
         const { title, content, priority, deadline, subtasks, status, assignedToId } = req.body;
         
         const task = await KanbanTask.findById(req.params.id);
-
         if (!task) {
             return res.status(404).json({ message: 'Nie znaleziono zadania' });
         }
-        
-        if (task.authorId.toString() !== req.user.userId && req.user.role !== 'administrator') {
-            return res.status(403).json({ message: 'Brak uprawnień do edycji tego zadania' });
 
         // Tylko admin lub autor mogą edytować zadanie
         if (req.user.role !== 'administrator' && task.authorId.toString() !== req.user.userId) {
             return res.status(403).json({ message: 'Brak uprawnień do edycji tego zadania.' });
         }
 
-        if (content !== undefined) task.content = content;
-        if (status !== undefined) task.status = status;
-        if (details !== undefined) task.details = details;
-        if (subtasks !== undefined) task.subtasks = subtasks;
-        if (priority !== undefined) task.priority = priority;
         const updatedData = { title, content, priority, deadline, subtasks, status, assignedToId };
         
         const updatedTask = await KanbanTask.findByIdAndUpdate(req.params.id, updatedData, { new: true })
             .populate('authorId', 'username')
             .populate('assignedToId', 'username');
 
-        const updatedTask = await task.save();
         res.json(updatedTask);
     } catch (error) {
-        res.status(500).json({ message: 'Błąd aktualizacji zadania' });
+        console.error('Błąd w PUT /api/kanban/tasks/:id:', error);
         res.status(500).json({ message: 'Błąd aktualizacji zadania', error: error.message });
     }
 });
@@ -1329,22 +1303,21 @@ app.put('/api/kanban/tasks/:id', authMiddleware, async (req, res) => {
 app.delete('/api/kanban/tasks/:id', authMiddleware, async (req, res) => {
     try {
         const task = await KanbanTask.findById(req.params.id);
-        if (!task) return res.status(404).json({ message: 'Nie znaleziono zadania' });
+        if (!task) {
+            return res.status(404).json({ message: 'Nie znaleziono zadania' });
+        }
 
-        if (task.authorId.toString() !== req.user.userId && req.user.role !== 'administrator') {
         if (req.user.role !== 'administrator' && task.authorId.toString() !== req.user.userId) {
             return res.status(403).json({ message: 'Brak uprawnień do usunięcia zadania' });
         }
         
-        await task.deleteOne();
         await KanbanTask.findByIdAndDelete(req.params.id);
         res.json({ message: 'Zadanie usunięte' });
     } catch (error) {
-        res.status(500).json({ message: 'Błąd usuwania zadania' });
+        console.error('Błąd w DELETE /api/kanban/tasks/:id:', error);
+        res.status(500).json({ message: 'Błąd usuwania zadania', error: error.message });
     }
 });
-
-
 
 
 app.get('/api/delegations', authMiddleware, async (req, res) => {
