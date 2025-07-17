@@ -760,7 +760,7 @@ app.get('/api/dashboard-stats', authMiddleware, async (req, res) => {
         }
 
         const productCount = await Product.countDocuments();
-        const pendingOrders = await Order.countDocuments({ status: 'Zapisane' });
+        const pendingOrders = await Order.countDocuments({ status: { $in: ['Zakończono', 'Braki'] } });
         const completedOrders = await Order.countDocuments({ status: 'Skompletowane' });
         
         const ordersByAuthor = await Order.aggregate([

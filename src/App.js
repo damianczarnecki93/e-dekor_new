@@ -2149,7 +2149,7 @@ const DashboardView = ({ user, onNavigate }) => {
 
     const availableWidgets = useMemo(() => ({
         'stats_products': { name: 'Liczba Produktów', component: (props) => <StatCard {...props} title="Produktów w bazie" value={stats?.productCount} icon={<Package />} /> },
-        'stats_pending_orders': { name: 'Zamówienia Oczekujące', component: (props) => <StatCard {...props} title="Zamówień do skompletowania" value={stats?.savedOrder} icon={<List />} onClick={() => onNavigate('picking')} /> },
+        'stats_pending_orders': { name: 'Zamówienia Oczekujące', component: (props) => <StatCard {...props} title="Zamówień do skompletowania" value={stats?.pendingOrders} icon={<List />} onClick={() => onNavigate('picking')} /> },
         'stats_completed_orders': { name: 'Zamówienia Zrealizowane', component: (props) => <StatCard {...props} title="Zamówień skompletowanych" value={stats?.completedOrders} icon={<CheckCircle />} onClick={() => onNavigate('orders')} /> },
         'sales_goals': { name: 'Cele Sprzedażowe', component: (props) => <SalesGoalsWidget {...props} stats={stats} user={user} onUpdate={fetchDashboardData} /> },
         'quick_actions': { name: 'Szybkie Akcje', component: (props) => <QuickActionsWidget {...props} onNavigate={onNavigate} /> },
