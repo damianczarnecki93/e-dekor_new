@@ -2470,19 +2470,6 @@ const TaskModal = ({ isOpen, onClose, onSave, task, users, currentUser }) => {
     const [newSubtask, setNewSubtask] = useState('');
 
     useEffect(() => {
-        if (task) {
-            setFormData({
-                title: task.title || '',
-                content: task.content || '',
-                subtasks: task.subtasks || [],
-                priority: task.priority || 'Normalny',
-                deadline: task.deadline ? format(parseISO(task.deadline), "yyyy-MM-dd'T'HH:mm") : '',
-                assignedToId: task.assignedToId?._id || task.assignedToId || ''
-            });
-        } else {
-            setFormData({
-                title: '', content: '', subtasks: [], priority: 'Normalny', deadline: '', assignedToId: currentUser.id
-            });
         if (isOpen) {
             if (task) {
                 setFormData({
@@ -2505,22 +2492,14 @@ const TaskModal = ({ isOpen, onClose, onSave, task, users, currentUser }) => {
 
     const handleAddSubtask = () => {
         if (newSubtask.trim()) {
-            setFormData({ ...formData, subtasks: [...formData.subtasks, { content: newSubtask, isDone: false }] });
             setFormData(prev => ({ ...prev, subtasks: [...prev.subtasks, { content: newSubtask, isDone: false }] }));
             setNewSubtask('');
         }
     };
     
     const handleRemoveSubtask = index => {
-        const newSubtasks = formData.subtasks.filter((_, i) => i !== index);
-        setFormData({ ...formData, subtasks: newSubtasks });
         setFormData(prev => ({ ...prev, subtasks: prev.subtasks.filter((_, i) => i !== index) }));
     };
-	
-	const handleToggleSubtask = (index) => {
-        const newSubtasks = [...formData.subtasks];
-        newSubtasks[index].isDone = !newSubtasks[index].isDone;
-        setFormData({ ...formData, subtasks: newSubtasks });
 
     const handleToggleSubtask = index => {
         setFormData(prev => {
@@ -2543,7 +2522,6 @@ const TaskModal = ({ isOpen, onClose, onSave, task, users, currentUser }) => {
                     <label className="font-semibold">Tytuł zadania *</label>
                     <input type="text" name="title" value={formData.title} onChange={handleChange} className="w-full p-2 border rounded-md" required />
                 </div>
-                 <div>
                 <div>
                     <label className="font-semibold">Treść (opcjonalnie)</label>
                     <textarea name="content" value={formData.content} onChange={handleChange} className="w-full p-2 border rounded-md min-h-[100px]"/>
@@ -2552,9 +2530,6 @@ const TaskModal = ({ isOpen, onClose, onSave, task, users, currentUser }) => {
                     <div>
                         <label className="font-semibold">Priorytet</label>
                         <select name="priority" value={formData.priority} onChange={handleChange} className="w-full p-2 border rounded-md">
-                            <option>Niski</option>
-                            <option>Normalny</option>
-                            <option>Wysoki</option>
                             <option>Niski</option><option>Normalny</option><option>Wysoki</option>
                         </select>
                     </div>
@@ -2563,7 +2538,6 @@ const TaskModal = ({ isOpen, onClose, onSave, task, users, currentUser }) => {
                         <input type="datetime-local" name="deadline" value={formData.deadline} onChange={handleChange} className="w-full p-2 border rounded-md" />
                     </div>
                 </div>
-                 {currentUser.role === 'administrator' && (
                 {currentUser.role === 'administrator' && (
                     <div>
                         <label className="font-semibold">Przypisz do</label>
@@ -2575,17 +2549,7 @@ const TaskModal = ({ isOpen, onClose, onSave, task, users, currentUser }) => {
                 <div>
                     <label className="font-semibold">Podpunkty</label>
                     {formData.subtasks.map((st, i) => (
-                        {formData.subtasks.map((st, i) => (
                         <div key={i} className="flex items-center gap-2 mt-1">
-                            <input 
-                                type="checkbox"
-                                checked={st.isDone}
-                                onChange={() => handleToggleSubtask(i)}
-                                className="h-4 w-4 rounded text-indigo-600 focus:ring-indigo-500"
-                            />
-                            <span className={`flex-grow p-2 bg-gray-100 dark:bg-gray-700 rounded-md ${st.isDone ? 'line-through text-gray-500' : ''}`}>
-                                {st.content}
-                            </span>
                             <input type="checkbox" checked={st.isDone} onChange={() => handleToggleSubtask(i)} className="h-4 w-4 rounded text-indigo-600 focus:ring-indigo-500" />
                             <span className={`flex-grow p-2 bg-gray-100 dark:bg-gray-700 rounded-md ${st.isDone ? 'line-through text-gray-500' : ''}`}>{st.content}</span>
                             <button type="button" onClick={() => handleRemoveSubtask(i)} className="text-red-500"><Trash2 size={16}/></button>
@@ -2596,7 +2560,6 @@ const TaskModal = ({ isOpen, onClose, onSave, task, users, currentUser }) => {
                         <button type="button" onClick={handleAddSubtask} className="px-3 bg-gray-200 dark:bg-gray-600 rounded-md">Dodaj</button>
                     </div>
                 </div>
-                <div className="flex justify-end gap-4 pt-4">
                 <div className="flex justify-end gap-4 pt-4 border-t dark:border-gray-700">
                     <button type="button" onClick={onClose} className="px-4 py-2 bg-gray-300 dark:bg-gray-600 rounded-lg">Anuluj</button>
                     <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg">Zapisz zadanie</button>
@@ -2606,38 +2569,22 @@ const TaskModal = ({ isOpen, onClose, onSave, task, users, currentUser }) => {
     );
 };
 
-const TaskCard = ({ task, isExpanded, onToggleExpand, onEdit, onDelete, onUpdateSubtask }) => {
 const TaskCard = ({ task, isExpanded, onToggleExpand, onEdit, onDelete, onUpdateTask }) => {
     const isOverdue = task.deadline && new Date(task.deadline) < new Date();
-    const priorityClass = {
-        'Wysoki': 'border-red-500', 'Normalny': 'border-yellow-500', 'Niski': 'border-green-500',
-    };
     const priorityClass = { 'Wysoki': 'border-red-500', 'Normalny': 'border-yellow-500', 'Niski': 'border-green-500' };
 
     const handleSubtaskToggle = (e, index) => {
-        e.stopPropagation(); // Kluczowe, aby nie zwijać/rozwijać kafelka
         e.stopPropagation();
         const newSubtasks = [...task.subtasks];
         newSubtasks[index].isDone = !newSubtasks[index].isDone;
-        onUpdateSubtask(task._id, { subtasks: newSubtasks });
         onUpdateTask(task._id, { subtasks: newSubtasks });
     };
 
     return (
-        <div 
-            onClick={onToggleExpand} 
-            className={`p-3 mb-3 rounded-lg shadow-md bg-white dark:bg-gray-800 border-l-4 ${isOverdue ? 'border-purple-600' : priorityClass[task.priority]} cursor-pointer group`}
-        >
         <div onClick={onToggleExpand} className={`p-3 mb-3 rounded-lg shadow-md bg-white dark:bg-gray-800 border-l-4 ${isOverdue ? 'border-purple-600' : priorityClass[task.priority]} cursor-pointer group`}>
             <div className="flex justify-between items-start">
-                <div className="flex-grow">
                 <div className="flex-grow mr-2">
                     <p className="font-semibold">{task.title}</p>
-                    {task.deadline && (
-                        <p className={`text-xs mt-1 ${isOverdue ? 'text-purple-600 font-bold' : 'text-gray-400'}`}>
-                            Termin: {format(parseISO(task.deadline), 'dd.MM.yyyy HH:mm')}
-                        </p>
-                    )}
                     {task.deadline && <p className={`text-xs mt-1 ${isOverdue ? 'text-purple-600 font-bold' : 'text-gray-400'}`}>Termin: {format(parseISO(task.deadline), 'dd.MM.yy HH:mm')}</p>}
                 </div>
                 <div className="flex-shrink-0 flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
@@ -2645,7 +2592,6 @@ const TaskCard = ({ task, isExpanded, onToggleExpand, onEdit, onDelete, onUpdate
                     <Tooltip text="Usuń"><button onClick={(e) => { e.stopPropagation(); onDelete(); }} className="p-1 text-gray-500 hover:text-red-500"><Trash2 size={16}/></button></Tooltip>
                 </div>
             </div>
-
             {isExpanded && (
                 <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700 space-y-2">
                     {task.content && <p className="text-sm text-gray-600 dark:text-gray-300 whitespace-pre-wrap">{task.content}</p>}
@@ -2653,12 +2599,6 @@ const TaskCard = ({ task, isExpanded, onToggleExpand, onEdit, onDelete, onUpdate
                         <div className="space-y-1">
                             {task.subtasks.map((subtask, index) => (
                                 <label key={index} className="flex items-center gap-2 cursor-pointer text-sm">
-                                    <input 
-                                        type="checkbox"
-                                        checked={subtask.isDone}
-                                        onChange={(e) => handleSubtaskToggle(e, index)}
-                                        className="h-4 w-4 rounded text-indigo-600 focus:ring-indigo-500"
-                                    />
                                     <input type="checkbox" checked={subtask.isDone} onChange={(e) => handleSubtaskToggle(e, index)} className="h-4 w-4 rounded text-indigo-600 focus:ring-indigo-500" />
                                     <span className={subtask.isDone ? 'line-through text-gray-400' : ''}>{subtask.content}</span>
                                 </label>
@@ -2676,20 +2616,10 @@ const KanbanColumn = ({ status, column, tasks, expandedTasks, onToggleExpand, on
         <h2 className="text-lg font-bold mb-4 text-center">{column.name} ({tasks.length})</h2>
         <Droppable droppableId={status}>
             {(provided, snapshot) => (
-                <div
-                    {...provided.droppableProps}
-                    ref={provided.innerRef}
-                    className={`min-h-[400px] p-2 rounded-md transition-colors ${snapshot.isDraggingOver ? 'bg-blue-50 dark:bg-blue-900/30' : ''}`}
-                >
                 <div {...provided.droppableProps} ref={provided.innerRef} className={`min-h-[400px] p-2 rounded-md transition-colors ${snapshot.isDraggingOver ? 'bg-blue-50 dark:bg-blue-900/30' : ''}`}>
                     {tasks.map((task, index) => (
                         <Draggable key={task._id} draggableId={task._id} index={index}>
                             {(provided) => (
-                                <div
-                                    ref={provided.innerRef}
-                                    {...provided.draggableProps}
-                                    {...provided.dragHandleProps}
-                                >
                                 <div ref={provided.innerRef} {...provided.draggableProps} {...provided.dragHandleProps}>
                                     <TaskCard 
                                         task={task} 
@@ -2697,7 +2627,6 @@ const KanbanColumn = ({ status, column, tasks, expandedTasks, onToggleExpand, on
                                         onToggleExpand={() => onToggleExpand(task._id)}
                                         onEdit={() => onEditTask(task)}
                                         onDelete={() => onDeleteTask(task._id)}
-                                        onUpdateSubtask={(taskId, subtaskData) => onUpdateTask(taskId, subtaskData)}
                                         onUpdateTask={onUpdateTask}
                                     />
                                 </div>
@@ -2711,7 +2640,6 @@ const KanbanColumn = ({ status, column, tasks, expandedTasks, onToggleExpand, on
     </div>
 );
 
-
 const KanbanView = ({ user }) => {
     const [tasks, setTasks] = useState([]);
     const [users, setUsers] = useState([]);
@@ -2719,7 +2647,6 @@ const KanbanView = ({ user }) => {
     const [isLoading, setIsLoading] = useState(true);
     const [modalState, setModalState] = useState({ isOpen: false, task: null });
     const { showNotification } = useNotification();
-	const [expandedTasks, setExpandedTasks] = useState(new Set());
     const [expandedTasks, setExpandedTasks] = useState(new Set());
 
     const fetchUsers = useCallback(async () => {
@@ -2727,24 +2654,9 @@ const KanbanView = ({ user }) => {
             try {
                 const userList = await api.getUsersList();
                 setUsers(userList);
-            } catch (error) {
-                showNotification(error.message, 'error');
-            }
             } catch (error) { showNotification(error.message, 'error'); }
         }
     }, [user.role, showNotification]);
-	
-	const handleToggleExpand = (taskId) => {
-        setExpandedTasks(prev => {
-            const newSet = new Set(prev);
-            if (newSet.has(taskId)) {
-                newSet.delete(taskId);
-            } else {
-                newSet.add(taskId);
-            }
-            return newSet;
-        });
-    };
     
     const fetchTasks = useCallback(async () => {
         setIsLoading(true);
@@ -2752,19 +2664,10 @@ const KanbanView = ({ user }) => {
             const userIdToFetch = user.role === 'administrator' ? (selectedUserId === 'all' ? '' : selectedUserId) : user.id;
             const data = await api.getKanbanTasks(userIdToFetch);
             setTasks(data);
-        } catch (error) {
-            showNotification(error.message, 'error');
-        } finally {
-            setIsLoading(false);
-        }
         } catch (error) { showNotification(error.message, 'error'); } 
         finally { setIsLoading(false); }
     }, [user.role, user.id, selectedUserId, showNotification]);
 
-    useEffect(() => {
-        fetchUsers();
-        fetchTasks();
-    }, [fetchUsers, fetchTasks]);
     useEffect(() => { fetchUsers(); fetchTasks(); }, [fetchUsers, fetchTasks]);
 
     const columns = useMemo(() => ({
@@ -2781,62 +2684,35 @@ const KanbanView = ({ user }) => {
         try {
             const taskToUpdate = tasks.find(t => t._id === draggableId);
             const updatedTask = { ...taskToUpdate, status: destination.droppableId };
-            
-            // Optimistic UI update
             setTasks(prev => prev.map(t => t._id === draggableId ? updatedTask : t));
-
             await api.updateKanbanTask(draggableId, { status: destination.droppableId });
             showNotification('Status zadania zaktualizowany', 'success');
-        } catch (error) {
-            showNotification(error.message, 'error');
-            fetchTasks(); // Revert on error
-        }
         } catch (error) { showNotification(error.message, 'error'); fetchTasks(); }
     };
     
     const handleSaveTask = async (taskData) => {
         try {
-            if (taskData._id) { // Edycja
-                await api.updateKanbanTask(taskData._id, taskData);
-            } else { // Nowe zadanie
-                await api.addKanbanTask(taskData);
-            }
             const promise = taskData._id ? api.updateKanbanTask(taskData._id, taskData) : api.addKanbanTask(taskData);
             await promise;
             showNotification('Zadanie zapisane!', 'success');
             fetchTasks();
-        } catch (error) {
-            showNotification(error.message, 'error');
-        }
         } catch (error) { showNotification(error.message, 'error'); }
     };
-	
-	const handleDeleteTask = async (taskId) => {
 
     const handleDeleteTask = async (taskId) => {
         if (window.confirm("Czy na pewno chcesz usunąć to zadanie?")) {
             try {
-                // Optimistic UI update
                 setTasks(prev => prev.filter(t => t._id !== taskId));
                 await api.deleteKanbanTask(taskId);
                 showNotification('Zadanie usunięte', 'success');
-            } catch (error) {
-                showNotification(error.message, 'error');
-                fetchTasks(); // Revert on error
-            }
             } catch (error) { showNotification(error.message, 'error'); fetchTasks(); }
         }
     };
     
     const handleUpdateTask = async (taskId, updateData) => {
         try {
-            // Optimistic UI update for subtasks
             setTasks(prev => prev.map(t => t._id === taskId ? {...t, ...updateData} : t));
             await api.updateKanbanTask(taskId, updateData);
-        } catch (error) {
-            showNotification('Błąd aktualizacji zadania', 'error');
-            fetchTasks(); // Revert on error
-        }
         } catch (error) { showNotification('Błąd aktualizacji zadania', 'error'); fetchTasks(); }
     };
 
@@ -2854,11 +2730,6 @@ const KanbanView = ({ user }) => {
                 <h1 className="text-3xl font-bold">Tablica Zadań</h1>
                 <div className="flex items-center gap-4">
                     {user.role === 'administrator' && (
-                        <select
-                            value={selectedUserId}
-                            onChange={(e) => setSelectedUserId(e.target.value)}
-                            className="p-2 border rounded-md bg-white dark:bg-gray-700"
-                        >
                         <select value={selectedUserId} onChange={(e) => setSelectedUserId(e.target.value)} className="p-2 border rounded-md bg-white dark:bg-gray-700">
                             <option value="all">Wszyscy użytkownicy</option>
                             {users.map(u => <option key={u._id} value={u._id}>{u.username}</option>)}
@@ -2871,21 +2742,6 @@ const KanbanView = ({ user }) => {
             </div>
             {isLoading ? <div className="text-center">Ładowanie zadań...</div> : (
                 <DragDropContext onDragEnd={handleDragEnd}>
-<div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {Object.entries(columns).map(([status, column]) => (
-            <KanbanColumn 
-                key={status}
-                status={status} 
-                column={column}
-                tasks={column.items}
-                expandedTasks={expandedTasks}         // <-- NOWY PROP
-                onToggleExpand={handleToggleExpand} // <-- NOWY PROP
-                onEditTask={(task) => setModalState({ isOpen: true, task })}
-                onDeleteTask={handleDeleteTask}
-                onUpdateTask={handleUpdateTask}
-            />
-        ))}
-    </div>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                         {Object.entries(columns).map(([status, column]) => (
                             <KanbanColumn 
@@ -2903,7 +2759,6 @@ const KanbanView = ({ user }) => {
                     </div>
                 </DragDropContext>
             )}
-            
             <TaskModal 
                 isOpen={modalState.isOpen}
                 onClose={() => setModalState({ isOpen: false, task: null })}
@@ -2975,6 +2830,16 @@ const AdminEmailConfigView = () => {
                 <div>
                     <label className="block text-sm font-medium">Adres e-mail odbiorcy powiadomień</label>
                     <input type="email" name="recipientEmail" value={config.recipientEmail || ''} onChange={handleChange} className="mt-1 w-full p-2 border rounded-md" required />
+                    <label className="block text-sm font-medium">Adres lub adresy e-mail odbiorców (oddzielone przecinkami)</label>
+                    <input 
+                        type="text"
+                        name="recipientEmail" 
+                        value={config.recipientEmail || ''} 
+                        onChange={handleChange} 
+                        className="mt-1 w-full p-2 border rounded-md" 
+                        placeholder="np. adres1@example.com, adres2@example.com"
+                        required 
+                    />
                 </div>
                 <div>
                     <label className="block text-sm font-medium">Host SMTP</label>
