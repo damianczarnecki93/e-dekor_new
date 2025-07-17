@@ -180,49 +180,73 @@ const adminMiddleware = (req, res, next) => {
     }
 };
 
-async function sendNotificationEmail(subject, htmlContent) {
+async function sendNotification(notificationType, data) {
     try {
         const config = await EmailConfig.findOne();
-        if (!config || !config.host || !config.recipientEmail) {
-            console.log('Powiadomienie email pominięte - brak pełnej konfiguracji w bazie danych.');
-            return { success: false, error: 'Brak konfiguracji email.' };
+        if (!config || !config.host || !config.user) {
+            console.log('Wysyłka pominięta - brak podstawowej konfiguracji SMTP.');
+            return;
         }
 
-        // --- POCZĄTEK POPRAWKI ---
-        // Automatycznie ustawiamy 'secure' na podstawie portu.
-        // Tylko port 465 używa bezpiecznego połączenia od samego początku.
-        const isSecurePort = parseInt(config.port, 10) === 465;
-        // --- KONIEC POPRAWKI ---
+        const settings = config.notifications[notificationType];
+        if (!settings || !settings.enabled || !settings.recipients) {
+            console.log(`Wysyłka pominięta - powiadomienie typu "${notificationType}" jest wyłączone lub nie ma odbiorców.`);
+            return;
+        }
+        
+        let subject = '';
+        let htmlContent = '';
+        let attachments = []; // Tablica na załączniki
 
-        let transporter = nodemailer.createTransport({
+        switch (notificationType) {
+            case 'orderCompleted':
+                subject = `Zamówienie klienta: ${data.customerName} zostało zakończone`;
+                htmlContent = `<h1>Status zamówienia został zmieniony na "Zakończono"</h1><p><strong>Klient:</strong> ${data.customerName}</p><p>Szczegóły zamówienia znajdują się w załączniku PDF.</p>`;
+                
+                // --- POCZĄTEK NOWEJ LOGIKI ---
+                // Generuj i dodaj PDF jako załącznik
+                const pdfBuffer = await generateOrderPdfBuffer(data);
+                attachments.push({
+                    filename: `Zamowienie_${data.id.replace(/\//g, '_')}.pdf`,
+                    content: pdfBuffer,
+                    contentType: 'application/pdf',
+                });
+                // --- KONIEC NOWEJ LOGIKI ---
+                break;
+
+            case 'newDelegation':
+                // ... (ta sekcja pozostaje bez zmian)
+                break;
+            case 'dailyOrderSummary':
+                // ... (ta sekcja pozostaje bez zmian)
+                break;
+            case 'dailyDelegationSummary':
+                // ... (ta sekcja pozostaje bez zmian)
+                break;
+            default:
+                return;
+        }
+
+        const transporter = nodemailer.createTransport({
             host: config.host,
             port: config.port,
-            // Używamy naszej nowej zmiennej zamiast wartości z bazy danych
-            secure: isSecurePort,
-            auth: {
-                user: config.user,
-                pass: config.pass,
-            },
-            tls: {
-                rejectUnauthorized: false
-            }
+            secure: parseInt(config.port, 10) === 465,
+            auth: { user: config.user, pass: config.pass },
+            tls: { rejectUnauthorized: false }
         });
 
-        await transporter.verify();
-
-        const info = await transporter.sendMail({
+        await transporter.sendMail({
             from: `"System E-Dekor" <${config.user}>`,
-            to: config.recipientEmail,
+            to: settings.recipients,
             subject: subject,
             html: htmlContent,
+            attachments: attachments, // Dołączamy załączniki do wiadomości
         });
 
-        console.log(`Wysłano e-mail z powiadomieniem: ${subject}, Message ID: ${info.messageId}`);
-        return { success: true };
+        console.log(`Pomyślnie wysłano powiadomienie typu "${notificationType}".`);
 
     } catch (error) {
-        console.error('BŁĄD NODEMAILER:', error);
-        return { success: false, error: error.message || 'Nieznany błąd podczas wysyłania e-maila.' };
+        console.error(`Błąd podczas wysyłania powiadomienia "${notificationType}":`, error);
     }
 }
 
@@ -251,6 +275,41 @@ const parseCsv = (buffer) => {
             .on('error', (err) => reject(err));
     });
 };
+
+async function generateOrderPdfBuffer(order) {
+    const doc = new jsPDF();
+    
+    // Upewnij się, że ścieżka do czcionki jest poprawna
+    doc.addFont('fonts/Roboto-regular.ttf', 'Roboto', 'normal');
+    doc.setFont('Roboto');
+
+    doc.text(`Zamówienie dla: ${order.customerName}`, 14, 15);
+    doc.text(`Data: ${new Date(order.date).toLocaleDateString()}`, 14, 22);
+
+    doc.autoTable({
+        startY: 30,
+        head: [['Nazwa', 'Kod produktu', 'Notatka', 'Ilość', 'Cena', 'Wartość']],
+        body: order.items.map(item => [
+            item.name,
+            item.product_code,
+			item.note
+            item.quantity,
+            `${item.price.toFixed(2)} PLN`,
+            `${(item.price * item.quantity).toFixed(2)} PLN`,
+        ]),
+        styles: {
+            font: 'Roboto',
+        },
+    });
+    
+    const finalY = doc.lastAutoTable.finalY;
+    doc.setFontSize(14);
+    doc.text(`Suma: ${order.total.toFixed(2)} PLN`, 14, finalY + 10);
+
+    // Zwracamy PDF jako bufor danych
+    return Buffer.from(doc.output('arraybuffer'));
+}
+
 async function geocodeAddress(address) {
     if (!address) return null;
     try {
