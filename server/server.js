@@ -102,9 +102,17 @@ const noteSchema = new mongoose.Schema({
 const Note = mongoose.models.Note || mongoose.model('Note', noteSchema);
 
 const kanbanTaskSchema = new mongoose.Schema({
+    content: { type: String, required: true },
     title: { type: String, required: true },
     content: { type: String, default: '' },
     status: { type: String, required: true, enum: ['todo', 'inprogress', 'done'], default: 'todo' },
+    author: String,
+    authorId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    assignedTo: String,
+    assignedToId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    date: { type: Date, default: Date.now },
+    isAccepted: { type: Boolean, default: false },
+    details: { type: String, default: '' },
     priority: { type: String, required: true, enum: ['Niski', 'Normalny', 'Wysoki'], default: 'Normalny' },
     deadline: { type: Date },
     authorId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
@@ -113,6 +121,7 @@ const kanbanTaskSchema = new mongoose.Schema({
         content: String,
         isDone: { type: Boolean, default: false }
     }]
+});
 }, { timestamps: true }); // Dodajemy timestamps (createdAt, updatedAt)
 
 const KanbanTask = mongoose.models.KanbanTask || mongoose.model('KanbanTask', kanbanTaskSchema);
@@ -180,73 +189,49 @@ const adminMiddleware = (req, res, next) => {
     }
 };
 
-async function sendNotification(notificationType, data) {
+async function sendNotificationEmail(subject, htmlContent) {
     try {
         const config = await EmailConfig.findOne();
-        if (!config || !config.host || !config.user) {
-            console.log('Wysyłka pominięta - brak podstawowej konfiguracji SMTP.');
-            return;
+        if (!config || !config.host || !config.recipientEmail) {
+            console.log('Powiadomienie email pominięte - brak pełnej konfiguracji w bazie danych.');
+            return { success: false, error: 'Brak konfiguracji email.' };
         }
 
-        const settings = config.notifications[notificationType];
-        if (!settings || !settings.enabled || !settings.recipients) {
-            console.log(`Wysyłka pominięta - powiadomienie typu "${notificationType}" jest wyłączone lub nie ma odbiorców.`);
-            return;
-        }
-        
-        let subject = '';
-        let htmlContent = '';
-        let attachments = []; // Tablica na załączniki
+        // --- POCZĄTEK POPRAWKI ---
+        // Automatycznie ustawiamy 'secure' na podstawie portu.
+        // Tylko port 465 używa bezpiecznego połączenia od samego początku.
+        const isSecurePort = parseInt(config.port, 10) === 465;
+        // --- KONIEC POPRAWKI ---
 
-        switch (notificationType) {
-            case 'orderCompleted':
-                subject = `Zamówienie klienta: ${data.customerName} zostało zakończone`;
-                htmlContent = `<h1>Status zamówienia został zmieniony na "Zakończono"</h1><p><strong>Klient:</strong> ${data.customerName}</p><p>Szczegóły zamówienia znajdują się w załączniku PDF.</p>`;
-                
-                // --- POCZĄTEK NOWEJ LOGIKI ---
-                // Generuj i dodaj PDF jako załącznik
-                const pdfBuffer = await generateOrderPdfBuffer(data);
-                attachments.push({
-                    filename: `Zamowienie_${data.id.replace(/\//g, '_')}.pdf`,
-                    content: pdfBuffer,
-                    contentType: 'application/pdf',
-                });
-                // --- KONIEC NOWEJ LOGIKI ---
-                break;
-
-            case 'newDelegation':
-                // ... (ta sekcja pozostaje bez zmian)
-                break;
-            case 'dailyOrderSummary':
-                // ... (ta sekcja pozostaje bez zmian)
-                break;
-            case 'dailyDelegationSummary':
-                // ... (ta sekcja pozostaje bez zmian)
-                break;
-            default:
-                return;
-        }
-
-        const transporter = nodemailer.createTransport({
+        let transporter = nodemailer.createTransport({
             host: config.host,
             port: config.port,
-            secure: parseInt(config.port, 10) === 465,
-            auth: { user: config.user, pass: config.pass },
-            tls: { rejectUnauthorized: false }
+            // Używamy naszej nowej zmiennej zamiast wartości z bazy danych
+            secure: isSecurePort,
+            auth: {
+                user: config.user,
+                pass: config.pass,
+            },
+            tls: {
+                rejectUnauthorized: false
+            }
         });
 
-        await transporter.sendMail({
+        await transporter.verify();
+
+        const info = await transporter.sendMail({
             from: `"System E-Dekor" <${config.user}>`,
-            to: settings.recipients,
+            to: config.recipientEmail,
             subject: subject,
             html: htmlContent,
-            attachments: attachments, // Dołączamy załączniki do wiadomości
         });
 
-        console.log(`Pomyślnie wysłano powiadomienie typu "${notificationType}".`);
+        console.log(`Wysłano e-mail z powiadomieniem: ${subject}, Message ID: ${info.messageId}`);
+        return { success: true };
 
     } catch (error) {
-        console.error(`Błąd podczas wysyłania powiadomienia "${notificationType}":`, error);
+        console.error('BŁĄD NODEMAILER:', error);
+        return { success: false, error: error.message || 'Nieznany błąd podczas wysyłania e-maila.' };
     }
 }
 
@@ -275,41 +260,6 @@ const parseCsv = (buffer) => {
             .on('error', (err) => reject(err));
     });
 };
-
-async function generateOrderPdfBuffer(order) {
-    const doc = new jsPDF();
-    
-    // Upewnij się, że ścieżka do czcionki jest poprawna
-    doc.addFont('fonts/Roboto-regular.ttf', 'Roboto', 'normal');
-    doc.setFont('Roboto');
-
-    doc.text(`Zamówienie dla: ${order.customerName}`, 14, 15);
-    doc.text(`Data: ${new Date(order.date).toLocaleDateString()}`, 14, 22);
-
-    doc.autoTable({
-        startY: 30,
-        head: [['Nazwa', 'Kod produktu', 'Notatka', 'Ilość', 'Cena', 'Wartość']],
-        body: order.items.map(item => [
-            item.name,
-            item.product_code,
-			item.note,
-            item.quantity,
-            `${item.price.toFixed(2)} PLN`,
-            `${(item.price * item.quantity).toFixed(2)} PLN`,
-        ]),
-        styles: {
-            font: 'Roboto',
-        },
-    });
-    
-    const finalY = doc.lastAutoTable.finalY;
-    doc.setFontSize(14);
-    doc.text(`Suma: ${order.total.toFixed(2)} PLN`, 14, finalY + 10);
-
-    // Zwracamy PDF jako bufor danych
-    return Buffer.from(doc.output('arraybuffer'));
-}
-
 async function geocodeAddress(address) {
     if (!address) return null;
     try {
@@ -1286,18 +1236,26 @@ app.delete('/api/notes/:id', authMiddleware, async (req, res) => {
     }
 });
 
+// --- NOWE I ZAKTUALIZOWANE ENDPOINTY KANBAN ---
+
+// --- NOWE I ZAKTUALIZOWANE ENDPOINTY KANBAN ---
+
 app.get('/api/kanban/tasks', authMiddleware, async (req, res) => {
     try {
         let query = {};
+        if (req.user.role === 'administrator' && req.query.userId) {
+            query = { authorId: req.query.userId };
         // Admin może filtrować zadania po użytkowniku, w przeciwnym razie widzi wszystkie
         if (req.user.role === 'administrator') {
             if (req.query.userId) {
                 query.assignedToId = req.query.userId;
             }
         } else {
+            query = { authorId: req.user.userId };
             // Zwykły użytkownik widzi tylko zadania przypisane do siebie
             query.assignedToId = req.user.userId;
         }
+        const tasks = await KanbanTask.find(query).sort({ date: -1 });
         
         const tasks = await KanbanTask.find(query)
             .populate('authorId', 'username')
@@ -1306,6 +1264,7 @@ app.get('/api/kanban/tasks', authMiddleware, async (req, res) => {
             
         res.json(tasks);
     } catch (error) {
+        res.status(500).json({ message: 'Błąd pobierania zadań' });
         res.status(500).json({ message: 'Błąd pobierania zadań', error: error.message });
     }
 });
@@ -1313,6 +1272,8 @@ app.get('/api/kanban/tasks', authMiddleware, async (req, res) => {
 // Tworzenie nowego zadania
 app.post('/api/kanban/tasks', authMiddleware, async (req, res) => {
     try {
+        const { content, details, subtasks, priority, authorId, author } = req.body;
+        
         const { title, content, priority, deadline, subtasks, assignedToId } = req.body;
 
         if (!title || !assignedToId) {
@@ -1322,21 +1283,31 @@ app.post('/api/kanban/tasks', authMiddleware, async (req, res) => {
         const newTask = new KanbanTask({
             title,
             content,
+            details: details || '',
+            subtasks: subtasks || [],
+            priority: priority || 'normal',
             priority,
             deadline: deadline ? new Date(deadline) : null,
             subtasks,
             assignedToId,
             authorId: req.user.userId,
             status: 'todo',
+            author: author,
+            authorId: authorId,
+            assignedTo: author, 
+            assignedToId: authorId,
+            isAccepted: true 
         });
 
         await newTask.save();
+        res.status(201).json(newTask);
         const populatedTask = await KanbanTask.findById(newTask._id)
             .populate('authorId', 'username')
             .populate('assignedToId', 'username');
 
         res.status(201).json(populatedTask);
     } catch (error) {
+        res.status(500).json({ message: 'Błąd tworzenia zadania' });
         res.status(500).json({ message: 'Błąd tworzenia zadania', error: error.message });
     }
 });
@@ -1344,26 +1315,38 @@ app.post('/api/kanban/tasks', authMiddleware, async (req, res) => {
 // Aktualizacja zadania (w tym statusu)
 app.put('/api/kanban/tasks/:id', authMiddleware, async (req, res) => {
     try {
+        const { content, status, details, subtasks, priority } = req.body;
         const { title, content, priority, deadline, subtasks, status, assignedToId } = req.body;
         
         const task = await KanbanTask.findById(req.params.id);
+
         if (!task) {
             return res.status(404).json({ message: 'Nie znaleziono zadania' });
         }
+        
+        if (task.authorId.toString() !== req.user.userId && req.user.role !== 'administrator') {
+            return res.status(403).json({ message: 'Brak uprawnień do edycji tego zadania' });
 
         // Tylko admin lub autor mogą edytować zadanie
         if (req.user.role !== 'administrator' && task.authorId.toString() !== req.user.userId) {
             return res.status(403).json({ message: 'Brak uprawnień do edycji tego zadania.' });
         }
 
+        if (content !== undefined) task.content = content;
+        if (status !== undefined) task.status = status;
+        if (details !== undefined) task.details = details;
+        if (subtasks !== undefined) task.subtasks = subtasks;
+        if (priority !== undefined) task.priority = priority;
         const updatedData = { title, content, priority, deadline, subtasks, status, assignedToId };
         
         const updatedTask = await KanbanTask.findByIdAndUpdate(req.params.id, updatedData, { new: true })
             .populate('authorId', 'username')
             .populate('assignedToId', 'username');
 
+        const updatedTask = await task.save();
         res.json(updatedTask);
     } catch (error) {
+        res.status(500).json({ message: 'Błąd aktualizacji zadania' });
         res.status(500).json({ message: 'Błąd aktualizacji zadania', error: error.message });
     }
 });
@@ -1374,16 +1357,21 @@ app.delete('/api/kanban/tasks/:id', authMiddleware, async (req, res) => {
         const task = await KanbanTask.findById(req.params.id);
         if (!task) return res.status(404).json({ message: 'Nie znaleziono zadania' });
 
+        if (task.authorId.toString() !== req.user.userId && req.user.role !== 'administrator') {
         if (req.user.role !== 'administrator' && task.authorId.toString() !== req.user.userId) {
             return res.status(403).json({ message: 'Brak uprawnień do usunięcia zadania' });
         }
         
+        await task.deleteOne();
         await KanbanTask.findByIdAndDelete(req.params.id);
         res.json({ message: 'Zadanie usunięte' });
     } catch (error) {
         res.status(500).json({ message: 'Błąd usuwania zadania' });
     }
 });
+
+
+
 
 app.get('/api/delegations', authMiddleware, async (req, res) => {
     try {
