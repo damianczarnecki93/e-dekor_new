@@ -45,8 +45,12 @@ const userSchema = new mongoose.Schema({
     password: { type: String, required: true },
     role: { type: String, default: 'user', enum: ['user', 'administrator'] },
     status: { type: String, enum: ['oczekujący', 'zaakceptowany'], default: 'oczekujący' },
+    salesGoal: { type: Number, default: 0 },
+    manualSales: { type: Number, default: 0 },
     visibleModules: { type: [String], default: [] },
+	dashboardLayout: { type: [String], default: ['stats_products', 'stats_pending_orders', 'stats_completed_orders', 'quick_actions', 'my_tasks'] }
 });
+
 const User = mongoose.models.User || mongoose.model('User', userSchema);
 
 const productSchema = new mongoose.Schema({
@@ -55,6 +59,7 @@ const productSchema = new mongoose.Schema({
     barcodes: { type: [String], index: true },
     price: Number,
     quantity: Number,
+    availability: Boolean
 });
 const Product = mongoose.models.Product || mongoose.model('Product', productSchema);
 
@@ -64,24 +69,37 @@ const orderSchema = new mongoose.Schema({
     author: String,
     items: Array,
     total: Number,
-    status: { type: String, default: 'Zapisane', enum: ['Zapisane', 'Skompletowane', 'Zakończono', 'Braki'] },
-}, { timestamps: true });
+    status: { 
+        type: String, 
+        default: 'Zapisane', 
+        // Dodajemy nowe statusy
+        enum: ['Zapisane', 'Skompletowane', 'Zakończono', 'Braki'] 
+    },
+    date: { type: Date, default: Date.now },
+    isDirty: { type: Boolean, default: false }
+	
+});
 const Order = mongoose.models.Order || mongoose.model('Order', orderSchema);
 
-const emailConfigSchema = new mongoose.Schema({
-    host: String,
-    port: Number,
-    secure: Boolean,
-    user: String,
-    pass: String,
-    notifications: {
-        orderCompleted: { enabled: { type: Boolean, default: false }, recipients: { type: String, default: '' } },
-        newDelegation: { enabled: { type: Boolean, default: false }, recipients: { type: String, default: '' } },
-        dailyOrderSummary: { enabled: { type: Boolean, default: false }, recipients: { type: String, default: '' } },
-        dailyDelegationSummary: { enabled: { type: Boolean, default: false }, recipients: { type: String, default: '' } },
-    }
+const inventorySchema = new mongoose.Schema({
+    name: { type: String, required: true },
+    author: String,
+    items: Array,
+    totalItems: Number,
+    totalQuantity: Number,
+    date: { type: Date, default: Date.now },
+    isDirty: { type: Boolean, default: false }
 });
-const EmailConfig = mongoose.models.EmailConfig || mongoose.model('EmailConfig', emailConfigSchema);
+const Inventory = mongoose.models.Inventory || mongoose.model('Inventory', inventorySchema);
+
+const noteSchema = new mongoose.Schema({
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    content: String,
+    color: String,
+    position: { x: Number, y: Number },
+    date: { type: Date, default: Date.now }
+});
+const Note = mongoose.models.Note || mongoose.model('Note', noteSchema);
 
 const kanbanTaskSchema = new mongoose.Schema({
     title: { type: String, required: true },
@@ -96,19 +114,8 @@ const kanbanTaskSchema = new mongoose.Schema({
         isDone: { type: Boolean, default: false }
     }]
 }, { timestamps: true }); // Dodajemy timestamps (createdAt, updatedAt)
-const KanbanTask = mongoose.models.KanbanTask || mongoose.model('KanbanTask', kanbanTaskSchema);
 
-// Upewnij się, że masz również te schematy, jeśli ich używasz
-const inventorySchema = new mongoose.Schema({
-    name: { type: String, required: true },
-    author: String,
-    items: Array,
-    totalItems: Number,
-    totalQuantity: Number,
-    date: { type: Date, default: Date.now },
-    isDirty: { type: Boolean, default: false }
-});
-const Inventory = mongoose.models.Inventory || mongoose.model('Inventory', inventorySchema);
+const KanbanTask = mongoose.models.KanbanTask || mongoose.model('KanbanTask', kanbanTaskSchema);
 
 const delegationSchema = new mongoose.Schema({
     destination: { type: String, required: true },
@@ -135,9 +142,19 @@ const delegationSchema = new mongoose.Schema({
     }],
     startTime: Date,
     endTime: Date
-}, { timestamps: true });
+});
 const Delegation = mongoose.models.Delegation || mongoose.model('Delegation', delegationSchema);
 
+const emailConfigSchema = new mongoose.Schema({
+    host: { type: String, required: true },
+    port: { type: Number, required: true },
+    secure: { type: Boolean, default: true },
+    user: { type: String, required: true },
+    pass: { type: String, required: true },
+    // Dodajemy to pole
+    recipientEmail: { type: String, required: true }, 
+});
+const EmailConfig = mongoose.models.EmailConfig || mongoose.model('EmailConfig', emailConfigSchema);
 
 // --- Middleware ---
 const authMiddleware = (req, res, next) => {
@@ -163,49 +180,73 @@ const adminMiddleware = (req, res, next) => {
     }
 };
 
-async function sendNotificationEmail(subject, htmlContent) {
+async function sendNotification(notificationType, data) {
     try {
         const config = await EmailConfig.findOne();
-        if (!config || !config.host || !config.recipientEmail) {
-            console.log('Powiadomienie email pominięte - brak pełnej konfiguracji w bazie danych.');
-            return { success: false, error: 'Brak konfiguracji email.' };
+        if (!config || !config.host || !config.user) {
+            console.log('Wysyłka pominięta - brak podstawowej konfiguracji SMTP.');
+            return;
         }
 
-        // --- POCZĄTEK POPRAWKI ---
-        // Automatycznie ustawiamy 'secure' na podstawie portu.
-        // Tylko port 465 używa bezpiecznego połączenia od samego początku.
-        const isSecurePort = parseInt(config.port, 10) === 465;
-        // --- KONIEC POPRAWKI ---
+        const settings = config.notifications[notificationType];
+        if (!settings || !settings.enabled || !settings.recipients) {
+            console.log(`Wysyłka pominięta - powiadomienie typu "${notificationType}" jest wyłączone lub nie ma odbiorców.`);
+            return;
+        }
+        
+        let subject = '';
+        let htmlContent = '';
+        let attachments = []; // Tablica na załączniki
 
-        let transporter = nodemailer.createTransport({
+        switch (notificationType) {
+            case 'orderCompleted':
+                subject = `Zamówienie klienta: ${data.customerName} zostało zakończone`;
+                htmlContent = `<h1>Status zamówienia został zmieniony na "Zakończono"</h1><p><strong>Klient:</strong> ${data.customerName}</p><p>Szczegóły zamówienia znajdują się w załączniku PDF.</p>`;
+                
+                // --- POCZĄTEK NOWEJ LOGIKI ---
+                // Generuj i dodaj PDF jako załącznik
+                const pdfBuffer = await generateOrderPdfBuffer(data);
+                attachments.push({
+                    filename: `Zamowienie_${data.id.replace(/\//g, '_')}.pdf`,
+                    content: pdfBuffer,
+                    contentType: 'application/pdf',
+                });
+                // --- KONIEC NOWEJ LOGIKI ---
+                break;
+
+            case 'newDelegation':
+                // ... (ta sekcja pozostaje bez zmian)
+                break;
+            case 'dailyOrderSummary':
+                // ... (ta sekcja pozostaje bez zmian)
+                break;
+            case 'dailyDelegationSummary':
+                // ... (ta sekcja pozostaje bez zmian)
+                break;
+            default:
+                return;
+        }
+
+        const transporter = nodemailer.createTransport({
             host: config.host,
             port: config.port,
-            // Używamy naszej nowej zmiennej zamiast wartości z bazy danych
-            secure: isSecurePort,
-            auth: {
-                user: config.user,
-                pass: config.pass,
-            },
-            tls: {
-                rejectUnauthorized: false
-            }
+            secure: parseInt(config.port, 10) === 465,
+            auth: { user: config.user, pass: config.pass },
+            tls: { rejectUnauthorized: false }
         });
 
-        await transporter.verify();
-
-        const info = await transporter.sendMail({
+        await transporter.sendMail({
             from: `"System E-Dekor" <${config.user}>`,
-            to: config.recipientEmail,
+            to: settings.recipients,
             subject: subject,
             html: htmlContent,
+            attachments: attachments, // Dołączamy załączniki do wiadomości
         });
 
-        console.log(`Wysłano e-mail z powiadomieniem: ${subject}, Message ID: ${info.messageId}`);
-        return { success: true };
+        console.log(`Pomyślnie wysłano powiadomienie typu "${notificationType}".`);
 
     } catch (error) {
-        console.error('BŁĄD NODEMAILER:', error);
-        return { success: false, error: error.message || 'Nieznany błąd podczas wysyłania e-maila.' };
+        console.error(`Błąd podczas wysyłania powiadomienia "${notificationType}":`, error);
     }
 }
 
@@ -234,6 +275,42 @@ const parseCsv = (buffer) => {
             .on('error', (err) => reject(err));
     });
 };
+
+async function generateOrderPdfBuffer(order) {
+    const doc = new jsPDF();
+    
+    // Upewnij się, że ścieżka do czcionki jest poprawna
+    doc.addFont('fonts/Roboto-regular.ttf', 'Roboto', 'normal');
+    doc.setFont('Roboto');
+
+    doc.text(`Zamówienie dla: ${order.customerName}`, 14, 15);
+    doc.text(`Data: ${new Date(order.date).toLocaleDateString()}`, 14, 22);
+
+    doc.autoTable({
+        startY: 30,
+        head: [['Nazwa', 'Kod produktu', 'Notatka', 'Ilość', 'Cena', 'Wartość']],
+        body: order.items.map(item => [
+            item.name,
+            item.product_code,
+			item.note
+			item.note,
+            item.quantity,
+            `${item.price.toFixed(2)} PLN`,
+            `${(item.price * item.quantity).toFixed(2)} PLN`,
+        ]),
+        styles: {
+            font: 'Roboto',
+        },
+    });
+    
+    const finalY = doc.lastAutoTable.finalY;
+    doc.setFontSize(14);
+    doc.text(`Suma: ${order.total.toFixed(2)} PLN`, 14, finalY + 10);
+
+    // Zwracamy PDF jako bufor danych
+    return Buffer.from(doc.output('arraybuffer'));
+}
+
 async function geocodeAddress(address) {
     if (!address) return null;
     try {
@@ -1210,10 +1287,6 @@ app.delete('/api/notes/:id', authMiddleware, async (req, res) => {
     }
 });
 
-// --- NOWE I ZAKTUALIZOWANE ENDPOINTY KANBAN ---
-
-// --- NOWE I ZAKTUALIZOWANE ENDPOINTY KANBAN ---
-
 app.get('/api/kanban/tasks', authMiddleware, async (req, res) => {
     try {
         let query = {};
@@ -1234,7 +1307,6 @@ app.get('/api/kanban/tasks', authMiddleware, async (req, res) => {
             
         res.json(tasks);
     } catch (error) {
-        console.error('Błąd w GET /api/kanban/tasks:', error);
         res.status(500).json({ message: 'Błąd pobierania zadań', error: error.message });
     }
 });
@@ -1266,7 +1338,6 @@ app.post('/api/kanban/tasks', authMiddleware, async (req, res) => {
 
         res.status(201).json(populatedTask);
     } catch (error) {
-        console.error('Błąd w POST /api/kanban/tasks:', error);
         res.status(500).json({ message: 'Błąd tworzenia zadania', error: error.message });
     }
 });
@@ -1294,7 +1365,6 @@ app.put('/api/kanban/tasks/:id', authMiddleware, async (req, res) => {
 
         res.json(updatedTask);
     } catch (error) {
-        console.error('Błąd w PUT /api/kanban/tasks/:id:', error);
         res.status(500).json({ message: 'Błąd aktualizacji zadania', error: error.message });
     }
 });
@@ -1303,9 +1373,7 @@ app.put('/api/kanban/tasks/:id', authMiddleware, async (req, res) => {
 app.delete('/api/kanban/tasks/:id', authMiddleware, async (req, res) => {
     try {
         const task = await KanbanTask.findById(req.params.id);
-        if (!task) {
-            return res.status(404).json({ message: 'Nie znaleziono zadania' });
-        }
+        if (!task) return res.status(404).json({ message: 'Nie znaleziono zadania' });
 
         if (req.user.role !== 'administrator' && task.authorId.toString() !== req.user.userId) {
             return res.status(403).json({ message: 'Brak uprawnień do usunięcia zadania' });
@@ -1314,11 +1382,9 @@ app.delete('/api/kanban/tasks/:id', authMiddleware, async (req, res) => {
         await KanbanTask.findByIdAndDelete(req.params.id);
         res.json({ message: 'Zadanie usunięte' });
     } catch (error) {
-        console.error('Błąd w DELETE /api/kanban/tasks/:id:', error);
-        res.status(500).json({ message: 'Błąd usuwania zadania', error: error.message });
+        res.status(500).json({ message: 'Błąd usuwania zadania' });
     }
 });
-
 
 app.get('/api/delegations', authMiddleware, async (req, res) => {
     try {
