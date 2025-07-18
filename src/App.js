@@ -2828,8 +2828,6 @@ const AdminEmailConfigView = () => {
             <h2 className="text-2xl font-semibold mb-4">Konfiguracja serwera E-mail (SMTP)</h2>
             <form onSubmit={handleSubmit} className="max-w-2xl space-y-4 bg-white dark:bg-gray-800 p-6 rounded-lg shadow">
                 <div>
-                    <label className="block text-sm font-medium">Adres e-mail odbiorcy powiadomień</label>
-                    <input type="email" name="recipientEmail" value={config.recipientEmail || ''} onChange={handleChange} className="mt-1 w-full p-2 border rounded-md" required />
                     <label className="block text-sm font-medium">Adres lub adresy e-mail odbiorców (oddzielone przecinkami)</label>
                     <input 
                         type="text"
