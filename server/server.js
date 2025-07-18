@@ -294,7 +294,6 @@ app.post('/api/orders/:id/process-completion', authMiddleware, async (req, res) 
                 author: originalOrder.author, // lub req.user.username, zależy od logiki
                 items: unpickedItems,
                 total: shortageOrderTotal,
-                total: shortageOrderTotal,
 				status: 'Braki', // ZMIANA Z 'Zapisane' NA 'Braki'
 				isDirty: false
             });
