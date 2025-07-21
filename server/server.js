@@ -396,13 +396,13 @@ app.put('/api/orders/:id/status', authMiddleware, async (req, res) => {
         const updatedOrder = await Order.findByIdAndUpdate(req.params.id, { status }, { new: true });
         if (!updatedOrder) return res.status(404).json({ message: 'Nie znaleziono zamówienia.' });
 		 if (status === 'Zakończono') {
-            const emailSubject = `Zamówienie ${updatedOrder.id} zostało zakończone`;
+            const emailSubject = `Zamówienie dla ${updatedOrder.customerName} zostało zakończone`;
             const emailHtml = `
                 <h1>Status zamówienia został zmieniony na "Zakończono"</h1>
                 <p><strong>Klient:</strong> ${updatedOrder.customerName}</p>
-                <p><strong>ID Zamówienia:</strong> ${updatedOrder.id}</p>
                 <p><strong>Wartość:</strong> ${updatedOrder.total.toFixed(2)} PLN</p>
                 <p>Zamówienie zostało zakończone przez: ${req.user.username}</p>
+				<p>Szczegóły zamówienia dostępne w Panelu Sprzedaży</p>
             `;
             sendNotificationEmail(emailSubject, emailHtml).catch(console.error);
         }

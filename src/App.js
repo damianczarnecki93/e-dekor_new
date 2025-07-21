@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useRef, useMemo, createContext, useContext, useCallback, Suspense } from 'react';
-import { Search, List, Wrench, Sun, Moon, LogOut, FileDown, FileText, Printer, Save, CheckCircle, AlertTriangle, Upload, Trash2, XCircle, UserPlus, KeyRound, PlusCircle, MessageSquare, Archive, Edit, Home, Menu, Filter, RotateCcw, FileUp, GitMerge, Eye, Trophy, Crown, BarChart2, Users, Package, StickyNote, Settings, ChevronsUpDown, ChevronUp, ChevronDown, ClipboardList, Plane, ListChecks, Mail, Zap, LayoutDashboard, ClipboardCheck } from 'lucide-react';
+import React, { useState, useEffect, useRef, useMemo, createContext, useContext, useCallback } from 'react';
+import { Search, List, Wrench, Sun, Moon, LogOut, FileDown, FileText, Printer, Save, CheckCircle, AlertTriangle, Upload, Trash2, XCircle, UserPlus, KeyRound, PlusCircle, MessageSquare, Archive, Edit, Home, Menu, Filter, RotateCcw, FileUp, GitMerge, Eye, Trophy, Crown, BarChart2, Users, Package, StickyNote, Settings, ChevronsUpDown, ChevronUp, ChevronDown, ClipboardList, Plane, ListChecks, Mail, Zap, ClipboardCheck } from 'lucide-react';
 import { format, parseISO, eachDayOfInterval, isValid } from 'date-fns';
 import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 import { pl } from 'date-fns/locale';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
-import { GoogleMap, useLoadScript, Marker, Polyline, DirectionsRenderer } from '@react-google-maps/api';
+import { GoogleMap, useLoadScript, Marker, DirectionsRenderer } from '@react-google-maps/api';
 
 // --- Komponent Granicy Błędu (Error Boundary) ---
 
@@ -2330,14 +2330,14 @@ const QuickActionsWidget = ({ onNavigate }) => (
         <h3 className="font-bold mb-4 flex items-center"><Zap className="w-5 h-5 mr-2 text-yellow-500"/>Szybkie Akcje</h3>
         <div className="grid grid-cols-2 gap-4">
             <button onClick={() => onNavigate('order')} className="p-3 bg-blue-500 text-white rounded-lg text-sm">Nowe Zamówienie</button>
-            <button onClick={() => onNavigate('delegations')} className="p-3 bg-green-500 text-white rounded-lg text-sm">Nowa Delegacja</button>
+            <button onClick={() => onNavigate('orders')} className="p-3 bg-red-500 text-white rounded-lg text-sm">Zamówienia</button>
         </div>
     </div>
 );
 
 const MyTasksWidget = ({ tasks, onNavigate }) => (
     <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md h-full">
-        <h3 className="font-bold mb-4 flex items-center"><ListChecks className="w-5 h-5 mr-2 text-red-500"/>Moje Zadania</h3>
+        <h3 className="font-bold mb-4 flex items-center"><ListChecks className="w-5 h-5 mr-2 text-red-500"/>Tablica zadań</h3>
         <div className="space-y-2 text-sm">
             {tasks.length > 0 ? tasks.slice(0, 3).map(task => (
                 <p key={task._id} className="truncate">{task.content}</p>
@@ -2519,11 +2519,11 @@ const TaskModal = ({ isOpen, onClose, onSave, task, users, currentUser }) => {
         <Modal isOpen={isOpen} onClose={onClose} title={task ? 'Edytuj zadanie' : 'Nowe zadanie'} maxWidth="2xl">
             <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
-                    <label className="font-semibold">Tytuł zadania *</label>
+                    <label className="font-semibold">Zadanie *</label>
                     <input type="text" name="title" value={formData.title} onChange={handleChange} className="w-full p-2 border rounded-md" required />
                 </div>
                 <div>
-                    <label className="font-semibold">Treść (opcjonalnie)</label>
+                    <label className="font-semibold">Szczególy</label>
                     <textarea name="content" value={formData.content} onChange={handleChange} className="w-full p-2 border rounded-md min-h-[100px]"/>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
