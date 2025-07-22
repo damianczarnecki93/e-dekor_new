@@ -3858,7 +3858,7 @@ function App() {
         );
     };
 
-  const navConfig = useMemo(() => [
+const navConfig = useMemo(() => [
         {
             category: 'Główne',
             items: [
@@ -3873,37 +3873,34 @@ function App() {
                 { id: 'orders', path: '/orders', label: 'Zamówienia', icon: Archive, roles: ['user', 'administrator'] },
             ]
         },
-		{
+        {
             category: 'Magazyn',
             items: [
-                { id: 'picking', path: 'picking' label: 'Kompletacja', icon: List, roles: ['user', 'administrator'] },
-                { id: 'inventory', path: 'inventory' label: 'Inwentaryzacja', icon: Wrench, roles: ['user', 'administrator'] },
+                { id: 'picking', path: '/picking', label: 'Kompletacja', icon: List, roles: ['user', 'administrator'] },
+                { id: 'inventory', path: '/inventory', label: 'Inwentaryzacja', icon: Wrench, roles: ['user', 'administrator'] },
             ]
         },
         {
             category: 'Organizacyjne',
             items: [
-                { id: 'kanban', path: 'kanban' label: 'Tablica Zadań', icon: ClipboardList, roles: ['user', 'administrator'] },
-                { id: 'delegations', path: 'delegations' label: 'Delegacje', icon: Plane, roles: ['user', 'administrator'] },
+                { id: 'kanban', path: '/kanban', label: 'Tablica Zadań', icon: ClipboardList, roles: ['user', 'administrator'] },
+                { id: 'delegations', path: '/delegations', label: 'Delegacje', icon: Plane, roles: ['user', 'administrator'] },
             ]
         },
 		{
             category: 'Raporty',
             items: [
-                 // --- POCZĄTEK POPRAWKI ---
-                 { id: 'shortage-report', path: 'reports/shortages' label: 'Raport Braków', icon: ClipboardCheck, roles: ['user', 'administrator'] },
-                 // --- KONIEC POPRAWKI ---
+                 { id: 'shortage-report', path: '/shortage-report', label: 'Raport Braków', icon: ClipboardCheck, roles: ['user', 'administrator'] },
             ]
         },
         {
             category: 'Administracja',
             items: [
-                 { id: 'admin', path: 'admin' label: 'Panel Admina', icon: Settings, roles: ['administrator'] },
-				 
-				 
+                 { id: 'admin', path: '/admin', label: 'Panel Admina', icon: Settings, roles: ['administrator'] },
             ]
         }
     ], [handleNewOrder]);
+
 
 const availableNav = useMemo(() => {
         if (!user) return [];
