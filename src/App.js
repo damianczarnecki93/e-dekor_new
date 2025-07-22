@@ -1432,7 +1432,7 @@ const PickingView = () => {
             </Modal>
         </div>
     );
-
+};
 
 // --- Moduł Inwentaryzacji ---
 

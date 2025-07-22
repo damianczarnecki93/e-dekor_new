@@ -24,6 +24,8 @@ app.use(cors(corsOptions));
 app.options('*', cors(corsOptions)); // Umożliwia obsługę zapytań preflight (OPTIONS)
 
 app.use(express.json());
+// Serwowanie statycznych plików z aplikacji React
+app.use(express.static(path.join(__dirname, 'build')));
 
 // --- Konfiguracja i połączenie z bazą danych ---
 const dbUrl = process.env.DATABASE_URL;
@@ -1404,6 +1406,10 @@ app.delete('/api/delegations/:id', authMiddleware, async (req, res) => {
     } catch (error) {
         res.status(500).json({ message: 'Błąd usuwania delegacji' });
     }
+});
+
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'build', 'index.html'));
 });
 
 app.post('/api/delegations/:id/start', authMiddleware, async (req, res) => {
