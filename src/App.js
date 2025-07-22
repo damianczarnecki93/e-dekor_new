@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, createContext, useContext, useCallback } from 'react';
 import { Search, List, Wrench, Sun, Moon, LogOut, FileDown, FileText, Printer, Save, CheckCircle, AlertTriangle, Upload, Trash2, XCircle, UserPlus, KeyRound, PlusCircle, MessageSquare, Archive, Edit, Home, Menu, Filter, RotateCcw, FileUp, GitMerge, Eye, Trophy, Crown, BarChart2, Users, Package, StickyNote, Settings, ChevronsUpDown, ChevronUp, ChevronDown, ClipboardList, Plane, ListChecks, Mail, Zap, ClipboardCheck } from 'lucide-react';
+import { BrowserRouter, Routes, Route, NavLink, useNavigate, useParams, useLocation } from 'react-router-dom';
 import { format, parseISO, eachDayOfInterval, isValid } from 'date-fns';
 import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 import { pl } from 'date-fns/locale';
@@ -3720,8 +3721,40 @@ const DelegationDetails = ({ delegation, onUpdate, onNavigate, setCurrentOrder, 
 
 // --- Główny Komponent Aplikacji ---
 function App() {
+    const OrderWrapper = ({ user, setDirty, onNavigate, currentOrder, setCurrentOrder, onOrderSave }) => {
+    const { orderId } = useParams(); // Pobiera ID z URL, np. /order/60f...
+    const navigate = useNavigate();
+
+    useEffect(() => {
+        const loadOrder = async () => {
+            try {
+                const orderData = await api.getOrderById(orderId);
+                setCurrentOrder(orderData);
+            } catch (error) {
+                console.error("Błąd ładowania zamówienia do edycji", error);
+                navigate('/orders'); // Przekieruj jeśli błąd
+            }
+        };
+
+        if (orderId) { // Jeśli jest ID w URL, ładujemy istniejące zamówienie
+            loadOrder();
+        } else { // W przeciwnym razie, to nowe zamówienie
+            setCurrentOrder({ customerName: '', items: [], isDirty: false });
+        }
+    }, [orderId, setCurrentOrder, navigate]);
+
+    return <OrderView user={user} setDirty={setDirty} onNavigate={onNavigate} currentOrder={currentOrder} setCurrentOrder={setCurrentOrder} onOrderSave={onOrderSave} />;
+};
+
+const InventorySheetWrapper = ({ user, setDirty, onSave }) => {
+    const { inventoryId } = useParams();
+    return <NewInventorySheet user={user} setDirty={setDirty} onSave={onSave} inventoryId={inventoryId} />;
+};
+
+
+// --- Główny Komponent Aplikacji ---
+function App() {
     const [user, setUser] = useState(null);
-    const [activeView, setActiveView] = useState({ view: 'dashboard', params: {} });
     const [currentOrder, setCurrentOrder] = useState({ customerName: '', items: [], isDirty: false });
     const [isDirty, setIsDirty] = useState(false);
     const [isDarkMode, setIsDarkMode] = useState(false);
@@ -3729,6 +3762,9 @@ function App() {
     const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
     const [isNavOpen, setIsNavOpen] = useState(false);
     const [expandedCategories, setExpandedCategories] = useState(['Główne']);
+    
+    // KROK 3: Używamy hooka useNavigate do programowej nawigacji
+    const navigate = useNavigate();
 
     const updateUserData = (newUserData) => {
         setUser(newUserData);
@@ -3822,74 +3858,73 @@ function App() {
         );
     };
 
-    const navConfig = useMemo(() => [
+  const navConfig = useMemo(() => [
         {
             category: 'Główne',
             items: [
-                { id: 'dashboard', label: 'Panel Główny', icon: Home, roles: ['user', 'administrator'], alwaysVisible: true },
-                { id: 'search', label: 'Wyszukiwarka', icon: Search, roles: ['user', 'administrator'] },
+                { id: 'dashboard', path: '/dashboard', label: 'Panel Główny', icon: Home, roles: ['user', 'administrator'], alwaysVisible: true },
+                { id: 'search', path: '/search', label: 'Wyszukiwarka', icon: Search, roles: ['user', 'administrator'] },
             ]
         },
         {
             category: 'Sprzedaż',
             items: [
-                { id: 'order', label: 'Nowe Zamówienie', icon: PlusCircle, roles: ['user', 'administrator'], action: handleNewOrder },
-                { id: 'orders', label: 'Zamówienia', icon: Archive, roles: ['user', 'administrator'] },
+                { id: 'order', path: '/order/new', label: 'Nowe Zamówienie', icon: PlusCircle, roles: ['user', 'administrator'], action: handleNewOrder },
+                { id: 'orders', path: '/orders', label: 'Zamówienia', icon: Archive, roles: ['user', 'administrator'] },
             ]
         },
-        {
+		{
             category: 'Magazyn',
             items: [
-                { id: 'picking', label: 'Kompletacja', icon: List, roles: ['user', 'administrator'] },
-                { id: 'inventory', label: 'Inwentaryzacja', icon: Wrench, roles: ['user', 'administrator'] },
+                { id: 'picking', path: 'picking' label: 'Kompletacja', icon: List, roles: ['user', 'administrator'] },
+                { id: 'inventory', path: 'inventory' label: 'Inwentaryzacja', icon: Wrench, roles: ['user', 'administrator'] },
             ]
         },
         {
             category: 'Organizacyjne',
             items: [
-                { id: 'kanban', label: 'Tablica Zadań', icon: ClipboardList, roles: ['user', 'administrator'] },
-                { id: 'delegations', label: 'Delegacje', icon: Plane, roles: ['user', 'administrator'] },
+                { id: 'kanban', path: 'kanban' label: 'Tablica Zadań', icon: ClipboardList, roles: ['user', 'administrator'] },
+                { id: 'delegations', path: 'delegations' label: 'Delegacje', icon: Plane, roles: ['user', 'administrator'] },
             ]
         },
 		{
             category: 'Raporty',
             items: [
                  // --- POCZĄTEK POPRAWKI ---
-                 { id: 'shortage-report', label: 'Raport Braków', icon: ClipboardCheck, roles: ['user', 'administrator'] },
+                 { id: 'shortage-report', path: 'reports/shortages' label: 'Raport Braków', icon: ClipboardCheck, roles: ['user', 'administrator'] },
                  // --- KONIEC POPRAWKI ---
             ]
         },
         {
             category: 'Administracja',
             items: [
-                 { id: 'admin', label: 'Panel Admina', icon: Settings, roles: ['administrator'] },
+                 { id: 'admin', path: 'admin' label: 'Panel Admina', icon: Settings, roles: ['administrator'] },
 				 
 				 
             ]
         }
     ], [handleNewOrder]);
 
-    const availableNav = useMemo(() => {
+const availableNav = useMemo(() => {
         if (!user) return [];
-        return navConfig
-            .map(category => {
-                const visibleItems = category.items.filter(item => {
-                    if (!item.roles.includes(user.role)) {
-                        return false;
-                    }
-                    if (user.role === 'administrator') {
-                        return true;
-                    }
-                    return item.alwaysVisible || user.visibleModules?.includes(item.id);
-                });
-                return { ...category, items: visibleItems };
-            })
-            .filter(category => category.items.length > 0);
+        return navConfig.map(category => ({
+            ...category,
+            items: category.items.filter(item => 
+                item.roles.includes(user.role) && (item.alwaysVisible || user.visibleModules?.includes(item.id))
+            )
+        })).filter(category => category.items.length > 0);
     }, [user, navConfig]);
     
+    if (isLoading) { return <div className="flex items-center justify-center h-screen">Ładowanie...</div> }
 
-    if (isLoading) { return <div className="flex items-center justify-center h-screen bg-gray-100 dark:bg-gray-900">Ładowanie...</div> }
-    if (!user) { return <AuthPage onLogin={handleLogin} />; }
+    // Widok dla niezalogowanego użytkownika
+    if (!user) {
+        return (
+            <Routes>
+                <Route path="*" element={<AuthPage onLogin={handleLogin} />} />
+            </Routes>
+        );
+    }
 
     const renderView = () => {
         const { view, params } = activeView;
@@ -3907,7 +3942,6 @@ function App() {
             case 'admin-users': return <AdminUsersView user={user} />;
 			case 'admin-products': return <AdminProductsView />;
 			case 'shortage-report': return <ShortageReportView />; // <-- Dodaj tę linię
-			case 'admin-products': return <AdminProductsView />;
 			case 'admin-email': return <AdminEmailConfigView />; // <-- DODAJ TĘ LINIĘ
 			default: return <DashboardView user={user} onNavigate={handleNavigate} onUpdateUser={updateUserData}/>;
 
@@ -3916,24 +3950,27 @@ function App() {
 
     return (
         <>
-            <div className="flex h-screen bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-sans">
-                <nav className={`w-64 bg-white dark:bg-gray-800 shadow-lg flex flex-col flex-shrink-0 transition-transform duration-300 ease-in-out z-40 fixed lg:static h-full ${isNavOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}>
-                    <div className="flex items-center justify-center h-20 border-b border-gray-200 dark:border-gray-700">
-                         <img src={isDarkMode ? "/logo-dark.png" : "/logo.png"} onError={(e) => { e.currentTarget.src = 'https://placehold.co/120x40/4f46e5/ffffff?text=Logo'; }} alt="Dekor-Art-Serwis" loading="lazy" className="h-10" />
-                    </div>
+            <div className="flex h-screen bg-gray-100 dark:bg-gray-900">
+                <nav className={`w-64 bg-white dark:bg-gray-800 ... ${isNavOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}>
+                    {/* ... (logo) ... */}
                     <ul className="flex-grow overflow-y-auto">
                         {availableNav.map(category => (
                             <div key={category.category} className="my-2">
-                                <h3 onClick={() => toggleCategory(category.category)} className="px-6 mt-4 mb-2 text-xs font-semibold text-gray-400 uppercase flex justify-between items-center cursor-pointer">
-                                    {category.category}
-                                    {expandedCategories.includes(category.category) ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                                </h3>
+                                <h3 onClick={() => toggleCategory(category.category)} className="...">{category.category}</h3>
                                 {expandedCategories.includes(category.category) && category.items.map(item => (
                                      <li key={item.id}>
-                                        <button onClick={() => { item.action ? item.action() : handleNavigate(item.id); }} className={`w-full flex items-center justify-start h-12 px-6 text-base transition-colors duration-200 text-left ${activeView.view.startsWith(item.id) ? 'bg-indigo-50 dark:bg-gray-700 text-indigo-600 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'}`}>
-                                            <item.icon className="h-5 w-5" />
-                                            <span className="ml-4">{item.label}</span>
-                                        </button>
+                                         {item.action ? (
+                                             <button onClick={item.action} className="...">
+                                                 <item.icon className="h-5 w-5" />
+                                                 <span className="ml-4">{item.label}</span>
+                                             </button>
+                                         ) : (
+                                            // KROK 5: Używamy NavLink zamiast buttona
+                                            <NavLink to={item.path} onClick={() => setIsNavOpen(false)} className={({ isActive }) => `... ${isActive ? 'bg-indigo-50 ...' : 'text-gray-500 ...'}`}>
+                                                <item.icon className="h-5 w-5" />
+                                                <span className="ml-4">{item.label}</span>
+                                            </NavLink>
+                                         )}
                                     </li>
                                 ))}
                             </div>
@@ -3949,13 +3986,40 @@ function App() {
                         </div>
                         <Tooltip text="Zmień motyw"><button onClick={() => setIsDarkMode(!isDarkMode)} className="w-full flex justify-center p-2 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600">{isDarkMode ? <Sun className="h-6 w-6 text-yellow-400" /> : <Moon className="h-6 w-6 text-indigo-500" />}</button></Tooltip>
                     </div>
-                </nav>
+					</nav>
                 <main className="flex-1 flex flex-col overflow-hidden">
-                    <div className="lg:hidden p-2 bg-white dark:bg-gray-800 border-b dark:border-gray-700 flex justify-between items-center">
-                        <button onClick={() => setIsNavOpen(!isNavOpen)} className="p-2 rounded-md"><Menu className="w-6 w-6" /></button>
-                        <span className="font-semibold">{navConfig.flatMap(c => c.items).find(item => item.id === activeView.view)?.label}</span>
+                    <div className="lg:hidden ...">
+                        <button onClick={() => setIsNavOpen(!isNavOpen)}><Menu /></button>
                     </div>
-                    <div className="flex-1 overflow-x-hidden overflow-y-auto">{renderView()}</div>
+                    <div className="flex-1 overflow-x-hidden overflow-y-auto">
+                 {/* KROK 6: Definiujemy wszystkie ścieżki aplikacji */}
+                        <Routes>
+                            <Route path="/dashboard" element={<DashboardView user={user} onNavigate={navigate} />} />
+                            <Route path="/search" element={<MainSearchView />} />
+                            
+                            <Route path="/order/new" element={<OrderWrapper user={user} setDirty={setIsDirty} onNavigate={navigate} currentOrder={currentOrder} setCurrentOrder={setCurrentOrder} onOrderSave={() => setCurrentOrder({})} />} />
+                            <Route path="/order/:orderId" element={<OrderWrapper user={user} setDirty={setIsDirty} onNavigate={navigate} currentOrder={currentOrder} setCurrentOrder={setCurrentOrder} />} />
+                            
+                            <Route path="/orders" element={<OrdersListView onEdit={(id) => navigate(`/order/${id}`)} />} />
+                            <Route path="/picking" element={<PickingView />} />
+                            
+                            <Route path="/inventory" element={<InventoryView onNavigate={(view, params) => navigate(`/${view}`, {state: params})} />} />
+                            <Route path="/inventory-sheet" element={<InventorySheetWrapper user={user} setDirty={setIsDirty} onSave={() => navigate('/inventory')} />} />
+                            <Route path="/inventory-sheet/:inventoryId" element={<InventorySheetWrapper user={user} setDirty={setIsDirty} onSave={() => navigate('/inventory')} />} />
+
+                            <Route path="/kanban" element={<KanbanView user={user} />} />
+                            <Route path="/delegations" element={<DelegationsView user={user} onNavigate={navigate} setCurrentOrder={setCurrentOrder} />} />
+                            
+                            <Route path="/admin" element={<AdminView onNavigate={(view) => navigate(`/${view}`)} />} />
+                            <Route path="/admin-users" element={<AdminUsersView user={user} />} />
+                            <Route path="/admin-products" element={<AdminProductsView />} />
+                            <Route path="/admin-email" element={<AdminEmailConfigView />} />
+                            <Route path="/shortage-report" element={<ShortageReportView />} />
+                            
+                            {/* Domyślna ścieżka */}
+                            <Route path="*" element={<DashboardView user={user} onNavigate={navigate} />} />
+                        </Routes>
+                    </div>
                 </main>
             </div>
             <UserChangePasswordModal isOpen={isPasswordModalOpen} onClose={() => setIsPasswordModalOpen(false)} />
@@ -4024,7 +4088,9 @@ export default function AppWrapper() {
     return (
         <ErrorBoundary>
             <NotificationProvider>
-                <App />
+                <BrowserRouter>
+                    <App />
+                </BrowserRouter>
             </NotificationProvider>
         </ErrorBoundary>
     );
