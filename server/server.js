@@ -23,9 +23,9 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions)); // Umożliwia obsługę zapytań preflight (OPTIONS)
 
-app.use(express.json());
-// Serwowanie statycznych plików z aplikacji React
-app.use(express.static(path.join(__dirname, 'build')));
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'build', 'index.html'));
+});
 
 // --- Konfiguracja i połączenie z bazą danych ---
 const dbUrl = process.env.DATABASE_URL;
