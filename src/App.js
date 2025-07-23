@@ -2140,7 +2140,7 @@ const DashboardView = ({ user, onNavigate }) => {
         } finally {
             setIsLoading(false);
         }
-    }, [user.id, showNotification]);
+}, [user?.id, showNotification]);
 
     useEffect(() => {
         fetchDashboardData();
