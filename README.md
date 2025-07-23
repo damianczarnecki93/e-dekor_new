@@ -1,3 +1,4 @@
+TEST ZMIAN - 23.07.2025
 # System Zarządzania Magazynem
 
 Prosta aplikacja Full-Stack (React + Node.js) do zarządzania magazynem, zamówieniami, kompletacją i inwentaryzacją.
