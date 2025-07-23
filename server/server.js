@@ -14,14 +14,17 @@ const nodemailer = require('nodemailer');
 const axios = require('axios');
 
 const app = express();
+const cors = require('cors');
+
 const corsOptions = {
-  origin: 'https://system-magazynowy-frontend.onrender.com', // Zezwalaj tylko na żądania z tej domeny
+  origin: 'https://system-magazynowy-frontend.onrender.com', // Zezwalaj na żądania TYLKO z tej domeny
   methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
   credentials: true,
   optionsSuccessStatus: 204
 };
+
 app.use(cors(corsOptions));
-app.options('*', cors(corsOptions));
+app.options('*', cors(corsOptions)); // Umożliwia obsługę zapytań preflight (OPTIONS)
 
 app.use(express.json());
 
