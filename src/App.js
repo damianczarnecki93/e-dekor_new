@@ -3978,7 +3978,7 @@ const availableNav = useMemo(() => {
                     <Tooltip text="Zmień motyw"><button onClick={() => setIsDarkMode(!isDarkMode)} className="w-full flex justify-center p-2 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600">{isDarkMode ? <Sun className="h-6 w-6 text-yellow-400" /> : <Moon className="h-6 w-6 text-indigo-500" />}</button></Tooltip>
                 </div>
             </nav>
-            <main className="flex-1 flex flex-col overflow-hidden">
+			<main className="flex-1 flex flex-col overflow-hidden lg:ml-64">
                 <div className="lg:hidden p-4 bg-white dark:bg-gray-800 border-b dark:border-gray-700">
                     <button onClick={() => setIsNavOpen(!isNavOpen)}><Menu /></button>
                 </div>
