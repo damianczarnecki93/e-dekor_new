@@ -15,7 +15,7 @@ const axios = require('axios');
 
 const app = express();
 const corsOptions = {
-  origin: '*',
+  origin: 'https://system-magazynowy-frontend.onrender.com', // Zezwalaj tylko na żądania z tej domeny
   methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
   credentials: true,
   optionsSuccessStatus: 204
