@@ -23,9 +23,9 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions)); // Umożliwia obsługę zapytań preflight (OPTIONS)
 
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, '..', 'build', 'index.html'));
-});
+app.use(express.json());
+// Serwowanie statycznych plików z aplikacji React
+app.use(express.static(path.join(__dirname, '..', 'build')));
 
 // --- Konfiguracja i połączenie z bazą danych ---
 const dbUrl = process.env.DATABASE_URL;
@@ -1408,10 +1408,6 @@ app.delete('/api/delegations/:id', authMiddleware, async (req, res) => {
     }
 });
 
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'build', 'index.html'));
-});
-
 app.post('/api/delegations/:id/start', authMiddleware, async (req, res) => {
     try {
         const delegation = await Delegation.findByIdAndUpdate(req.params.id, { startTime: new Date(), status: 'W trakcie' }, { new: true });
@@ -1461,6 +1457,10 @@ app.post('/api/delegations/:id/visits/:clientIndex/end', authMiddleware, async (
     } catch (error) {
         res.status(500).json({ message: 'Błąd zakończenia wizyty' });
     }
+});
+
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'build', 'index.html'));
 });
 
 // --- Start serwera ---
