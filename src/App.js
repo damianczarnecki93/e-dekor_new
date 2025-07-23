@@ -3965,7 +3965,7 @@ const availableNav = useMemo(() => {
                 </ul>
                 <div className="p-4 border-t border-gray-200 dark:border-gray-700">
                     <div className="flex items-center justify-between mb-4">
-                        <div><p className="font-semibold">{user.username}</p><p className="text-sm text-gray-500">{user.role}</p></div>
+                        <div><p className="font-semibold">{user?.username}</p><p className="text-sm text-gray-500">{user?.role}</p></div>
                          <div className="flex items-center">
                             <Tooltip text="Zmień hasło"><button onClick={() => setIsPasswordModalOpen(true)} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600"><KeyRound className="h-6 w-6 text-gray-500" /></button></Tooltip>
                             <Tooltip text="Wyloguj"><button onClick={handleLogout} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600"><LogOut className="h-6 w-6 text-gray-500" /></button></Tooltip>
