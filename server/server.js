@@ -1461,14 +1461,11 @@ app.post('/api/delegations/:id/visits/:clientIndex/end', authMiddleware, async (
 });
 
 const buildPath = path.join(__dirname, '..', 'build');
-console.log(`[SERVER] Ścieżka do folderu build: ${buildPath}`);
+
 app.use(express.static(buildPath));
 
 app.get('*', (req, res) => {
-  const indexPath = path.join(buildPath, 'index.html');
-  console.log(`[SERVER] Próba wysłania pliku: ${indexPath}`);
-  
-  res.sendFile(indexPath, (err) => {
+  res.sendFile(path.join(buildPath, 'index.html'), (err) => {
     if (err) {
       console.error('[SERVER] Błąd podczas wysyłania pliku index.html:', err);
       res.status(500).send("Błąd serwera podczas próby załadowania aplikacji.");
