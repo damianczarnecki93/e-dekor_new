@@ -3720,7 +3720,6 @@ const DelegationDetails = ({ delegation, onUpdate, onNavigate, setCurrentOrder, 
 
 
 // --- Główny Komponent Aplikacji ---
-function App() {
     const OrderWrapper = ({ user, setDirty, onNavigate, currentOrder, setCurrentOrder, onOrderSave }) => {
     const { orderId } = useParams(); // Pobiera ID z URL, np. /order/60f...
     const navigate = useNavigate();
