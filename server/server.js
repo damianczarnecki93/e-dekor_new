@@ -1459,7 +1459,7 @@ app.post('/api/delegations/:id/visits/:clientIndex/end', authMiddleware, async (
     }
 });
 
-const buildPath = path.join(__dirname, '..', 'client', 'build');
+const buildPath = path.join(__dirname, '..', 'build');
 console.log(`[SERVER] Ścieżka do folderu build: ${buildPath}`);
 app.use(express.static(buildPath));
 
