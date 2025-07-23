@@ -3910,8 +3910,6 @@ const availableNav = useMemo(() => {
             )
         })).filter(category => category.items.length > 0);
     }, [user, navConfig]);
-    
-    if (isLoading) { return <div className="flex items-center justify-center h-screen">Ładowanie...</div> }
 
     // Widok dla niezalogowanego użytkownika
     if (!user) {
@@ -3946,43 +3944,43 @@ const availableNav = useMemo(() => {
 
     return (
         <>
-            <div className="flex h-screen bg-gray-100 dark:bg-gray-900">
-                <nav className={`w-64 bg-white dark:bg-gray-800 ... ${isNavOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}>
-                    {/* ... (logo) ... */}
-                    <ul className="flex-grow overflow-y-auto">
-                        {availableNav.map(category => (
-                            <div key={category.category} className="my-2">
-                                <h3 onClick={() => toggleCategory(category.category)} className="...">{category.category}</h3>
-                                {expandedCategories.includes(category.category) && category.items.map(item => (
-                                     <li key={item.id}>
-                                         {item.action ? (
-                                             <button onClick={item.action} className="...">
-                                                 <item.icon className="h-5 w-5" />
-                                                 <span className="ml-4">{item.label}</span>
-                                             </button>
-                                         ) : (
-                                            // KROK 5: Używamy NavLink zamiast buttona
-                                            <NavLink to={item.path} onClick={() => setIsNavOpen(false)} className={({ isActive }) => `... ${isActive ? 'bg-indigo-50 ...' : 'text-gray-500 ...'}`}>
-                                                <item.icon className="h-5 w-5" />
-                                                <span className="ml-4">{item.label}</span>
-                                            </NavLink>
-                                         )}
-                                    </li>
-                                ))}
-                            </div>
-                        ))}
-                    </ul>
-                    <div className="p-4 border-t border-gray-200 dark:border-gray-700">
-                        <div className="flex items-center justify-between mb-4">
-                            <div><p className="font-semibold">{user.username}</p><p className="text-sm text-gray-500">{user.role}</p></div>
-                             <div className="flex items-center">
-                                <Tooltip text="Zmień hasło"><button onClick={() => setIsPasswordModalOpen(true)} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600"><KeyRound className="h-6 w-6 text-gray-500" /></button></Tooltip>
-                                <Tooltip text="Wyloguj"><button onClick={handleLogout} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600"><LogOut className="h-6 w-6 text-gray-500" /></button></Tooltip>
-                             </div>
-                        </div>
-                        <Tooltip text="Zmień motyw"><button onClick={() => setIsDarkMode(!isDarkMode)} className="w-full flex justify-center p-2 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600">{isDarkMode ? <Sun className="h-6 w-6 text-yellow-400" /> : <Moon className="h-6 w-6 text-indigo-500" />}</button></Tooltip>
-                    </div>
-					</nav>
+ <nav className={`w-64 bg-white dark:bg-gray-800 shadow-xl flex flex-col transition-transform duration-300 ease-in-out fixed top-0 left-0 h-full z-40 ${isNavOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}>
+    <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-center">
+        <img src="/logo.png" onError={(e) => { e.currentTarget.src = 'https://placehold.co/150x50/4f46e5/ffffff?text=Logo'; }} alt="Logo" className="h-10" />
+    </div>
+    <ul className="flex-grow overflow-y-auto">
+        {availableNav.map(category => (
+            <div key={category.category} className="my-2">
+                <h3 onClick={() => toggleCategory(category.category)} className="px-4 py-2 text-xs font-bold text-gray-400 uppercase cursor-pointer flex justify-between items-center hover:bg-gray-50 dark:hover:bg-gray-700">{category.category} {expandedCategories.includes(category.category) ? <ChevronUp size={16}/> : <ChevronDown size={16}/>}</h3>
+                {expandedCategories.includes(category.category) && category.items.map(item => (
+                     <li key={item.id}>
+                         {item.action ? (
+                             <button onClick={item.action} className="w-full flex items-center px-4 py-3 text-gray-500 dark:text-gray-300 hover:bg-indigo-50 dark:hover:bg-gray-700 hover:text-indigo-600 dark:hover:text-white transition-colors duration-200">
+                                 <item.icon className="h-5 w-5" />
+                                 <span className="ml-4">{item.label}</span>
+                             </button>
+                         ) : (
+                            <NavLink to={item.path} onClick={() => setIsNavOpen(false)} className={({ isActive }) => `w-full flex items-center px-4 py-3 transition-colors duration-200 ${isActive ? 'bg-indigo-50 text-indigo-600 dark:bg-gray-900 dark:text-white font-semibold' : 'text-gray-500 dark:text-gray-300 hover:bg-indigo-50 dark:hover:bg-gray-700 hover:text-indigo-600 dark:hover:text-white'}`}>
+                                <item.icon className="h-5 w-5" />
+                                <span className="ml-4">{item.label}</span>
+                            </NavLink>
+                         )}
+                    </li>
+                ))}
+            </div>
+        ))}
+    </ul>
+    <div className="p-4 border-t border-gray-200 dark:border-gray-700">
+        <div className="flex items-center justify-between mb-4">
+            <div><p className="font-semibold">{user.username}</p><p className="text-sm text-gray-500">{user.role}</p></div>
+             <div className="flex items-center">
+                <Tooltip text="Zmień hasło"><button onClick={() => setIsPasswordModalOpen(true)} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600"><KeyRound className="h-6 w-6 text-gray-500" /></button></Tooltip>
+                <Tooltip text="Wyloguj"><button onClick={handleLogout} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600"><LogOut className="h-6 w-6 text-gray-500" /></button></Tooltip>
+             </div>
+        </div>
+        <Tooltip text="Zmień motyw"><button onClick={() => setIsDarkMode(!isDarkMode)} className="w-full flex justify-center p-2 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600">{isDarkMode ? <Sun className="h-6 w-6 text-yellow-400" /> : <Moon className="h-6 w-6 text-indigo-500" />}</button></Tooltip>
+    </div>
+</nav>
                 <main className="flex-1 flex flex-col overflow-hidden">
                     <div className="lg:hidden ...">
                         <button onClick={() => setIsNavOpen(!isNavOpen)}><Menu /></button>
