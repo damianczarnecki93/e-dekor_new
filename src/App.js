@@ -2642,7 +2642,7 @@ const KanbanColumn = ({ status, column, tasks, expandedTasks, onToggleExpand, on
 const KanbanView = ({ user }) => {
     const [tasks, setTasks] = useState([]);
     const [users, setUsers] = useState([]);
-    const [selectedUserId, setSelectedUserId] = useState(user.id);
+    const [selectedUserId, setSelectedUserId] = useState(user?.id);
     const [isLoading, setIsLoading] = useState(true);
     const [modalState, setModalState] = useState({ isOpen: false, task: null });
     const { showNotification } = useNotification();
@@ -2660,12 +2660,12 @@ const KanbanView = ({ user }) => {
     const fetchTasks = useCallback(async () => {
         setIsLoading(true);
         try {
-            const userIdToFetch = user.role === 'administrator' ? (selectedUserId === 'all' ? '' : selectedUserId) : user.id;
+            const userIdToFetch = user?.role === 'administrator' ? (selectedUserId === 'all' ? '' : selectedUserId) : user?.id;
             const data = await api.getKanbanTasks(userIdToFetch);
             setTasks(data);
         } catch (error) { showNotification(error.message, 'error'); } 
         finally { setIsLoading(false); }
-    }, [user.role, user.id, selectedUserId, showNotification]);
+    }, [user?.role, user?.id, selectedUserId, showNotification]);
 
     useEffect(() => { fetchUsers(); fetchTasks(); }, [fetchUsers, fetchTasks]);
 
