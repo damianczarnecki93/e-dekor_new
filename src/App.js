@@ -3782,20 +3782,18 @@ function App() {
     }, [isDarkMode]);
 
     const handleLogout = useCallback(() => {
-        localStorage.removeItem('userToken');
-        localStorage.removeItem('userData');
-        setUser(null);
-        setIsLoading(false);
-        setActiveView({ view: 'dashboard', params: {} });
-    }, []);
+    localStorage.removeItem('userToken');
+    localStorage.removeItem('userData');
+    setUser(null);
+    setIsLoading(false);
+}, []);
 
     const handleLogin = useCallback((data) => {
-        localStorage.setItem('userToken', data.token);
-        localStorage.setItem('userData', JSON.stringify(data.user));
-        setUser(data.user);
-        setIsLoading(false);
-        setActiveView({ view: 'dashboard', params: {} });
-    }, []);
+    localStorage.setItem('userToken', data.token);
+    localStorage.setItem('userData', JSON.stringify(data.user));
+    setUser(data.user);
+    setIsLoading(false);
+}, []);
 
     const handleNavigate = (view, params = {}) => {
         if (isDirty) {
@@ -3911,28 +3909,6 @@ const availableNav = useMemo(() => {
         })
     })).filter(category => category.items.length > 0);
 }, [user, navConfig]);
-
-    const renderView = () => {
-        const { view, params } = activeView;
-        switch (view) {
-            case 'dashboard': return <DashboardView user={user} onNavigate={handleNavigate} onUpdateUser={updateUserData}/>;
-            case 'search': return <MainSearchView />;
-            case 'order': return <OrderView currentOrder={currentOrder} setCurrentOrder={setCurrentOrder} user={user} setDirty={setIsDirty} />;
-            case 'orders': return <OrdersListView onEdit={loadOrderForEditing} />;
-            case 'picking': return <PickingView />;
-            case 'inventory': return <InventoryView user={user} onNavigate={handleNavigate} isDirty={isDirty} setIsDirty={setIsDirty} />;
-            case 'inventory-sheet': return <NewInventorySheet user={user} onSave={() => handleNavigate('inventory')} inventoryId={params.inventoryId} setDirty={setIsDirty} />;
-            case 'kanban': return <KanbanView user={user} />;
-            case 'delegations': return <DelegationsView user={user} onNavigate={handleNavigate} setCurrentOrder={setCurrentOrder} />;
-            case 'admin': return <AdminView user={user} onNavigate={handleNavigate} />;
-            case 'admin-users': return <AdminUsersView user={user} />;
-			case 'admin-products': return <AdminProductsView />;
-			case 'shortage-report': return <ShortageReportView />; // <-- Dodaj tę linię
-			case 'admin-email': return <AdminEmailConfigView />; // <-- DODAJ TĘ LINIĘ
-			default: return <DashboardView user={user} onNavigate={handleNavigate} onUpdateUser={updateUserData}/>;
-
-        }
-    };
 
     return (
     <>
