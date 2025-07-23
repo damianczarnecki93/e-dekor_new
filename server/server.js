@@ -9,23 +9,21 @@ const { Readable } = require('stream');
 const csv = require('csv-parser');
 const iconv = require('iconv-lite');
 const fs = require('fs');
-const path = require('path');
+const path = require('path'); // Ważne, aby mieć 'path'
 const nodemailer = require('nodemailer');
 const axios = require('axios');
 
 const app = express();
 const corsOptions = {
-  origin: '*', // Pozwala na żądania z dowolnego źródła
+  origin: '*',
   methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
   credentials: true,
   optionsSuccessStatus: 204
 };
 app.use(cors(corsOptions));
-app.options('*', cors(corsOptions)); // Umożliwia obsługę zapytań preflight (OPTIONS)
+app.options('*', cors(corsOptions));
 
 app.use(express.json());
-// Serwowanie statycznych plików z aplikacji React
-app.use(express.static(path.join(__dirname, '..', 'build')));
 
 // --- Konfiguracja i połączenie z bazą danych ---
 const dbUrl = process.env.DATABASE_URL;
@@ -274,6 +272,8 @@ async function geocodeAddress(address) {
         return null;
     }
 }
+
+
 
 app.post('/api/orders/:id/process-completion', authMiddleware, async (req, res) => {
     try {
@@ -1459,8 +1459,19 @@ app.post('/api/delegations/:id/visits/:clientIndex/end', authMiddleware, async (
     }
 });
 
+const buildPath = path.join(__dirname, '..', 'build');
+console.log(`[SERVER] Ścieżka do folderu build: ${buildPath}`);
+
 app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, '..', 'build', 'index.html'));
+  const indexPath = path.join(buildPath, 'index.html');
+  console.log(`[SERVER] Próba wysłania pliku: ${indexPath}`);
+  
+  res.sendFile(indexPath, (err) => {
+    if (err) {
+      console.error('[SERVER] Błąd podczas wysyłania pliku index.html:', err);
+      res.status(500).send("Błąd serwera podczas próby załadowania aplikacji.");
+    }
+  });
 });
 
 // --- Start serwera ---

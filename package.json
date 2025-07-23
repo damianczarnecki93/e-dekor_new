@@ -1,15 +1,13 @@
 {
-  "name": "e-dekor-app",
+  "name": "e-dekor-final",
   "version": "1.0.0",
-  "description": "Full-stack E-Dekor Application",
   "main": "server/server.js",
   "scripts": {
     "start": "node server/server.js",
-    "build": "react-scripts build",
-    "test": "react-scripts test"
+    "build": "react-scripts build"
   },
   "dependencies": {
-    "@react-google-maps/api": "^2.19.3",
+"@react-google-maps/api": "^2.19.3",
     "axios": "^1.7.2",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
@@ -29,22 +27,11 @@
     "react-router-dom": "^6.25.1",
     "react-scripts": "5.0.1"
   },
-  "eslintConfig": {
-    "extends": [
-      "react-app",
-      "react-app/jest"
-    ]
+  "engines": {
+    "node": ">=16.0.0"
   },
   "browserslist": {
-    "production": [
-      ">0.2%",
-      "not dead",
-      "not op_mini all"
-    ],
-    "development": [
-      "last 1 chrome version",
-      "last 1 firefox version",
-      "last 1 safari version"
-    ]
+    "production": [ ">0.2%", "not dead", "not op_mini all" ],
+    "development": [ "last 1 chrome version", "last 1 firefox version", "last 1 safari version" ]
   }
 }
