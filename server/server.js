@@ -11,15 +11,16 @@ const fs = require('fs');
 const path = require('path'); // Ważne, aby mieć 'path'
 const nodemailer = require('nodemailer');
 const axios = require('axios');
-const app = express();
 const cors = require('cors');
+const app = express();
 
 const corsOptions = {
-  origin: 'https://system-magazynowy-frontend.onrender.com', // Zezwalaj na żądania TYLKO z tej domeny
+  origin: 'https://system-magazynowy-frontend.onrender.com',
   methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
   credentials: true,
   optionsSuccessStatus: 204
 };
+const buildPath = path.join(__dirname, '..', 'build');
 
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions)); // Umożliwia obsługę zapytań preflight (OPTIONS)
@@ -1458,6 +1459,15 @@ app.post('/api/delegations/:id/visits/:clientIndex/end', authMiddleware, async (
     } catch (error) {
         res.status(500).json({ message: 'Błąd zakończenia wizyty' });
     }
+});
+
+app.get('*', (req, res) => {
+  res.sendFile(path.join(buildPath, 'index.html'), (err) => {
+    if (err) {
+      console.error('[SERVER] Błąd podczas wysyłania pliku index.html:', err);
+      res.status(500).send("Błąd serwera podczas próby załadowania aplikacji.");
+    }
+  });
 });
 
 app.use(express.static(buildPath));
