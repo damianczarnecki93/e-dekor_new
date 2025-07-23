@@ -4015,11 +4015,11 @@ const availableNav = useMemo(() => {
                     </Routes>
                 </div>
             </main>
-        </div>
-        <UserChangePasswordModal isOpen={isPasswordModalOpen} onClose={() => setIsPasswordModalOpen(false)} />
-    </>
-);
-
+         </div>
+            <UserChangePasswordModal isOpen={isPasswordModalOpen} onClose={() => setIsPasswordModalOpen(false)} />
+        </>
+    );
+} // <-- WAŻNE: Upewnij się, że ten nawias zamyka funkcję "App"
 
 const UserChangePasswordModal = ({ isOpen, onClose }) => {
     const [currentPassword, setCurrentPassword] = useState('');
