@@ -2123,7 +2123,7 @@ const DashboardView = ({ user, onNavigate }) => {
     const [tasks, setTasks] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const { showNotification } = useNotification();
-    const [layout, setLayout] = useState(user.dashboardLayout || []);
+    const [layout, setLayout] = useState(user?.dashboardLayout || []);
     const [isCustomizeModalOpen, setIsCustomizeModalOpen] = useState(false);
 
     const fetchDashboardData = useCallback(async () => {
