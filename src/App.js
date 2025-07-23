@@ -3805,16 +3805,6 @@ function App() {
     setIsLoading(false);
 }, []);
 
-    const handleNavigate = (view, params = {}) => {
-        if (isDirty) {
-            if (!window.confirm("Masz niezapisane zmiany. Czy na pewno chcesz opuścić tę stronę? Zmiany zostaną utracone.")) {
-                return;
-            }
-        }
-        setIsDirty(false);
-        setActiveView({ view, params });
-        setIsNavOpen(false);
-    };
 
     useEffect(() => {
         const token = localStorage.getItem('userToken');
@@ -3834,15 +3824,6 @@ function App() {
         setIsLoading(false);
     }, [handleLogout]);
     
-    const loadOrderForEditing = async (orderId) => {
-        try {
-            const order = await api.getOrderById(orderId);
-            setCurrentOrder(order);
-            handleNavigate('order');
-        } catch (error) {
-            console.error("Błąd ładowania zamówienia", error);
-        }
-    };
 
     const handleNewOrder = () => {
         if (isDirty) {

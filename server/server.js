@@ -21,6 +21,7 @@ const corsOptions = {
   optionsSuccessStatus: 204
 };
 const buildPath = path.join(__dirname, '..', 'build');
+app.use(express.static(buildPath));
 
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions)); // Umożliwia obsługę zapytań preflight (OPTIONS)
@@ -1462,17 +1463,9 @@ app.post('/api/delegations/:id/visits/:clientIndex/end', authMiddleware, async (
 });
 
 app.get('*', (req, res) => {
-  res.sendFile(path.join(buildPath, 'index.html'), (err) => {
-    if (err) {
-      console.error('[SERVER] Błąd podczas wysyłania pliku index.html:', err);
-      res.status(500).send("Błąd serwera podczas próby załadowania aplikacji.");
-    }
-  });
+res.sendFile(path.join(buildPath, 'index.html'));
 });
 
-app.use(express.static(buildPath));
-
-// --- Start serwera ---
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
     console.log(`Serwer działa na porcie ${PORT}`);
