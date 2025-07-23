@@ -9,7 +9,6 @@ import 'jspdf-autotable';
 import { GoogleMap, useLoadScript, Marker, DirectionsRenderer } from '@react-google-maps/api';
 
 // --- Komponent Granicy Błędu (Error Boundary) ---
-
 class ErrorBoundary extends React.Component {
     constructor(props) {
         super(props);
@@ -55,7 +54,6 @@ class ErrorBoundary extends React.Component {
 }
 
 // --- Kontekst Powiadomień ---
-
 const NotificationContext = createContext();
 const NotificationProvider = ({ children }) => {
     const [notification, setNotification] = useState(null);
@@ -3761,8 +3759,6 @@ function App() {
     const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
     const [isNavOpen, setIsNavOpen] = useState(false);
     const [expandedCategories, setExpandedCategories] = useState(['Główne']);
-    
-    // KROK 3: Używamy hooka useNavigate do programowej nawigacji
     const navigate = useNavigate();
 
     const updateUserData = (newUserData) => {
@@ -4019,7 +4015,7 @@ const availableNav = useMemo(() => {
             <UserChangePasswordModal isOpen={isPasswordModalOpen} onClose={() => setIsPasswordModalOpen(false)} />
         </>
     );
-} // <-- WAŻNE: Upewnij się, że ten nawias zamyka funkcję "App"
+}
 
 const UserChangePasswordModal = ({ isOpen, onClose }) => {
     const [currentPassword, setCurrentPassword] = useState('');
