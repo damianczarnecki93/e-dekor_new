@@ -2,11 +2,11 @@
   "name": "e-dekor-frontend",
   "version": "1.0.0",
   "private": true,
-  "scripts": {
-    "start": "react-scripts start",
-    "build": "react-scripts build",
-    "test": "react-scripts test"
-  },
+"scripts": {
+  "start": "react-scripts start",
+  "build": "react-scripts build",
+  "test": "react-scripts test"
+},
   "dependencies": {
     "@react-google-maps/api": "^2.19.3",
     "axios": "^1.7.2",
