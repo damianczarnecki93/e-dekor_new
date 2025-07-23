@@ -3943,83 +3943,82 @@ const availableNav = useMemo(() => {
     };
 
     return (
-        <>
- <nav className={`w-64 bg-white dark:bg-gray-800 shadow-xl flex flex-col transition-transform duration-300 ease-in-out fixed top-0 left-0 h-full z-40 ${isNavOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}>
-    <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-center">
-        <img src="/logo.png" onError={(e) => { e.currentTarget.src = 'https://placehold.co/150x50/4f46e5/ffffff?text=Logo'; }} alt="Logo" className="h-10" />
-    </div>
-    <ul className="flex-grow overflow-y-auto">
-        {availableNav.map(category => (
-            <div key={category.category} className="my-2">
-                <h3 onClick={() => toggleCategory(category.category)} className="px-4 py-2 text-xs font-bold text-gray-400 uppercase cursor-pointer flex justify-between items-center hover:bg-gray-50 dark:hover:bg-gray-700">{category.category} {expandedCategories.includes(category.category) ? <ChevronUp size={16}/> : <ChevronDown size={16}/>}</h3>
-                {expandedCategories.includes(category.category) && category.items.map(item => (
-                     <li key={item.id}>
-                         {item.action ? (
-                             <button onClick={item.action} className="w-full flex items-center px-4 py-3 text-gray-500 dark:text-gray-300 hover:bg-indigo-50 dark:hover:bg-gray-700 hover:text-indigo-600 dark:hover:text-white transition-colors duration-200">
-                                 <item.icon className="h-5 w-5" />
-                                 <span className="ml-4">{item.label}</span>
-                             </button>
-                         ) : (
-                            <NavLink to={item.path} onClick={() => setIsNavOpen(false)} className={({ isActive }) => `w-full flex items-center px-4 py-3 transition-colors duration-200 ${isActive ? 'bg-indigo-50 text-indigo-600 dark:bg-gray-900 dark:text-white font-semibold' : 'text-gray-500 dark:text-gray-300 hover:bg-indigo-50 dark:hover:bg-gray-700 hover:text-indigo-600 dark:hover:text-white'}`}>
-                                <item.icon className="h-5 w-5" />
-                                <span className="ml-4">{item.label}</span>
-                            </NavLink>
-                         )}
-                    </li>
-                ))}
-            </div>
-        ))}
-    </ul>
-    <div className="p-4 border-t border-gray-200 dark:border-gray-700">
-        <div className="flex items-center justify-between mb-4">
-            <div><p className="font-semibold">{user.username}</p><p className="text-sm text-gray-500">{user.role}</p></div>
-             <div className="flex items-center">
-                <Tooltip text="Zmień hasło"><button onClick={() => setIsPasswordModalOpen(true)} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600"><KeyRound className="h-6 w-6 text-gray-500" /></button></Tooltip>
-                <Tooltip text="Wyloguj"><button onClick={handleLogout} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600"><LogOut className="h-6 w-6 text-gray-500" /></button></Tooltip>
-             </div>
-        </div>
-        <Tooltip text="Zmień motyw"><button onClick={() => setIsDarkMode(!isDarkMode)} className="w-full flex justify-center p-2 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600">{isDarkMode ? <Sun className="h-6 w-6 text-yellow-400" /> : <Moon className="h-6 w-6 text-indigo-500" />}</button></Tooltip>
-    </div>
-</nav>
-                <main className="flex-1 flex flex-col overflow-hidden">
-                    <div className="lg:hidden ...">
-                        <button onClick={() => setIsNavOpen(!isNavOpen)}><Menu /></button>
+    <>
+        <div className="flex h-screen bg-gray-100 dark:bg-gray-900">
+            <nav className={`w-64 bg-white dark:bg-gray-800 shadow-xl flex flex-col transition-transform duration-300 ease-in-out fixed top-0 left-0 h-full z-40 ${isNavOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}>
+                <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-center">
+                    <img src="/logo.png" onError={(e) => { e.currentTarget.src = 'https://placehold.co/150x50/4f46e5/ffffff?text=Logo'; }} alt="Logo" className="h-10" />
+                </div>
+                <ul className="flex-grow overflow-y-auto">
+                    {availableNav.map(category => (
+                        <div key={category.category} className="my-2">
+                            <h3 onClick={() => toggleCategory(category.category)} className="px-4 py-2 text-xs font-bold text-gray-400 uppercase cursor-pointer flex justify-between items-center hover:bg-gray-50 dark:hover:bg-gray-700">{category.category} {expandedCategories.includes(category.category) ? <ChevronUp size={16}/> : <ChevronDown size={16}/>}</h3>
+                            {expandedCategories.includes(category.category) && category.items.map(item => (
+                                 <li key={item.id}>
+                                     {item.action ? (
+                                         <button onClick={item.action} className="w-full flex items-center px-4 py-3 text-gray-500 dark:text-gray-300 hover:bg-indigo-50 dark:hover:bg-gray-700 hover:text-indigo-600 dark:hover:text-white transition-colors duration-200">
+                                             <item.icon className="h-5 w-5" />
+                                             <span className="ml-4">{item.label}</span>
+                                         </button>
+                                     ) : (
+                                        <NavLink to={item.path} onClick={() => setIsNavOpen(false)} className={({ isActive }) => `w-full flex items-center px-4 py-3 transition-colors duration-200 ${isActive ? 'bg-indigo-50 text-indigo-600 dark:bg-gray-900 dark:text-white font-semibold' : 'text-gray-500 dark:text-gray-300 hover:bg-indigo-50 dark:hover:bg-gray-700 hover:text-indigo-600 dark:hover:text-white'}`}>
+                                            <item.icon className="h-5 w-5" />
+                                            <span className="ml-4">{item.label}</span>
+                                        </NavLink>
+                                     )}
+                                </li>
+                            ))}
+                        </div>
+                    ))}
+                </ul>
+                <div className="p-4 border-t border-gray-200 dark:border-gray-700">
+                    <div className="flex items-center justify-between mb-4">
+                        <div><p className="font-semibold">{user.username}</p><p className="text-sm text-gray-500">{user.role}</p></div>
+                         <div className="flex items-center">
+                            <Tooltip text="Zmień hasło"><button onClick={() => setIsPasswordModalOpen(true)} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600"><KeyRound className="h-6 w-6 text-gray-500" /></button></Tooltip>
+                            <Tooltip text="Wyloguj"><button onClick={handleLogout} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600"><LogOut className="h-6 w-6 text-gray-500" /></button></Tooltip>
+                         </div>
                     </div>
-                    <div className="flex-1 overflow-x-hidden overflow-y-auto">
-                 {/* KROK 6: Definiujemy wszystkie ścieżki aplikacji */}
-                        <Routes>
-                            <Route path="/dashboard" element={<DashboardView user={user} onNavigate={navigate} />} />
-                            <Route path="/search" element={<MainSearchView />} />
-                            
-                            <Route path="/order/new" element={<OrderWrapper user={user} setDirty={setIsDirty} onNavigate={navigate} currentOrder={currentOrder} setCurrentOrder={setCurrentOrder} onOrderSave={() => setCurrentOrder({})} />} />
-                            <Route path="/order/:orderId" element={<OrderWrapper user={user} setDirty={setIsDirty} onNavigate={navigate} currentOrder={currentOrder} setCurrentOrder={setCurrentOrder} />} />
-                            
-                            <Route path="/orders" element={<OrdersListView onEdit={(id) => navigate(`/order/${id}`)} />} />
-                            <Route path="/picking" element={<PickingView />} />
-                            
-                            <Route path="/inventory" element={<InventoryView onNavigate={(view, params) => navigate(`/${view}`, {state: params})} />} />
-                            <Route path="/inventory-sheet" element={<InventorySheetWrapper user={user} setDirty={setIsDirty} onSave={() => navigate('/inventory')} />} />
-                            <Route path="/inventory-sheet/:inventoryId" element={<InventorySheetWrapper user={user} setDirty={setIsDirty} onSave={() => navigate('/inventory')} />} />
+                    <Tooltip text="Zmień motyw"><button onClick={() => setIsDarkMode(!isDarkMode)} className="w-full flex justify-center p-2 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600">{isDarkMode ? <Sun className="h-6 w-6 text-yellow-400" /> : <Moon className="h-6 w-6 text-indigo-500" />}</button></Tooltip>
+                </div>
+            </nav>
+            <main className="flex-1 flex flex-col overflow-hidden">
+                <div className="lg:hidden p-4 bg-white dark:bg-gray-800 border-b dark:border-gray-700">
+                    <button onClick={() => setIsNavOpen(!isNavOpen)}><Menu /></button>
+                </div>
+                <div className="flex-1 overflow-x-hidden overflow-y-auto">
+                    <Routes>
+                        <Route path="/dashboard" element={<DashboardView user={user} onNavigate={navigate} />} />
+                        <Route path="/search" element={<MainSearchView />} />
+                        
+                        <Route path="/order/new" element={<OrderWrapper user={user} setDirty={setIsDirty} onNavigate={navigate} currentOrder={currentOrder} setCurrentOrder={setCurrentOrder} onOrderSave={() => setCurrentOrder({})} />} />
+                        <Route path="/order/:orderId" element={<OrderWrapper user={user} setDirty={setIsDirty} onNavigate={navigate} currentOrder={currentOrder} setCurrentOrder={setCurrentOrder} />} />
+                        
+                        <Route path="/orders" element={<OrdersListView onEdit={(id) => navigate(`/order/${id}`)} />} />
+                        <Route path="/picking" element={<PickingView />} />
+                        
+                        <Route path="/inventory" element={<InventoryView onNavigate={(view, params) => navigate(`/${view}`, {state: params})} />} />
+                        <Route path="/inventory-sheet" element={<InventorySheetWrapper user={user} setDirty={setIsDirty} onSave={() => navigate('/inventory')} />} />
+                        <Route path="/inventory-sheet/:inventoryId" element={<InventorySheetWrapper user={user} setDirty={setIsDirty} onSave={() => navigate('/inventory')} />} />
 
-                            <Route path="/kanban" element={<KanbanView user={user} />} />
-                            <Route path="/delegations" element={<DelegationsView user={user} onNavigate={navigate} setCurrentOrder={setCurrentOrder} />} />
-                            
-                            <Route path="/admin" element={<AdminView onNavigate={(view) => navigate(`/${view}`)} />} />
-                            <Route path="/admin-users" element={<AdminUsersView user={user} />} />
-                            <Route path="/admin-products" element={<AdminProductsView />} />
-                            <Route path="/admin-email" element={<AdminEmailConfigView />} />
-                            <Route path="/shortage-report" element={<ShortageReportView />} />
-                            
-                            {/* Domyślna ścieżka */}
-                            <Route path="*" element={<DashboardView user={user} onNavigate={navigate} />} />
-                        </Routes>
-                    </div>
-                </main>
-            </div>
-            <UserChangePasswordModal isOpen={isPasswordModalOpen} onClose={() => setIsPasswordModalOpen(false)} />
-        </>
-    );
-}
+                        <Route path="/kanban" element={<KanbanView user={user} />} />
+                        <Route path="/delegations" element={<DelegationsView user={user} onNavigate={navigate} setCurrentOrder={setCurrentOrder} />} />
+                        
+                        <Route path="/admin" element={<AdminView onNavigate={(view) => navigate(`/${view}`)} />} />
+                        <Route path="/admin-users" element={<AdminUsersView user={user} />} />
+                        <Route path="/admin-products" element={<AdminProductsView />} />
+                        <Route path="/admin-email" element={<AdminEmailConfigView />} />
+                        <Route path="/shortage-report" element={<ShortageReportView />} />
+                        
+                        {/* Domyślna ścieżka */}
+                        <Route path="*" element={<DashboardView user={user} onNavigate={navigate} />} />
+                    </Routes>
+                </div>
+            </main>
+        </div>
+        <UserChangePasswordModal isOpen={isPasswordModalOpen} onClose={() => setIsPasswordModalOpen(false)} />
+    </>
+);
 
 
 const UserChangePasswordModal = ({ isOpen, onClose }) => {
@@ -4050,6 +4049,7 @@ const UserChangePasswordModal = ({ isOpen, onClose }) => {
         </Modal>
     );
 };
+
 
 const VisitRecapForm = ({ onSubmit }) => {
     const [visitNotes, setVisitNotes] = useState('');
