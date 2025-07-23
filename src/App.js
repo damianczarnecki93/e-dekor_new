@@ -57,12 +57,22 @@ class ErrorBoundary extends React.Component {
 const NotificationContext = createContext();
 const NotificationProvider = ({ children }) => {
     const [notification, setNotification] = useState(null);
-    const showNotification = (message, type = 'success') => {
+
+    // Używamy useCallback, aby funkcja nie była tworzona na nowo przy każdym renderowaniu
+    const showNotification = useCallback((message, type = 'success') => {
         setNotification({ message, type });
-        setTimeout(() => setNotification(null), 5000);
-    };
+        // Używamy funkcji zwrotnej w setTimeout, aby uniknąć problemów z zamykaniem
+        const timer = setTimeout(() => {
+            setNotification(null);
+        }, 5000);
+        return () => clearTimeout(timer);
+    }, []); // Pusta tablica zależności oznacza, że funkcja zostanie utworzona tylko raz
+
+    // Używamy useMemo, aby obiekt wartości kontekstu również był stabilny
+    const contextValue = useMemo(() => ({ showNotification }), [showNotification]);
+
     return (
-        <NotificationContext.Provider value={{ showNotification }}>
+        <NotificationContext.Provider value={contextValue}>
             {children}
             {notification && (
                 <div className={`fixed top-5 right-5 z-[100] p-4 rounded-lg shadow-lg text-white animate-fade-in-out ${notification.type === 'success' ? 'bg-green-500' : 'bg-red-500'}`}>
