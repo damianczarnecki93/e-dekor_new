@@ -3898,23 +3898,19 @@ const navConfig = useMemo(() => [
 
 
 const availableNav = useMemo(() => {
-        if (!user) return [];
-        return navConfig.map(category => ({
-            ...category,
-            items: category.items.filter(item => 
-                item.roles.includes(user.role) && (item.alwaysVisible || user.visibleModules?.includes(item.id))
-            )
-        })).filter(category => category.items.length > 0);
-    }, [user, navConfig]);
-
-    // Widok dla niezalogowanego użytkownika
-    if (!user) {
-        return (
-            <Routes>
-                <Route path="*" element={<AuthPage onLogin={handleLogin} />} />
-            </Routes>
-        );
-    }
+    if (!user) return [];
+    return navConfig.map(category => ({
+        ...category,
+        items: category.items.filter(item => {
+            // Jeśli użytkownik jest administratorem, pomiń sprawdzanie `visibleModules`
+            if (user.role === 'administrator') {
+                return item.roles.includes('administrator');
+            }
+            // Dla zwykłych użytkowników zostawiamy starą logikę
+            return item.roles.includes(user.role) && (item.alwaysVisible || user.visibleModules?.includes(item.id));
+        })
+    })).filter(category => category.items.length > 0);
+}, [user, navConfig]);
 
     const renderView = () => {
         const { view, params } = activeView;
@@ -3993,7 +3989,7 @@ const availableNav = useMemo(() => {
                         <Route path="/orders" element={<OrdersListView onEdit={(id) => navigate(`/order/${id}`)} />} />
                         <Route path="/picking" element={<PickingView />} />
                         
-                        <Route path="/inventory" element={<InventoryView onNavigate={(view, params) => navigate(`/${view}`, {state: params})} />} />
+                        <Route path="/inventory" element={<InventoryView user={user} onNavigate={(view, params) => navigate(`/${view}`, {state: params})} />} />
                         <Route path="/inventory-sheet" element={<InventorySheetWrapper user={user} setDirty={setIsDirty} onSave={() => navigate('/inventory')} />} />
                         <Route path="/inventory-sheet/:inventoryId" element={<InventorySheetWrapper user={user} setDirty={setIsDirty} onSave={() => navigate('/inventory')} />} />
 
