@@ -1,6 +1,5 @@
 require('dotenv').config();
 const express = require('express');
-const cors = require('cors');
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
@@ -12,7 +11,6 @@ const fs = require('fs');
 const path = require('path'); // Ważne, aby mieć 'path'
 const nodemailer = require('nodemailer');
 const axios = require('axios');
-
 const app = express();
 const cors = require('cors');
 
