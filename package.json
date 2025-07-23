@@ -1,10 +1,9 @@
 {
-  "name": "e-dekor-app",
+  "name": "e-dekor-frontend",
   "version": "1.0.0",
-  "description": "Full-stack E-Dekor Application",
-  "main": "server/server.js",
+  "private": true,
   "scripts": {
-    "start": "node server/server.js",
+    "start": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test"
   },
@@ -30,9 +29,6 @@
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.25.1",
     "react-scripts": "5.0.1"
-  },
-  "engines": {
-    "node": ">=16.0.0"
   },
   "browserslist": {
     "production": [
