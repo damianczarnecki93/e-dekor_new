@@ -8,27 +8,26 @@ const { Readable } = require('stream');
 const csv = require('csv-parser');
 const iconv = require('iconv-lite');
 const fs = require('fs');
-const path = require('path'); // Ważne, aby mieć 'path'
+const path = require('path');
 const nodemailer = require('nodemailer');
 const axios = require('axios');
 const cors = require('cors');
+
 const app = express();
 
+// --- Konfiguracja CORS ---
 const corsOptions = {
   origin: 'https://system-magazynowy-frontend.onrender.com',
   methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
   credentials: true,
   optionsSuccessStatus: 204
 };
-const buildPath = path.join(__dirname, '..', 'build');
-app.use(express.static(buildPath));
-
 app.use(cors(corsOptions));
-app.options('*', cors(corsOptions)); // Umożliwia obsługę zapytań preflight (OPTIONS)
+app.options('*', cors(corsOptions));
 
 app.use(express.json());
 
-// --- Konfiguracja i połączenie z bazą danych ---
+// --- Połączenie z bazą danych ---
 const dbUrl = process.env.DATABASE_URL;
 const jwtSecret = process.env.JWT_SECRET || 'domyslny-sekret-jwt-zmien-to-w-produkcji';
 
@@ -39,7 +38,10 @@ if (!dbUrl) {
 
 mongoose.connect(dbUrl)
     .then(() => console.log('Połączono z MongoDB Atlas!'))
-    .catch(err => console.error('Błąd połączenia z MongoDB:', err));
+    .catch(err => {
+        console.error('Błąd połączenia z MongoDB:', err);
+        process.exit(1); // Zakończ proces, jeśli nie można połączyć się z bazą
+    });
 
 // --- Definicje schematów i modeli ---
 
@@ -1461,9 +1463,15 @@ app.post('/api/delegations/:id/visits/:clientIndex/end', authMiddleware, async (
         res.status(500).json({ message: 'Błąd zakończenia wizyty' });
     }
 });
-
+const buildPath = path.join(__dirname, '..', 'build');
+app.use(express.static(buildPath));
 app.get('*', (req, res) => {
-res.sendFile(path.join(buildPath, 'index.html'));
+  res.sendFile(path.join(buildPath, 'index.html'), (err) => {
+    if (err) {
+      console.error('[SERVER] Błąd podczas wysyłania pliku index.html:', err);
+      res.status(500).send("Błąd serwera podczas próby załadowania aplikacji.");
+    }
+  });
 });
 
 const PORT = process.env.PORT || 3001;
