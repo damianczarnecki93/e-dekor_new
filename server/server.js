@@ -12,6 +12,20 @@ const path = require('path');
 const nodemailer = require('nodemailer');
 const axios = require('axios');
 const app = express();
+
+// Dodajemy middleware do parsowania JSON
+app.use(express.json());
+
+// Middleware do logowania wszystkich przychodzących zapytań
+app.use((req, res, next) => {
+  console.log('--- Nowe Zapytanie ---');
+  console.log('Czas:', new Date().toISOString());
+  console.log('Metoda:', req.method);
+  console.log('URL:', req.originalUrl);
+  console.log('Nagłówki:', req.headers);
+  next();
+});
+
 const cors = require('cors');
 
 app.use(cors({
@@ -35,6 +49,8 @@ mongoose.connect(dbUrl)
         console.error('Błąd połączenia z MongoDB:', err);
         process.exit(1); // Zakończ proces, jeśli nie można połączyć się z bazą
     });
+
+
 
 // --- Definicje schematów i modeli ---
 
