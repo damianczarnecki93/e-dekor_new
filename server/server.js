@@ -3,6 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
+const cookieParser = require('cookie-parser');
 const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const { Readable } = require('stream');
@@ -18,6 +19,7 @@ app.set('trust proxy', 1);
 // Middleware
 app.use(cors());
 app.use(express.json());
+app.use(cookieParser()); // Dodaj tę linię
 
 // Twoje logowanie (opcjonalne, ale przydatne)
 app.use((req, res, next) => {
@@ -166,12 +168,12 @@ const EmailConfig = mongoose.models.EmailConfig || mongoose.model('EmailConfig',
 
 // --- Middleware ---
 const authMiddleware = (req, res, next) => {
-    const authHeader = req.headers.authorization; // Wracamy do standardowego nagłówka
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    const token = req.cookies.token; // Odczytujemy token z ciasteczka
+
+    if (!token) {
         return res.status(401).json({ message: 'Brak tokenu, autoryzacja odrzucona.' });
     }
     try {
-        const token = authHeader.split(' ')[1];
         const decoded = jwt.verify(token, jwtSecret);
         req.user = decoded;
         next();
@@ -354,7 +356,14 @@ app.post('/api/login', async (req, res) => {
         if (!isMatch) return res.status(401).json({ message: 'Nieprawidłowe dane logowania.' });
         const token = jwt.sign({ userId: user._id, role: user.role, username: user.username }, jwtSecret, { expiresIn: '1d' });
         // UPEWNIJ SIĘ, ŻE ZWRACASZ TUTAJ `visibleModules`
-        res.json({ token, user: { id: user._id, username: user.username, role: user.role, salesGoal: user.salesGoal, manualSales: user.manualSales, visibleModules: user.visibleModules, dashboardLayout: user.dashboardLayout } });
+        res.cookie('token', token, {
+    httpOnly: true,
+    secure: true, // Ważne dla HTTPS na Render.com
+    sameSite: 'strict',
+    maxAge: 24 * 60 * 60 * 1000 // Ciasteczko ważne 1 dzień
+});
+
+res.json({ user: { id: user._id, username: user.username, role: user.role, salesGoal: user.salesGoal, manualSales: user.manualSales, visibleModules: user.visibleModules, dashboardLayout: user.dashboardLayout } });
     } catch (error) {
         res.status(500).json({ message: 'Błąd serwera podczas logowania.', error: error.message });
     }
@@ -549,6 +558,8 @@ app.post('/api/admin/users/:id/password', authMiddleware, adminMiddleware, async
     }
 });
 
+
+
 app.delete('/api/admin/users/:id', authMiddleware, adminMiddleware, async (req, res) => {
     try {
         if (req.params.id === req.user.userId) {
@@ -564,6 +575,11 @@ app.delete('/api/admin/users/:id', authMiddleware, adminMiddleware, async (req, 
 
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
+
+app.post('/api/logout', (req, res) => {
+    res.clearCookie('token');
+    res.status(200).json({ message: 'Wylogowano pomyślnie.' });
+});
 
 app.post('/api/admin/upload-products', authMiddleware, adminMiddleware, upload.single('productsFile'), async (req, res) => {
     if (!req.file) return res.status(400).json({ message: 'Nie przesłano pliku.' });

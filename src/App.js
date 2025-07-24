@@ -124,17 +124,15 @@ const useSortableData = (items, config = null) => {
 const API_BASE_URL = '';
 
 const fetchWithAuth = async (url, options = {}) => {
-    const token = localStorage.getItem('userToken');
     const headers = { ...options.headers };
-	if (token) headers['Authorization'] = `Bearer ${token}`;
-    if (!(options.body instanceof FormData)) headers['Content-Type'] = 'application/json';
-    
-    const response = await fetch(url, { ...options, headers });
+    if (!(options.body instanceof FormData)) {
+        headers['Content-Type'] = 'application/json';
+    }
 
-if (response.status === 401) {
-        localStorage.removeItem('userToken');
-        localStorage.removeItem('userData');
-        window.location.hash = '/login';
+    const response = await fetch(url, { ...options, headers }); // Nagłówek Authorization jest już niepotrzebny
+
+    if (response.status === 401) {
+        localStorage.removeItem('userData'); // Usuwamy tylko dane użytkownika
         window.location.reload();
         throw new Error('Sesja wygasła. Proszę zalogować się ponownie.');
     }
@@ -3791,26 +3789,24 @@ function App() {
         }
     }, [isDarkMode]);
 
-     const handleLogout = useCallback(() => {
-        localStorage.removeItem('userToken');
+const handleLogout = useCallback(async () => {
+    try {
+        await fetch('/api/logout', { method: 'POST' }); // Wywołujemy endpoint wylogowania
+    } catch (error) {
+        console.error('Błąd podczas wylogowywania:', error);
+    } finally {
         localStorage.removeItem('userData');
         setUser(null);
         setIsLoading(false);
-        navigate('/login'); // Dodaj tę linię
-    }, [navigate]); // Dodaj navigate do zależności
-
-    const handleLogin = useCallback((data) => {
-    localStorage.setItem('userToken', data.token);
-    localStorage.setItem('userData', JSON.stringify(data.user));
-    setUser(data.user);
-    setIsLoading(false);
+        setActiveView({ view: 'dashboard', params: {} });
+    }
 }, []);
 
 
     useEffect(() => {
         const token = localStorage.getItem('userToken');
         const userData = localStorage.getItem('userData');
-        if (token && userData) {
+        if (userData) {
             try {
                 const userObj = JSON.parse(userData);
                 if (userObj && userObj.id) {
