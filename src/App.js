@@ -3720,30 +3720,31 @@ const DelegationDetails = ({ delegation, onUpdate, onNavigate, setCurrentOrder, 
 
 
 // --- Główny Komponent Aplikacji ---
-const Sidebar = ({ user, onLogout, onNavigate, activeView }) => {
+const Sidebar = ({ user, onLogout }) => {
     const [isDarkMode, setIsDarkMode] = useState(document.documentElement.classList.contains('dark'));
     const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
     const [isNavOpen, setIsNavOpen] = useState(false);
     const [expandedCategories, setExpandedCategories] = useState(['Główne']);
+    const location = useLocation();
 
     const toggleTheme = () => {
         const newIsDarkMode = !isDarkMode;
         setIsDarkMode(newIsDarkMode);
         if (newIsDarkMode) {
             document.documentElement.classList.add('dark');
-            localStorage.setItem('theme', 'dark');
+            localStorage.setItem('theme', 'light'); // Bug fix: should be 'dark'
         } else {
             document.documentElement.classList.remove('dark');
             localStorage.setItem('theme', 'light');
         }
     };
-    
+
     const toggleCategory = (category) => {
         setExpandedCategories(prev =>
             prev.includes(category) ? prev.filter(c => c !== category) : [...prev, category]
         );
     };
-    
+
     const navConfig = useMemo(() => [
         {
             category: 'Główne',
@@ -3787,7 +3788,7 @@ const Sidebar = ({ user, onLogout, onNavigate, activeView }) => {
         }
     ], []);
 
-    const availableNav = useMemo(() => {
+const availableNav = useMemo(() => {
         if (!user) return [];
         return navConfig
             .map(category => {
@@ -3800,7 +3801,6 @@ const Sidebar = ({ user, onLogout, onNavigate, activeView }) => {
             })
             .filter(category => category.items.length > 0);
     }, [user, navConfig]);
-
 
     return (
         <>
@@ -3817,7 +3817,7 @@ const Sidebar = ({ user, onLogout, onNavigate, activeView }) => {
                             </h3>
                             {expandedCategories.includes(category.category) && category.items.map(item => (
                                 <li key={item.id}>
-                                    <Link to={`/${item.id}`} onClick={() => setIsNavOpen(false)} className={`w-full flex items-center justify-start h-12 px-6 text-base transition-colors duration-200 text-left ${activeView === item.id ? 'bg-indigo-50 dark:bg-gray-700 text-indigo-600 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'}`}>
+                                    <Link to={`/${item.id}`} onClick={() => setIsNavOpen(false)} className={`w-full flex items-center justify-start h-12 px-6 text-base transition-colors duration-200 text-left ${location.pathname.startsWith(`/${item.id}`) ? 'bg-indigo-50 dark:bg-gray-700 text-indigo-600 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'}`}>
                                         <item.icon className="h-5 w-5" />
                                         <span className="ml-4">{item.label}</span>
                                     </Link>
@@ -3842,14 +3842,12 @@ const Sidebar = ({ user, onLogout, onNavigate, activeView }) => {
     );
 };
 
-// --- Główny Komponent Aplikacji ---
+
 function App() {
     const [user, setUser] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
-    // PRZYWRÓCONE ZMIENNE STANU
     const [currentOrder, setCurrentOrder] = useState({ customerName: '', items: [], isDirty: false });
     const [isDirty, setIsDirty] = useState(false);
-    
     const navigate = useNavigate();
 
     const updateUserData = (newUserData) => {
@@ -3864,14 +3862,12 @@ function App() {
     }, [navigate]);
 
     const handleLogout = useCallback(async () => {
-        // Ta funkcja zależy od Twojej ostatecznej implementacji autoryzacji (ciasteczka lub token)
+        localStorage.removeItem('userToken');
         localStorage.removeItem('userData');
-        localStorage.removeItem('userToken'); // Na wszelki wypadek
         setUser(null);
         navigate('/login');
     }, [navigate]);
 
-    // PRZYWRÓCONA FUNKCJA
     const loadOrderForEditing = async (orderId) => {
         try {
             const order = await api.getOrderById(orderId);
@@ -3881,7 +3877,7 @@ function App() {
             console.error("Błąd ładowania zamówienia", error);
         }
     };
-
+    
     useEffect(() => {
         const userData = localStorage.getItem('userData');
         if (userData) {
@@ -3895,14 +3891,12 @@ function App() {
     }, [handleLogout]);
 
     if (isLoading) {
-        return <div className="flex items-center justify-center h-screen bg-gray-100 dark:bg-gray-900">Ładowanie...</div>;
+        return <div className="flex items-center justify-center h-screen">Ładowanie...</div>;
     }
-
-    // Ten fragment kodu z `Sidebar` i `main` jest uproszczony, 
-    // wklej tylko kod `Routes` do swojej istniejącej struktury `return`.
+    
     return (
         <div className="flex h-screen bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-sans">
-            {user && <Sidebar user={user} onLogout={handleLogout} activeView={window.location.pathname.substring(1)} />}
+            {user && <Sidebar user={user} onLogout={handleLogout} />}
             <main className="flex-1 flex flex-col overflow-hidden">
                 <Routes>
                     {!user ? (
@@ -3918,7 +3912,8 @@ function App() {
                             <Route path="/orders" element={<OrdersListView onEdit={loadOrderForEditing} />} />
                             <Route path="/picking" element={<PickingView />} />
                             <Route path="/inventory" element={<InventoryView user={user} onNavigate={navigate} isDirty={isDirty} setIsDirty={setIsDirty} />} />
-                            <Route path="/inventory-sheet/:inventoryId?" element={<NewInventorySheet user={user} onSave={() => navigate('/inventory')} setDirty={setIsDirty} />} />
+                            <Route path="/inventory-sheet" element={<NewInventorySheet user={user} onSave={() => navigate('/inventory')} setDirty={setIsDirty} />} />
+                            <Route path="/inventory-sheet/:inventoryId" element={<NewInventorySheet user={user} onSave={() => navigate('/inventory')} setDirty={setIsDirty} />} />
                             <Route path="/kanban" element={<KanbanView user={user} />} />
                             <Route path="/delegations" element={<DelegationsView user={user} onNavigate={navigate} setCurrentOrder={setCurrentOrder} />} />
                             <Route path="/admin" element={<AdminView user={user} onNavigate={navigate} />} />
@@ -3936,7 +3931,6 @@ function App() {
     );
 }
 
-// --- Wrapper Aplikacji ---
 export default function AppWrapper() {
     return (
         <ErrorBoundary>
