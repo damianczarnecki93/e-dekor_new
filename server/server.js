@@ -1,5 +1,6 @@
 require('dotenv').config();
 const express = require('express');
+const cors = require('cors');
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
@@ -12,17 +13,19 @@ const path = require('path');
 const nodemailer = require('nodemailer');
 const axios = require('axios');
 const app = express();
-app.set('trust proxy', 1); 
+app.set('trust proxy', 1);
+
+// Middleware
 app.use(cors());
 app.use(express.json());
+
+// Twoje logowanie (opcjonalne, ale przydatne)
 app.use((req, res, next) => {
   console.log('--- Nowe Zapytanie ---');
   console.log('URL:', req.originalUrl);
   console.log('Nagłówki:', req.headers);
   next();
 });
-const cors = require('cors');
-
 
 // --- Połączenie z bazą danych ---
 const dbUrl = process.env.DATABASE_URL;
