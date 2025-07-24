@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, createContext, useContext, useCallback } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, Link } from 'react-router-dom';
 import { Search, List, Wrench, Sun, Moon, LogOut, FileDown, FileText, Printer, Save, CheckCircle, AlertTriangle, Upload, Trash2, XCircle, UserPlus, KeyRound, PlusCircle, MessageSquare, Archive, Edit, Home, Menu, Filter, RotateCcw, FileUp, GitMerge, Eye, Trophy, Crown, BarChart2, Users, Package, StickyNote, Settings, ChevronsUpDown, ChevronUp, ChevronDown, ClipboardList, Plane, ListChecks, Mail, Zap, ClipboardCheck } from 'lucide-react';
-import { BrowserRouter, Routes, Route, NavLink, useNavigate, useParams, useLocation } from 'react-router-dom';
 import { format, parseISO, eachDayOfInterval, isValid } from 'date-fns';
 import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 import { pl } from 'date-fns/locale';
@@ -9,6 +9,7 @@ import 'jspdf-autotable';
 import { GoogleMap, useLoadScript, Marker, DirectionsRenderer } from '@react-google-maps/api';
 
 // --- Komponent Granicy Błędu (Error Boundary) ---
+
 class ErrorBoundary extends React.Component {
     constructor(props) {
         super(props);
@@ -54,25 +55,16 @@ class ErrorBoundary extends React.Component {
 }
 
 // --- Kontekst Powiadomień ---
+
 const NotificationContext = createContext();
 const NotificationProvider = ({ children }) => {
     const [notification, setNotification] = useState(null);
-
-    // Używamy useCallback, aby funkcja nie była tworzona na nowo przy każdym renderowaniu
-    const showNotification = useCallback((message, type = 'success') => {
+    const showNotification = (message, type = 'success') => {
         setNotification({ message, type });
-        // Używamy funkcji zwrotnej w setTimeout, aby uniknąć problemów z zamykaniem
-        const timer = setTimeout(() => {
-            setNotification(null);
-        }, 5000);
-        return () => clearTimeout(timer);
-    }, []); // Pusta tablica zależności oznacza, że funkcja zostanie utworzona tylko raz
-
-    // Używamy useMemo, aby obiekt wartości kontekstu również był stabilny
-    const contextValue = useMemo(() => ({ showNotification }), [showNotification]);
-
+        setTimeout(() => setNotification(null), 5000);
+    };
     return (
-        <NotificationContext.Provider value={contextValue}>
+        <NotificationContext.Provider value={{ showNotification }}>
             {children}
             {notification && (
                 <div className={`fixed top-5 right-5 z-[100] p-4 rounded-lg shadow-lg text-white animate-fade-in-out ${notification.type === 'success' ? 'bg-green-500' : 'bg-red-500'}`}>
@@ -121,18 +113,20 @@ const useSortableData = (items, config = null) => {
 
 
 // --- API Client ---
-const API_BASE_URL = '';
+const API_BASE_URL = 'https://dekor.onrender.com';
 
 const fetchWithAuth = async (url, options = {}) => {
+    const token = localStorage.getItem('userToken');
     const headers = { ...options.headers };
-    if (!(options.body instanceof FormData)) {
-        headers['Content-Type'] = 'application/json';
-    }
-
-    const response = await fetch(url, { ...options, headers }); // Nagłówek Authorization jest już niepotrzebny
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    if (!(options.body instanceof FormData)) headers['Content-Type'] = 'application/json';
+    
+    const response = await fetch(url, { ...options, headers });
 
     if (response.status === 401) {
-        localStorage.removeItem('userData'); // Usuwamy tylko dane użytkownika
+        localStorage.removeItem('userToken');
+        localStorage.removeItem('userData');
+        window.location.hash = '/login';
         window.location.reload();
         throw new Error('Sesja wygasła. Proszę zalogować się ponownie.');
     }
@@ -1890,7 +1884,7 @@ const AdminUsersView = ({ user }) => {
                             <tr key={u._id}>
                                 <td className="p-4 font-medium">{u.username}<br/><span className={`text-xs font-semibold rounded-full capitalize ${u.status === 'oczekujący' ? 'text-yellow-500' : 'text-green-500'}`}>{u.status}</span></td>
                                 <td className="p-4">
-                                    <select value={u.role} onChange={(e) => handleRoleChange(u._id, e.target.value)} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-600 dark:border-gray-500 dark:placeholder-gray-400 dark:text-white" disabled={user?.id === u._id}><option value="user">Użytkownik</option><option value="administrator">Administrator</option></select>
+                                    <select value={u.role} onChange={(e) => handleRoleChange(u._id, e.target.value)} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-600 dark:border-gray-500 dark:placeholder-gray-400 dark:text-white" disabled={user.id === u._id}><option value="user">Użytkownik</option><option value="administrator">Administrator</option></select>
                                 </td>
                                 <td className="p-4">
                                     <div className="flex flex-wrap gap-2">
@@ -1911,7 +1905,7 @@ const AdminUsersView = ({ user }) => {
                                 <td className="p-4 text-right whitespace-nowrap">
                                     {u.status === 'oczekujący' && (<button onClick={() => handleApproveUser(u._id)} className="px-3 py-1 bg-green-500 text-white text-sm font-semibold rounded-lg hover:bg-green-600 mr-2">Akceptuj</button>)}
                                     <Tooltip text="Zmień hasło"><button onClick={() => setModalState({ isOpen: true, user: u, type: 'password' })} className="p-2 text-gray-500 hover:text-blue-500"><KeyRound className="w-5 h-5" /></button></Tooltip>
-                                    {user?.id !== u._id && (<Tooltip text="Usuń użytkownika"><button onClick={() => setModalState({ isOpen: true, user: u, type: 'delete' })} className="p-2 text-gray-500 hover:text-red-500"><Trash2 className="w-5 h-5" /></button></Tooltip>)}
+                                    {user.id !== u._id && (<Tooltip text="Usuń użytkownika"><button onClick={() => setModalState({ isOpen: true, user: u, type: 'delete' })} className="p-2 text-gray-500 hover:text-red-500"><Trash2 className="w-5 h-5" /></button></Tooltip>)}
                                 </td>
                             </tr>
                         ))}
@@ -2131,7 +2125,7 @@ const DashboardView = ({ user, onNavigate }) => {
     const [tasks, setTasks] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const { showNotification } = useNotification();
-    const [layout, setLayout] = useState(user?.dashboardLayout || []);
+    const [layout, setLayout] = useState(user.dashboardLayout || []);
     const [isCustomizeModalOpen, setIsCustomizeModalOpen] = useState(false);
 
     const fetchDashboardData = useCallback(async () => {
@@ -2148,7 +2142,7 @@ const DashboardView = ({ user, onNavigate }) => {
         } finally {
             setIsLoading(false);
         }
-}, [user?.id, showNotification]);
+    }, [user.id, showNotification]);
 
     useEffect(() => {
         fetchDashboardData();
@@ -2650,7 +2644,7 @@ const KanbanColumn = ({ status, column, tasks, expandedTasks, onToggleExpand, on
 const KanbanView = ({ user }) => {
     const [tasks, setTasks] = useState([]);
     const [users, setUsers] = useState([]);
-    const [selectedUserId, setSelectedUserId] = useState(user?.id);
+    const [selectedUserId, setSelectedUserId] = useState(user.id);
     const [isLoading, setIsLoading] = useState(true);
     const [modalState, setModalState] = useState({ isOpen: false, task: null });
     const { showNotification } = useNotification();
@@ -2668,12 +2662,12 @@ const KanbanView = ({ user }) => {
     const fetchTasks = useCallback(async () => {
         setIsLoading(true);
         try {
-            const userIdToFetch = user?.role === 'administrator' ? (selectedUserId === 'all' ? '' : selectedUserId) : user?.id;
+            const userIdToFetch = user.role === 'administrator' ? (selectedUserId === 'all' ? '' : selectedUserId) : user.id;
             const data = await api.getKanbanTasks(userIdToFetch);
             setTasks(data);
         } catch (error) { showNotification(error.message, 'error'); } 
         finally { setIsLoading(false); }
-    }, [user?.role, user?.id, selectedUserId, showNotification]);
+    }, [user.role, user.id, selectedUserId, showNotification]);
 
     useEffect(() => { fetchUsers(); fetchTasks(); }, [fetchUsers, fetchTasks]);
 
@@ -3324,7 +3318,7 @@ return (
                                         <Tooltip text="Odrzuć"><button onClick={() => handleStatusUpdate(d._id, 'Odrzucona')} className="p-2 text-red-500 hover:text-red-700"><XCircle className="w-5 h-5"/></button></Tooltip>
                                     </>
                                 )}
-                                {(user?.id === d.authorId || user?.role === 'administrator') && (
+                                {(user.id === d.authorId || user.role === 'administrator') && (
                                     <Tooltip text="Usuń"><button onClick={() => handleDelete(d._id)} className="p-2 text-gray-500 hover:text-red-500"><Trash2 className="w-5 h-5"/></button></Tooltip>
                                 )}
                             </td>
@@ -3726,48 +3720,14 @@ const DelegationDetails = ({ delegation, onUpdate, onNavigate, setCurrentOrder, 
 
 
 // --- Główny Komponent Aplikacji ---
-    const OrderWrapper = ({ user, setDirty, onNavigate, currentOrder, setCurrentOrder, onOrderSave }) => {
-    const { orderId } = useParams(); // Pobiera ID z URL, np. /order/60f...
-    const navigate = useNavigate();
-
-    useEffect(() => {
-        const loadOrder = async () => {
-            try {
-                const orderData = await api.getOrderById(orderId);
-                setCurrentOrder(orderData);
-            } catch (error) {
-                console.error("Błąd ładowania zamówienia do edycji", error);
-                navigate('/orders'); // Przekieruj jeśli błąd
-            }
-        };
-
-        if (orderId) { // Jeśli jest ID w URL, ładujemy istniejące zamówienie
-            loadOrder();
-        } else { // W przeciwnym razie, to nowe zamówienie
-            setCurrentOrder({ customerName: '', items: [], isDirty: false });
-        }
-    }, [orderId, setCurrentOrder, navigate]);
-
-    return <OrderView user={user} setDirty={setDirty} onNavigate={onNavigate} currentOrder={currentOrder} setCurrentOrder={setCurrentOrder} onOrderSave={onOrderSave} />;
-};
-
-const InventorySheetWrapper = ({ user, setDirty, onSave }) => {
-    const { inventoryId } = useParams();
-    return <NewInventorySheet user={user} setDirty={setDirty} onSave={onSave} inventoryId={inventoryId} />;
-};
-
-
-// --- Główny Komponent Aplikacji ---
 function App() {
-    const [user, setUser] = useState(null);
-    const [currentOrder, setCurrentOrder] = useState({ customerName: '', items: [], isDirty: false });
+	const [user, setUser] = useState(null);
+    const [isLoading, setIsLoading] = useState(true);
     const [isDirty, setIsDirty] = useState(false);
     const [isDarkMode, setIsDarkMode] = useState(false);
-    const [isLoading, setIsLoading] = useState(true);
     const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
     const [isNavOpen, setIsNavOpen] = useState(false);
     const [expandedCategories, setExpandedCategories] = useState(['Główne']);
-    const navigate = useNavigate();
 
     const updateUserData = (newUserData) => {
         setUser(newUserData);
@@ -3788,25 +3748,89 @@ function App() {
             localStorage.setItem('theme', 'light');
         }
     }, [isDarkMode]);
+	
+	const navigate = useNavigate(); // Hook do nawigacji
 
-const handleLogout = useCallback(async () => {
-    try {
-        await fetch('/api/logout', { method: 'POST' }); // Wywołujemy endpoint wylogowania
-    } catch (error) {
-        console.error('Błąd podczas wylogowywania:', error);
-    } finally {
-        localStorage.removeItem('userData');
-        setUser(null);
+    const handleLogin = useCallback((data) => {
+        localStorage.setItem('userData', JSON.stringify(data.user));
+        setUser(data.user);
+        navigate('/dashboard'); // Przekieruj po zalogowaniu
+    }, [navigate]);
+
+    const handleLogout = useCallback(async () => {
+        try {
+            await fetch(`${API_BASE_URL}/api/logout`, { method: 'POST', credentials: 'include' });
+        } catch (error) {
+            console.error('Błąd podczas wylogowywania:', error);
+        } finally {
+            localStorage.removeItem('userData');
+            setUser(null);
+            navigate('/login'); // Przekieruj po wylogowaniu
+        }
+    }, [navigate]);
+
+    useEffect(() => {
+        const userData = localStorage.getItem('userData');
+        if (userData) {
+            try {
+                const userObj = JSON.parse(userData);
+                if (userObj && userObj.id) {
+                    setUser(userObj);
+                }
+            } catch (e) {
+                localStorage.removeItem('userData');
+            }
+        }
         setIsLoading(false);
-        setActiveView({ view: 'dashboard', params: {} });
-    }
-}, []);
+    }, []);
 
+    if (isLoading) {
+        return <div className="flex items-center justify-center h-screen">Ładowanie...</div>;
+    }
+
+    return (
+        <div className="flex h-screen bg-gray-100 dark:bg-gray-900">
+            {user && (
+                <Sidebar user={user} onLogout={handleLogout} /> // Komponent Sidebar (nawigacja)
+            )}
+            <main className="flex-1 flex flex-col overflow-hidden">
+                <Routes>
+                    {!user ? (
+                        <>
+                            <Route path="/login" element={<AuthPage onLogin={handleLogin} />} />
+                            <Route path="*" element={<Navigate to="/login" />} />
+                        </>
+                    ) : (
+                        <>
+                            <Route path="/dashboard" element={<DashboardView user={user} />} />
+                            <Route path="/search" element={<MainSearchView />} />
+                            {/* Dodaj tutaj resztę swoich ścieżek/komponentów */}
+                            {/* Przykład: <Route path="/orders" element={<OrdersListView />} /> */}
+
+                            <Route path="*" element={<Navigate to="/dashboard" />} />
+                        </>
+                    )}
+                </Routes>
+            </main>
+        </div>
+    );
+}
+
+    const handleNavigate = (view, params = {}) => {
+        if (isDirty) {
+            if (!window.confirm("Masz niezapisane zmiany. Czy na pewno chcesz opuścić tę stronę? Zmiany zostaną utracone.")) {
+                return;
+            }
+        }
+        setIsDirty(false);
+        setActiveView({ view, params });
+        setIsNavOpen(false);
+    };
 
     useEffect(() => {
         const token = localStorage.getItem('userToken');
         const userData = localStorage.getItem('userData');
-        if (userData) {
+        if (token && userData) {
             try {
                 const userObj = JSON.parse(userData);
                 if (userObj && userObj.id) {
@@ -3820,7 +3844,18 @@ const handleLogout = useCallback(async () => {
         }
         setIsLoading(false);
     }, [handleLogout]);
+	
+	
     
+    const loadOrderForEditing = async (orderId) => {
+        try {
+            const order = await api.getOrderById(orderId);
+            setCurrentOrder(order);
+            handleNavigate('order');
+        } catch (error) {
+            console.error("Błąd ładowania zamówienia", error);
+        }
+    };
 
     const handleNewOrder = () => {
         if (isDirty) {
@@ -3839,143 +3874,147 @@ const handleLogout = useCallback(async () => {
         );
     };
 
-const navConfig = useMemo(() => [
+    const navConfig = useMemo(() => [
         {
             category: 'Główne',
             items: [
-                { id: 'dashboard', path: '/dashboard', label: 'Panel Główny', icon: Home, roles: ['user', 'administrator'], alwaysVisible: true },
-                { id: 'search', path: '/search', label: 'Wyszukiwarka', icon: Search, roles: ['user', 'administrator'] },
+                { id: 'dashboard', label: 'Panel Główny', icon: Home, roles: ['user', 'administrator'], alwaysVisible: true },
+                { id: 'search', label: 'Wyszukiwarka', icon: Search, roles: ['user', 'administrator'] },
             ]
         },
         {
             category: 'Sprzedaż',
             items: [
-                { id: 'order', path: '/order/new', label: 'Nowe Zamówienie', icon: PlusCircle, roles: ['user', 'administrator'], action: handleNewOrder },
-                { id: 'orders', path: '/orders', label: 'Zamówienia', icon: Archive, roles: ['user', 'administrator'] },
+                { id: 'order', label: 'Nowe Zamówienie', icon: PlusCircle, roles: ['user', 'administrator'], action: handleNewOrder },
+                { id: 'orders', label: 'Zamówienia', icon: Archive, roles: ['user', 'administrator'] },
             ]
         },
         {
             category: 'Magazyn',
             items: [
-                { id: 'picking', path: '/picking', label: 'Kompletacja', icon: List, roles: ['user', 'administrator'] },
-                { id: 'inventory', path: '/inventory', label: 'Inwentaryzacja', icon: Wrench, roles: ['user', 'administrator'] },
+                { id: 'picking', label: 'Kompletacja', icon: List, roles: ['user', 'administrator'] },
+                { id: 'inventory', label: 'Inwentaryzacja', icon: Wrench, roles: ['user', 'administrator'] },
             ]
         },
         {
             category: 'Organizacyjne',
             items: [
-                { id: 'kanban', path: '/kanban', label: 'Tablica Zadań', icon: ClipboardList, roles: ['user', 'administrator'] },
-                { id: 'delegations', path: '/delegations', label: 'Delegacje', icon: Plane, roles: ['user', 'administrator'] },
+                { id: 'kanban', label: 'Tablica Zadań', icon: ClipboardList, roles: ['user', 'administrator'] },
+                { id: 'delegations', label: 'Delegacje', icon: Plane, roles: ['user', 'administrator'] },
             ]
         },
 		{
             category: 'Raporty',
             items: [
-                 { id: 'shortage-report', path: '/shortage-report', label: 'Raport Braków', icon: ClipboardCheck, roles: ['user', 'administrator'] },
+                 // --- POCZĄTEK POPRAWKI ---
+                 { id: 'shortage-report', label: 'Raport Braków', icon: ClipboardCheck, roles: ['user', 'administrator'] },
+                 // --- KONIEC POPRAWKI ---
             ]
         },
         {
             category: 'Administracja',
             items: [
-                 { id: 'admin', path: '/admin', label: 'Panel Admina', icon: Settings, roles: ['administrator'] },
+                 { id: 'admin', label: 'Panel Admina', icon: Settings, roles: ['administrator'] },
+				 
+				 
             ]
         }
     ], [handleNewOrder]);
 
+    const availableNav = useMemo(() => {
+        if (!user) return [];
+        return navConfig
+            .map(category => {
+                const visibleItems = category.items.filter(item => {
+                    if (!item.roles.includes(user.role)) {
+                        return false;
+                    }
+                    if (user.role === 'administrator') {
+                        return true;
+                    }
+                    return item.alwaysVisible || user.visibleModules?.includes(item.id);
+                });
+                return { ...category, items: visibleItems };
+            })
+            .filter(category => category.items.length > 0);
+    }, [user, navConfig]);
+    
 
-const availableNav = useMemo(() => {
-    if (!user) return [];
-    return navConfig.map(category => ({
-        ...category,
-        items: category.items.filter(item => {
-            // Jeśli użytkownik jest administratorem, pomiń sprawdzanie `visibleModules`
-            if (user.role === 'administrator') {
-                return item.roles.includes('administrator');
-            }
-            // Dla zwykłych użytkowników zostawiamy starą logikę
-            return item.roles.includes(user.role) && (item.alwaysVisible || user.visibleModules?.includes(item.id));
-        })
-    })).filter(category => category.items.length > 0);
-}, [user, navConfig]);
+    if (isLoading) { return <div className="flex items-center justify-center h-screen bg-gray-100 dark:bg-gray-900">Ładowanie...</div> }
+    if (!user) { return <AuthPage onLogin={handleLogin} />; }
+
+    const renderView = () => {
+        const { view, params } = activeView;
+        switch (view) {
+            case 'dashboard': return <DashboardView user={user} onNavigate={handleNavigate} onUpdateUser={updateUserData}/>;
+            case 'search': return <MainSearchView />;
+            case 'order': return <OrderView currentOrder={currentOrder} setCurrentOrder={setCurrentOrder} user={user} setDirty={setIsDirty} />;
+            case 'orders': return <OrdersListView onEdit={loadOrderForEditing} />;
+            case 'picking': return <PickingView />;
+            case 'inventory': return <InventoryView user={user} onNavigate={handleNavigate} isDirty={isDirty} setIsDirty={setIsDirty} />;
+            case 'inventory-sheet': return <NewInventorySheet user={user} onSave={() => handleNavigate('inventory')} inventoryId={params.inventoryId} setDirty={setIsDirty} />;
+            case 'kanban': return <KanbanView user={user} />;
+            case 'delegations': return <DelegationsView user={user} onNavigate={handleNavigate} setCurrentOrder={setCurrentOrder} />;
+            case 'admin': return <AdminView user={user} onNavigate={handleNavigate} />;
+            case 'admin-users': return <AdminUsersView user={user} />;
+			case 'admin-products': return <AdminProductsView />;
+			case 'shortage-report': return <ShortageReportView />; // <-- Dodaj tę linię
+			case 'admin-products': return <AdminProductsView />;
+			case 'admin-email': return <AdminEmailConfigView />; // <-- DODAJ TĘ LINIĘ
+			default: return <DashboardView user={user} onNavigate={handleNavigate} onUpdateUser={updateUserData}/>;
+
+        }
+    };
 
     return (
-    <>
-        <div className="flex h-screen bg-gray-100 dark:bg-gray-900">
-            <nav className={`w-64 bg-white dark:bg-gray-800 shadow-xl flex flex-col transition-transform duration-300 ease-in-out fixed top-0 left-0 h-full z-40 ${isNavOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}>
-                <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-center">
-                    <img src="/logo.png" onError={(e) => { e.currentTarget.src = 'https://placehold.co/150x50/4f46e5/ffffff?text=Logo'; }} alt="Logo" className="h-10" />
-                </div>
-                <ul className="flex-grow overflow-y-auto">
-                    {availableNav.map(category => (
-                        <div key={category.category} className="my-2">
-                            <h3 onClick={() => toggleCategory(category.category)} className="px-4 py-2 text-xs font-bold text-gray-400 uppercase cursor-pointer flex justify-between items-center hover:bg-gray-50 dark:hover:bg-gray-700">{category.category} {expandedCategories.includes(category.category) ? <ChevronUp size={16}/> : <ChevronDown size={16}/>}</h3>
-                            {expandedCategories.includes(category.category) && category.items.map(item => (
-                                 <li key={item.id}>
-                                     {item.action ? (
-                                         <button onClick={item.action} className="w-full flex items-center px-4 py-3 text-gray-500 dark:text-gray-300 hover:bg-indigo-50 dark:hover:bg-gray-700 hover:text-indigo-600 dark:hover:text-white transition-colors duration-200">
-                                             <item.icon className="h-5 w-5" />
-                                             <span className="ml-4">{item.label}</span>
-                                         </button>
-                                     ) : (
-                                        <NavLink to={item.path} onClick={() => setIsNavOpen(false)} className={({ isActive }) => `w-full flex items-center px-4 py-3 transition-colors duration-200 ${isActive ? 'bg-indigo-50 text-indigo-600 dark:bg-gray-900 dark:text-white font-semibold' : 'text-gray-500 dark:text-gray-300 hover:bg-indigo-50 dark:hover:bg-gray-700 hover:text-indigo-600 dark:hover:text-white'}`}>
+        <>
+            <div className="flex h-screen bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-sans">
+                <nav className={`w-64 bg-white dark:bg-gray-800 shadow-lg flex flex-col flex-shrink-0 transition-transform duration-300 ease-in-out z-40 fixed lg:static h-full ${isNavOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}>
+                    <div className="flex items-center justify-center h-20 border-b border-gray-200 dark:border-gray-700">
+                         <img src={isDarkMode ? "/logo-dark.png" : "/logo.png"} onError={(e) => { e.currentTarget.src = 'https://placehold.co/120x40/4f46e5/ffffff?text=Logo'; }} alt="Dekor-Art-Serwis" loading="lazy" className="h-10" />
+                    </div>
+                    <ul className="flex-grow overflow-y-auto">
+                        {availableNav.map(category => (
+                            <div key={category.category} className="my-2">
+                                <h3 onClick={() => toggleCategory(category.category)} className="px-6 mt-4 mb-2 text-xs font-semibold text-gray-400 uppercase flex justify-between items-center cursor-pointer">
+                                    {category.category}
+                                    {expandedCategories.includes(category.category) ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                                </h3>
+                                {expandedCategories.includes(category.category) && category.items.map(item => (
+                                     <li key={item.id}>
+                                        <button onClick={() => { item.action ? item.action() : handleNavigate(item.id); }} className={`w-full flex items-center justify-start h-12 px-6 text-base transition-colors duration-200 text-left ${activeView.view.startsWith(item.id) ? 'bg-indigo-50 dark:bg-gray-700 text-indigo-600 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'}`}>
                                             <item.icon className="h-5 w-5" />
                                             <span className="ml-4">{item.label}</span>
-                                        </NavLink>
-                                     )}
-                                </li>
-                            ))}
+                                        </button>
+                                    </li>
+                                ))}
+                            </div>
+                        ))}
+                    </ul>
+                    <div className="p-4 border-t border-gray-200 dark:border-gray-700">
+                        <div className="flex items-center justify-between mb-4">
+                            <div><p className="font-semibold">{user.username}</p><p className="text-sm text-gray-500">{user.role}</p></div>
+                             <div className="flex items-center">
+                                <Tooltip text="Zmień hasło"><button onClick={() => setIsPasswordModalOpen(true)} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600"><KeyRound className="h-6 w-6 text-gray-500" /></button></Tooltip>
+                                <Tooltip text="Wyloguj"><button onClick={handleLogout} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600"><LogOut className="h-6 w-6 text-gray-500" /></button></Tooltip>
+                             </div>
                         </div>
-                    ))}
-                </ul>
-                <div className="p-4 border-t border-gray-200 dark:border-gray-700">
-                    <div className="flex items-center justify-between mb-4">
-                        <div><p className="font-semibold">{user?.username}</p><p className="text-sm text-gray-500">{user?.role}</p></div>
-                         <div className="flex items-center">
-                            <Tooltip text="Zmień hasło"><button onClick={() => setIsPasswordModalOpen(true)} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600"><KeyRound className="h-6 w-6 text-gray-500" /></button></Tooltip>
-                            <Tooltip text="Wyloguj"><button onClick={handleLogout} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600"><LogOut className="h-6 w-6 text-gray-500" /></button></Tooltip>
-                         </div>
+                        <Tooltip text="Zmień motyw"><button onClick={() => setIsDarkMode(!isDarkMode)} className="w-full flex justify-center p-2 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600">{isDarkMode ? <Sun className="h-6 w-6 text-yellow-400" /> : <Moon className="h-6 w-6 text-indigo-500" />}</button></Tooltip>
                     </div>
-                    <Tooltip text="Zmień motyw"><button onClick={() => setIsDarkMode(!isDarkMode)} className="w-full flex justify-center p-2 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600">{isDarkMode ? <Sun className="h-6 w-6 text-yellow-400" /> : <Moon className="h-6 w-6 text-indigo-500" />}</button></Tooltip>
-                </div>
-            </nav>
-			<main className="flex-1 flex flex-col overflow-hidden lg:ml-64">
-                <div className="lg:hidden p-4 bg-white dark:bg-gray-800 border-b dark:border-gray-700">
-                    <button onClick={() => setIsNavOpen(!isNavOpen)}><Menu /></button>
-                </div>
-                <div className="flex-1 overflow-x-hidden overflow-y-auto">
-                    <Routes>
-                        <Route path="/dashboard" element={<DashboardView user={user} onNavigate={navigate} />} />
-                        <Route path="/search" element={<MainSearchView />} />
-                        
-                        <Route path="/order/new" element={<OrderWrapper user={user} setDirty={setIsDirty} onNavigate={navigate} currentOrder={currentOrder} setCurrentOrder={setCurrentOrder} onOrderSave={() => setCurrentOrder({})} />} />
-                        <Route path="/order/:orderId" element={<OrderWrapper user={user} setDirty={setIsDirty} onNavigate={navigate} currentOrder={currentOrder} setCurrentOrder={setCurrentOrder} />} />
-                        
-                        <Route path="/orders" element={<OrdersListView onEdit={(id) => navigate(`/order/${id}`)} />} />
-                        <Route path="/picking" element={<PickingView />} />
-                        
-                        <Route path="/inventory" element={<InventoryView user={user} onNavigate={(view, params) => navigate(`/${view}`, {state: params})} />} />
-                        <Route path="/inventory-sheet" element={<InventorySheetWrapper user={user} setDirty={setIsDirty} onSave={() => navigate('/inventory')} />} />
-                        <Route path="/inventory-sheet/:inventoryId" element={<InventorySheetWrapper user={user} setDirty={setIsDirty} onSave={() => navigate('/inventory')} />} />
-
-                        <Route path="/kanban" element={<KanbanView user={user} />} />
-                        <Route path="/delegations" element={<DelegationsView user={user} onNavigate={navigate} setCurrentOrder={setCurrentOrder} />} />
-                        
-                        <Route path="/admin" element={<AdminView onNavigate={(view) => navigate(`/${view}`)} />} />
-                        <Route path="/admin-users" element={<AdminUsersView user={user} />} />
-                        <Route path="/admin-products" element={<AdminProductsView />} />
-                        <Route path="/admin-email" element={<AdminEmailConfigView />} />
-                        <Route path="/shortage-report" element={<ShortageReportView />} />
-                        
-                        {/* Domyślna ścieżka */}
-                        <Route path="*" element={<DashboardView user={user} onNavigate={navigate} />} />
-                    </Routes>
-                </div>
-            </main>
-         </div>
+                </nav>
+                <main className="flex-1 flex flex-col overflow-hidden">
+                    <div className="lg:hidden p-2 bg-white dark:bg-gray-800 border-b dark:border-gray-700 flex justify-between items-center">
+                        <button onClick={() => setIsNavOpen(!isNavOpen)} className="p-2 rounded-md"><Menu className="w-6 w-6" /></button>
+                        <span className="font-semibold">{navConfig.flatMap(c => c.items).find(item => item.id === activeView.view)?.label}</span>
+                    </div>
+                    <div className="flex-1 overflow-x-hidden overflow-y-auto">{renderView()}</div>
+                </main>
+            </div>
             <UserChangePasswordModal isOpen={isPasswordModalOpen} onClose={() => setIsPasswordModalOpen(false)} />
         </>
     );
 }
+
 
 const UserChangePasswordModal = ({ isOpen, onClose }) => {
     const [currentPassword, setCurrentPassword] = useState('');
@@ -4005,7 +4044,6 @@ const UserChangePasswordModal = ({ isOpen, onClose }) => {
         </Modal>
     );
 };
-
 
 const VisitRecapForm = ({ onSubmit }) => {
     const [visitNotes, setVisitNotes] = useState('');
@@ -4038,9 +4076,9 @@ export default function AppWrapper() {
     return (
         <ErrorBoundary>
             <NotificationProvider>
-                <BrowserRouter>
+                <Router>
                     <App />
-                </BrowserRouter>
+                </Router>
             </NotificationProvider>
         </ErrorBoundary>
     );
