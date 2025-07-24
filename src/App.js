@@ -121,7 +121,7 @@ const useSortableData = (items, config = null) => {
 
 
 // --- API Client ---
-const API_BASE_URL = 'https://dekor.onrender.com';
+const API_BASE_URL = '';
 
 const fetchWithAuth = async (url, options = {}) => {
     const token = localStorage.getItem('userToken');
