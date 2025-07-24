@@ -12,25 +12,15 @@ const path = require('path');
 const nodemailer = require('nodemailer');
 const axios = require('axios');
 const app = express();
+// --- Konfiguracja CORS ---
 const cors = require('cors');
 
-const allowedOrigins = [
-  'https://system-magazynowy-frontend.onrender.com',
-  'https://dekor.onrender.com'
-];
-
-const corsOptions = {
-  origin: function (origin, callback) {
-    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
+app.use(cors({
+  origin: '*', // Zezwól na żądania z dowolnego źródła
   methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
   credentials: true,
   optionsSuccessStatus: 204
-};
+}));
 
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
