@@ -131,9 +131,11 @@ const fetchWithAuth = async (url, options = {}) => {
     
     const response = await fetch(url, { ...options, headers });
 
-  if (response.status === 401) {
-        // Ta funkcja jest zdefiniowana w komponencie App
-        handleLogout(); 
+if (response.status === 401) {
+        localStorage.removeItem('userToken');
+        localStorage.removeItem('userData');
+        window.location.hash = '/login';
+        window.location.reload();
         throw new Error('Sesja wygasła. Proszę zalogować się ponownie.');
     }
     return response;

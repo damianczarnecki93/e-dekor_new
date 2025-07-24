@@ -21,15 +21,19 @@ const allowedOrigins = [
     'https://dekor.onrender.com'
 ];
 
+// --- Konfiguracja CORS ---
+const allowedOrigins = [
+    'https://system-magazynowy-frontend.onrender.com',
+    'https://dekor.onrender.com'
+];
+
 const corsOptions = {
   origin: function (origin, callback) {
-    // Zezwalaj na zapytania bez 'origin' (np. z aplikacji mobilnych lub Postmana)
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.indexOf(origin) === -1) {
-      const msg = 'Polityka CORS dla tej strony nie zezwala na dostęp z podanego źródła.';
-      return callback(new Error(msg), false);
+    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
     }
-    return callback(null, true);
   },
   methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
   credentials: true,
@@ -37,7 +41,7 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
-app.options('*', cors(corsOptions)); // Upewnij się, że ta linia pozostaje
+app.options('*', cors(corsOptions));
 
 // --- Połączenie z bazą danych ---
 const dbUrl = process.env.DATABASE_URL;
