@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, createContext, useContext, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, createContext, useContext, useMemo, useRef } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, Link } from 'react-router-dom';
 import { Search, List, Wrench, Sun, Moon, LogOut, FileDown, FileText, Printer, Save, CheckCircle, AlertTriangle, Upload, Trash2, XCircle, UserPlus, KeyRound, PlusCircle, MessageSquare, Archive, Edit, Home, Menu, Filter, RotateCcw, FileUp, GitMerge, Eye, Trophy, Crown, BarChart2, Users, Package, StickyNote, Settings, ChevronsUpDown, ChevronUp, ChevronDown, ClipboardList, Plane, ListChecks, Mail, Zap, ClipboardCheck } from 'lucide-react';
 import { format, parseISO, eachDayOfInterval, isValid } from 'date-fns';
@@ -3720,160 +3720,30 @@ const DelegationDetails = ({ delegation, onUpdate, onNavigate, setCurrentOrder, 
 
 
 // --- Główny Komponent Aplikacji ---
-function App() {
-	const [user, setUser] = useState(null);
-    const [isLoading, setIsLoading] = useState(true);
-    const [isDirty, setIsDirty] = useState(false);
-    const [isDarkMode, setIsDarkMode] = useState(false);
+const Sidebar = ({ user, onLogout, onNavigate, activeView }) => {
+    const [isDarkMode, setIsDarkMode] = useState(document.documentElement.classList.contains('dark'));
     const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
     const [isNavOpen, setIsNavOpen] = useState(false);
     const [expandedCategories, setExpandedCategories] = useState(['Główne']);
 
-    const updateUserData = (newUserData) => {
-        setUser(newUserData);
-        localStorage.setItem('userData', JSON.stringify(newUserData));
-    };
-
-    useEffect(() => {
-        const savedTheme = localStorage.getItem('theme');
-        if (savedTheme === 'dark') setIsDarkMode(true);
-    }, []);
-
-    useEffect(() => {
-        if (isDarkMode) {
+    const toggleTheme = () => {
+        const newIsDarkMode = !isDarkMode;
+        setIsDarkMode(newIsDarkMode);
+        if (newIsDarkMode) {
             document.documentElement.classList.add('dark');
             localStorage.setItem('theme', 'dark');
         } else {
             document.documentElement.classList.remove('dark');
             localStorage.setItem('theme', 'light');
         }
-    }, [isDarkMode]);
-	
-	const navigate = useNavigate(); // Hook do nawigacji
-
-    const handleLogin = useCallback((data) => {
-        localStorage.setItem('userData', JSON.stringify(data.user));
-        setUser(data.user);
-        navigate('/dashboard'); // Przekieruj po zalogowaniu
-    }, [navigate]);
-
-    const handleLogout = useCallback(async () => {
-        try {
-            await fetch(`${API_BASE_URL}/api/logout`, { method: 'POST', credentials: 'include' });
-        } catch (error) {
-            console.error('Błąd podczas wylogowywania:', error);
-        } finally {
-            localStorage.removeItem('userData');
-            setUser(null);
-            navigate('/login'); // Przekieruj po wylogowaniu
-        }
-    }, [navigate]);
-
-    useEffect(() => {
-        const userData = localStorage.getItem('userData');
-        if (userData) {
-            try {
-                const userObj = JSON.parse(userData);
-                if (userObj && userObj.id) {
-                    setUser(userObj);
-                }
-            } catch (e) {
-                localStorage.removeItem('userData');
-            }
-        }
-        setIsLoading(false);
-    }, []);
-
-    if (isLoading) {
-        return <div className="flex items-center justify-center h-screen">Ładowanie...</div>;
-    }
-
-    return (
-        <div className="flex h-screen bg-gray-100 dark:bg-gray-900">
-            {user && (
-                <Sidebar user={user} onLogout={handleLogout} /> // Komponent Sidebar (nawigacja)
-            )}
-            <main className="flex-1 flex flex-col overflow-hidden">
-                <Routes>
-                    {!user ? (
-                        <>
-                            <Route path="/login" element={<AuthPage onLogin={handleLogin} />} />
-                            <Route path="*" element={<Navigate to="/login" />} />
-                        </>
-                    ) : (
-                        <>
-                            <Route path="/dashboard" element={<DashboardView user={user} />} />
-                            <Route path="/search" element={<MainSearchView />} />
-                            {/* Dodaj tutaj resztę swoich ścieżek/komponentów */}
-                            {/* Przykład: <Route path="/orders" element={<OrdersListView />} /> */}
-
-                            <Route path="*" element={<Navigate to="/dashboard" />} />
-                        </>
-                    )}
-                </Routes>
-            </main>
-        </div>
-    );
-}
-
-    const handleNavigate = (view, params = {}) => {
-        if (isDirty) {
-            if (!window.confirm("Masz niezapisane zmiany. Czy na pewno chcesz opuścić tę stronę? Zmiany zostaną utracone.")) {
-                return;
-            }
-        }
-        setIsDirty(false);
-        setActiveView({ view, params });
-        setIsNavOpen(false);
-    };
-
-    useEffect(() => {
-        const token = localStorage.getItem('userToken');
-        const userData = localStorage.getItem('userData');
-        if (token && userData) {
-            try {
-                const userObj = JSON.parse(userData);
-                if (userObj && userObj.id) {
-                    setUser(userObj);
-                } else {
-                    handleLogout();
-                }
-            } catch (e) {
-                handleLogout();
-            }
-        }
-        setIsLoading(false);
-    }, [handleLogout]);
-	
-	
-    
-    const loadOrderForEditing = async (orderId) => {
-        try {
-            const order = await api.getOrderById(orderId);
-            setCurrentOrder(order);
-            handleNavigate('order');
-        } catch (error) {
-            console.error("Błąd ładowania zamówienia", error);
-        }
-    };
-
-    const handleNewOrder = () => {
-        if (isDirty) {
-            if (!window.confirm("Masz niezapisane zmiany. Czy na pewno chcesz opuścić tę stronę? Zmiany zostaną utracone.")) {
-                return;
-            }
-        }
-        setIsDirty(false);
-        setCurrentOrder({ customerName: '', items: [], isDirty: false });
-        handleNavigate('order');
     };
     
     const toggleCategory = (category) => {
-        setExpandedCategories(prev => 
+        setExpandedCategories(prev =>
             prev.includes(category) ? prev.filter(c => c !== category) : [...prev, category]
         );
     };
-
+    
     const navConfig = useMemo(() => [
         {
             category: 'Główne',
@@ -3885,7 +3755,7 @@ function App() {
         {
             category: 'Sprzedaż',
             items: [
-                { id: 'order', label: 'Nowe Zamówienie', icon: PlusCircle, roles: ['user', 'administrator'], action: handleNewOrder },
+                { id: 'order', label: 'Nowe Zamówienie', icon: PlusCircle, roles: ['user', 'administrator'] },
                 { id: 'orders', label: 'Zamówienia', icon: Archive, roles: ['user', 'administrator'] },
             ]
         },
@@ -3906,172 +3776,149 @@ function App() {
 		{
             category: 'Raporty',
             items: [
-                 // --- POCZĄTEK POPRAWKI ---
                  { id: 'shortage-report', label: 'Raport Braków', icon: ClipboardCheck, roles: ['user', 'administrator'] },
-                 // --- KONIEC POPRAWKI ---
             ]
         },
         {
             category: 'Administracja',
             items: [
                  { id: 'admin', label: 'Panel Admina', icon: Settings, roles: ['administrator'] },
-				 
-				 
             ]
         }
-    ], [handleNewOrder]);
+    ], []);
 
     const availableNav = useMemo(() => {
         if (!user) return [];
         return navConfig
             .map(category => {
                 const visibleItems = category.items.filter(item => {
-                    if (!item.roles.includes(user.role)) {
-                        return false;
-                    }
-                    if (user.role === 'administrator') {
-                        return true;
-                    }
+                    if (!item.roles.includes(user.role)) return false;
+                    if (user.role === 'administrator') return true;
                     return item.alwaysVisible || user.visibleModules?.includes(item.id);
                 });
                 return { ...category, items: visibleItems };
             })
             .filter(category => category.items.length > 0);
     }, [user, navConfig]);
-    
 
-    if (isLoading) { return <div className="flex items-center justify-center h-screen bg-gray-100 dark:bg-gray-900">Ładowanie...</div> }
-    if (!user) { return <AuthPage onLogin={handleLogin} />; }
-
-    const renderView = () => {
-        const { view, params } = activeView;
-        switch (view) {
-            case 'dashboard': return <DashboardView user={user} onNavigate={handleNavigate} onUpdateUser={updateUserData}/>;
-            case 'search': return <MainSearchView />;
-            case 'order': return <OrderView currentOrder={currentOrder} setCurrentOrder={setCurrentOrder} user={user} setDirty={setIsDirty} />;
-            case 'orders': return <OrdersListView onEdit={loadOrderForEditing} />;
-            case 'picking': return <PickingView />;
-            case 'inventory': return <InventoryView user={user} onNavigate={handleNavigate} isDirty={isDirty} setIsDirty={setIsDirty} />;
-            case 'inventory-sheet': return <NewInventorySheet user={user} onSave={() => handleNavigate('inventory')} inventoryId={params.inventoryId} setDirty={setIsDirty} />;
-            case 'kanban': return <KanbanView user={user} />;
-            case 'delegations': return <DelegationsView user={user} onNavigate={handleNavigate} setCurrentOrder={setCurrentOrder} />;
-            case 'admin': return <AdminView user={user} onNavigate={handleNavigate} />;
-            case 'admin-users': return <AdminUsersView user={user} />;
-			case 'admin-products': return <AdminProductsView />;
-			case 'shortage-report': return <ShortageReportView />; // <-- Dodaj tę linię
-			case 'admin-products': return <AdminProductsView />;
-			case 'admin-email': return <AdminEmailConfigView />; // <-- DODAJ TĘ LINIĘ
-			default: return <DashboardView user={user} onNavigate={handleNavigate} onUpdateUser={updateUserData}/>;
-
-        }
-    };
 
     return (
         <>
-            <div className="flex h-screen bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-sans">
-                <nav className={`w-64 bg-white dark:bg-gray-800 shadow-lg flex flex-col flex-shrink-0 transition-transform duration-300 ease-in-out z-40 fixed lg:static h-full ${isNavOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}>
-                    <div className="flex items-center justify-center h-20 border-b border-gray-200 dark:border-gray-700">
-                         <img src={isDarkMode ? "/logo-dark.png" : "/logo.png"} onError={(e) => { e.currentTarget.src = 'https://placehold.co/120x40/4f46e5/ffffff?text=Logo'; }} alt="Dekor-Art-Serwis" loading="lazy" className="h-10" />
-                    </div>
-                    <ul className="flex-grow overflow-y-auto">
-                        {availableNav.map(category => (
-                            <div key={category.category} className="my-2">
-                                <h3 onClick={() => toggleCategory(category.category)} className="px-6 mt-4 mb-2 text-xs font-semibold text-gray-400 uppercase flex justify-between items-center cursor-pointer">
-                                    {category.category}
-                                    {expandedCategories.includes(category.category) ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                                </h3>
-                                {expandedCategories.includes(category.category) && category.items.map(item => (
-                                     <li key={item.id}>
-                                        <button onClick={() => { item.action ? item.action() : handleNavigate(item.id); }} className={`w-full flex items-center justify-start h-12 px-6 text-base transition-colors duration-200 text-left ${activeView.view.startsWith(item.id) ? 'bg-indigo-50 dark:bg-gray-700 text-indigo-600 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'}`}>
-                                            <item.icon className="h-5 w-5" />
-                                            <span className="ml-4">{item.label}</span>
-                                        </button>
-                                    </li>
-                                ))}
-                            </div>
-                        ))}
-                    </ul>
-                    <div className="p-4 border-t border-gray-200 dark:border-gray-700">
-                        <div className="flex items-center justify-between mb-4">
-                            <div><p className="font-semibold">{user.username}</p><p className="text-sm text-gray-500">{user.role}</p></div>
-                             <div className="flex items-center">
-                                <Tooltip text="Zmień hasło"><button onClick={() => setIsPasswordModalOpen(true)} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600"><KeyRound className="h-6 w-6 text-gray-500" /></button></Tooltip>
-                                <Tooltip text="Wyloguj"><button onClick={handleLogout} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600"><LogOut className="h-6 w-6 text-gray-500" /></button></Tooltip>
-                             </div>
+            <nav className={`w-64 bg-white dark:bg-gray-800 shadow-lg flex flex-col flex-shrink-0 transition-transform duration-300 ease-in-out z-40 fixed lg:static h-full ${isNavOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}>
+                <div className="flex items-center justify-center h-20 border-b border-gray-200 dark:border-gray-700">
+                    <img src={isDarkMode ? "/logo-dark.png" : "/logo.png"} alt="Logo" className="h-10" />
+                </div>
+                <ul className="flex-grow overflow-y-auto">
+                    {availableNav.map(category => (
+                        <div key={category.category} className="my-2">
+                            <h3 onClick={() => toggleCategory(category.category)} className="px-6 mt-4 mb-2 text-xs font-semibold text-gray-400 uppercase flex justify-between items-center cursor-pointer">
+                                {category.category}
+                                {expandedCategories.includes(category.category) ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                            </h3>
+                            {expandedCategories.includes(category.category) && category.items.map(item => (
+                                <li key={item.id}>
+                                    <Link to={`/${item.id}`} onClick={() => setIsNavOpen(false)} className={`w-full flex items-center justify-start h-12 px-6 text-base transition-colors duration-200 text-left ${activeView === item.id ? 'bg-indigo-50 dark:bg-gray-700 text-indigo-600 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'}`}>
+                                        <item.icon className="h-5 w-5" />
+                                        <span className="ml-4">{item.label}</span>
+                                    </Link>
+                                </li>
+                            ))}
                         </div>
-                        <Tooltip text="Zmień motyw"><button onClick={() => setIsDarkMode(!isDarkMode)} className="w-full flex justify-center p-2 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600">{isDarkMode ? <Sun className="h-6 w-6 text-yellow-400" /> : <Moon className="h-6 w-6 text-indigo-500" />}</button></Tooltip>
+                    ))}
+                </ul>
+                <div className="p-4 border-t border-gray-200 dark:border-gray-700">
+                    <div className="flex items-center justify-between mb-4">
+                        <div><p className="font-semibold">{user.username}</p><p className="text-sm text-gray-500">{user.role}</p></div>
+                        <div className="flex items-center">
+                            <Tooltip text="Zmień hasło"><button onClick={() => setIsPasswordModalOpen(true)} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600"><KeyRound className="h-6 w-6 text-gray-500" /></button></Tooltip>
+                            <Tooltip text="Wyloguj"><button onClick={onLogout} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600"><LogOut className="h-6 w-6 text-gray-500" /></button></Tooltip>
+                        </div>
                     </div>
-                </nav>
-                <main className="flex-1 flex flex-col overflow-hidden">
-                    <div className="lg:hidden p-2 bg-white dark:bg-gray-800 border-b dark:border-gray-700 flex justify-between items-center">
-                        <button onClick={() => setIsNavOpen(!isNavOpen)} className="p-2 rounded-md"><Menu className="w-6 w-6" /></button>
-                        <span className="font-semibold">{navConfig.flatMap(c => c.items).find(item => item.id === activeView.view)?.label}</span>
-                    </div>
-                    <div className="flex-1 overflow-x-hidden overflow-y-auto">{renderView()}</div>
-                </main>
-            </div>
+                    <Tooltip text="Zmień motyw"><button onClick={toggleTheme} className="w-full flex justify-center p-2 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600">{isDarkMode ? <Sun className="h-6 w-6 text-yellow-400" /> : <Moon className="h-6 w-6 text-indigo-500" />}</button></Tooltip>
+                </div>
+            </nav>
             <UserChangePasswordModal isOpen={isPasswordModalOpen} onClose={() => setIsPasswordModalOpen(false)} />
         </>
     );
+};
+
+// --- Główny komponent, który zarządza logiką i routingiem ---
+function App() {
+    const [user, setUser] = useState(null);
+    const [isLoading, setIsLoading] = useState(true);
+    const navigate = useNavigate();
+
+    const handleLogin = useCallback((data) => {
+        localStorage.setItem('userData', JSON.stringify(data.user));
+        setUser(data.user);
+        navigate('/dashboard');
+    }, [navigate]);
+
+    const handleLogout = useCallback(async () => {
+        try {
+            // Zakładając, że masz endpoint do wylogowania, który czyści cookie
+            await api.logout(); 
+        } catch (error) {
+            console.error("Błąd wylogowania:", error);
+        } finally {
+            localStorage.removeItem('userData');
+            setUser(null);
+            navigate('/login');
+        }
+    }, [navigate]);
+
+    useEffect(() => {
+        const userData = localStorage.getItem('userData');
+        if (userData) {
+            try {
+                setUser(JSON.parse(userData));
+            } catch (e) {
+                localStorage.removeItem('userData');
+            }
+        }
+        setIsLoading(false);
+    }, []);
+
+    if (isLoading) {
+        return <div className="flex items-center justify-center h-screen bg-gray-100 dark:bg-gray-900">Ładowanie...</div>;
+    }
+
+    return (
+        <div className="flex h-screen bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-sans">
+            {user && <Sidebar user={user} onLogout={handleLogout} onNavigate={navigate} />}
+            <main className="flex-1 flex flex-col overflow-hidden">
+                <Routes>
+                    {!user ? (
+                        <>
+                            <Route path="/login" element={<AuthPage onLogin={handleLogin} />} />
+                            <Route path="*" element={<Navigate to="/login" replace />} />
+                        </>
+                    ) : (
+                        <>
+                            <Route path="/dashboard" element={<DashboardView user={user} onNavigate={navigate} onUpdateUser={updateUserData} />} />
+							<Route path="/search" element={<MainSearchView />} />
+							<Route path="/order" element={<OrderView currentOrder={currentOrder} setCurrentOrder={setCurrentOrder} user={user} setDirty={setIsDirty} />} />
+							<Route path="/orders" element={<OrdersListView onEdit={loadOrderForEditing} />} />
+							<Route path="/picking" element={<PickingView />} />
+            <Route path="/inventory" element={<InventoryView user={user} onNavigate={navigate} isDirty={isDirty} setIsDirty={setIsDirty} />} />
+            <Route path="/inventory-sheet" element={<NewInventorySheet user={user} onSave={() => navigate('/inventory')} inventoryId={activeView.params.inventoryId} setDirty={setIsDirty} />} />
+            <Route path="/kanban" element={<KanbanView user={user} />} />
+            <Route path="/delegations" element={<DelegationsView user={user} onNavigate={navigate} setCurrentOrder={setCurrentOrder} />} />
+            <Route path="/admin" element={<AdminView user={user} onNavigate={navigate} />} />
+            <Route path="/admin-users" element={<AdminUsersView user={user} />} />
+            <Route path="/admin-products" element={<AdminProductsView />} />
+            <Route path="/shortage-report" element={<ShortageReportView />} />
+            <Route path="/admin-email" element={<AdminEmailConfigView />} />
+            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+                        </>
+                    )}
+                </Routes>
+            </main>
+        </div>
+    );
 }
 
-
-const UserChangePasswordModal = ({ isOpen, onClose }) => {
-    const [currentPassword, setCurrentPassword] = useState('');
-    const [newPassword, setNewPassword] = useState('');
-    const [error, setError] = useState('');
-    const { showNotification } = useNotification();
-
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        setError('');
-        if (newPassword.length < 6) { setError('Nowe hasło musi mieć co najmniej 6 znaków.'); return; }
-        try {
-            await api.userChangeOwnPassword(currentPassword, newPassword);
-            showNotification('Hasło zostało zmienione pomyślnie!', 'success');
-            onClose();
-        } catch (err) { setError(err.message); }
-    };
-
-    return (
-        <Modal isOpen={isOpen} onClose={onClose} title="Zmień swoje hasło">
-            <form onSubmit={handleSubmit} className="space-y-4">
-                <div><label className="block mb-2 text-sm font-medium">Aktualne hasło</label><input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} className="w-full p-3 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg" required /></div>
-                <div><label className="block mb-2 text-sm font-medium">Nowe hasło</label><input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="w-full p-3 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg" required /></div>
-                {error && <p className="text-sm text-red-500">{error}</p>}
-                <div className="flex justify-end gap-4 pt-4"><button type="button" onClick={onClose} className="px-4 py-2 bg-gray-200 dark:bg-gray-600 rounded-lg">Anuluj</button><button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg">Zmień hasło</button></div>
-            </form>
-        </Modal>
-    );
-};
-
-const VisitRecapForm = ({ onSubmit }) => {
-    const [visitNotes, setVisitNotes] = useState('');
-    const [ordered, setOrdered] = useState(false);
-
-    const handleSubmit = (e) => {
-        e.preventDefault();
-        onSubmit({ visitNotes, ordered });
-    };
-
-    return (
-        <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-                <label className="block text-sm font-medium">Podsumowanie wizyty</label>
-                <textarea value={visitNotes} onChange={(e) => setVisitNotes(e.target.value)} className="w-full p-2 border rounded-md" />
-            </div>
-            <div className="flex items-center">
-                <input type="checkbox" checked={ordered} onChange={(e) => setOrdered(e.target.checked)} id="ordered" className="h-4 w-4 text-indigo-600 border-gray-300 rounded" />
-                <label htmlFor="ordered" className="ml-2 block text-sm">Zrealizowano zamówienie</label>
-            </div>
-            <div className="flex justify-end pt-4">
-                <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg">Zakończ wizytę</button>
-            </div>
-        </form>
-    );
-};
-
-
+// --- Wrapper Aplikacji, który zawiera Router ---
 export default function AppWrapper() {
     return (
         <ErrorBoundary>
