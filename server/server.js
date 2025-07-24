@@ -15,11 +15,6 @@ const cors = require('cors');
 
 const app = express();
 
-// --- Konfiguracja CORS ---
-const allowedOrigins = [
-    'https://system-magazynowy-frontend.onrender.com',
-    'https://dekor.onrender.com'
-];
 
 // --- Konfiguracja CORS ---
 const allowedOrigins = [
