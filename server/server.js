@@ -11,15 +11,12 @@ const fs = require('fs');
 const path = require('path');
 const nodemailer = require('nodemailer');
 const axios = require('axios');
+const app = express();
 const cors = require('cors');
 
-const app = express();
-
-
-// --- Konfiguracja CORS ---
 const allowedOrigins = [
-    'https://system-magazynowy-frontend.onrender.com',
-    'https://dekor.onrender.com'
+  'https://system-magazynowy-frontend.onrender.com',
+  'https://dekor.onrender.com'
 ];
 
 const corsOptions = {
