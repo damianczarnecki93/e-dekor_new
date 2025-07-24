@@ -3842,13 +3842,17 @@ const Sidebar = ({ user, onLogout, onNavigate, activeView }) => {
     );
 };
 
-// --- Główny komponent, który zarządza logiką i routingiem ---
+// --- Główny Komponent Aplikacji ---
 function App() {
     const [user, setUser] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
+    // PRZYWRÓCONE ZMIENNE STANU
+    const [currentOrder, setCurrentOrder] = useState({ customerName: '', items: [], isDirty: false });
+    const [isDirty, setIsDirty] = useState(false);
+    
     const navigate = useNavigate();
-	
-	const updateUserData = (newUserData) => {
+
+    const updateUserData = (newUserData) => {
         setUser(newUserData);
         localStorage.setItem('userData', JSON.stringify(newUserData));
     };
@@ -3860,17 +3864,23 @@ function App() {
     }, [navigate]);
 
     const handleLogout = useCallback(async () => {
-        try {
-            // Zakładając, że masz endpoint do wylogowania, który czyści cookie
-            await api.logout(); 
-        } catch (error) {
-            console.error("Błąd wylogowania:", error);
-        } finally {
-            localStorage.removeItem('userData');
-            setUser(null);
-            navigate('/login');
-        }
+        // Ta funkcja zależy od Twojej ostatecznej implementacji autoryzacji (ciasteczka lub token)
+        localStorage.removeItem('userData');
+        localStorage.removeItem('userToken'); // Na wszelki wypadek
+        setUser(null);
+        navigate('/login');
     }, [navigate]);
+
+    // PRZYWRÓCONA FUNKCJA
+    const loadOrderForEditing = async (orderId) => {
+        try {
+            const order = await api.getOrderById(orderId);
+            setCurrentOrder(order);
+            navigate('/order');
+        } catch (error) {
+            console.error("Błąd ładowania zamówienia", error);
+        }
+    };
 
     useEffect(() => {
         const userData = localStorage.getItem('userData');
@@ -3878,19 +3888,21 @@ function App() {
             try {
                 setUser(JSON.parse(userData));
             } catch (e) {
-                localStorage.removeItem('userData');
+                handleLogout();
             }
         }
         setIsLoading(false);
-    }, []);
+    }, [handleLogout]);
 
     if (isLoading) {
         return <div className="flex items-center justify-center h-screen bg-gray-100 dark:bg-gray-900">Ładowanie...</div>;
     }
 
+    // Ten fragment kodu z `Sidebar` i `main` jest uproszczony, 
+    // wklej tylko kod `Routes` do swojej istniejącej struktury `return`.
     return (
         <div className="flex h-screen bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-sans">
-            {user && <Sidebar user={user} onLogout={handleLogout} onNavigate={navigate} />}
+            {user && <Sidebar user={user} onLogout={handleLogout} activeView={window.location.pathname.substring(1)} />}
             <main className="flex-1 flex flex-col overflow-hidden">
                 <Routes>
                     {!user ? (
@@ -3901,20 +3913,21 @@ function App() {
                     ) : (
                         <>
                             <Route path="/dashboard" element={<DashboardView user={user} onNavigate={navigate} onUpdateUser={updateUserData} />} />
-							<Route path="/search" element={<MainSearchView />} />
-							<Route path="/order" element={<OrderView currentOrder={currentOrder} setCurrentOrder={setCurrentOrder} user={user} setDirty={setIsDirty} />} />
-							<Route path="/orders" element={<OrdersListView onEdit={loadOrderForEditing} />} />
-							<Route path="/picking" element={<PickingView />} />
-            <Route path="/inventory" element={<InventoryView user={user} onNavigate={navigate} isDirty={isDirty} setIsDirty={setIsDirty} />} />
-            <Route path="/inventory-sheet" element={<NewInventorySheet user={user} onSave={() => navigate('/inventory')} inventoryId={activeView.params.inventoryId} setDirty={setIsDirty} />} />
-            <Route path="/kanban" element={<KanbanView user={user} />} />
-            <Route path="/delegations" element={<DelegationsView user={user} onNavigate={navigate} setCurrentOrder={setCurrentOrder} />} />
-            <Route path="/admin" element={<AdminView user={user} onNavigate={navigate} />} />
-            <Route path="/admin-users" element={<AdminUsersView user={user} />} />
-            <Route path="/admin-products" element={<AdminProductsView />} />
-            <Route path="/shortage-report" element={<ShortageReportView />} />
-            <Route path="/admin-email" element={<AdminEmailConfigView />} />
-            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+                            <Route path="/search" element={<MainSearchView />} />
+                            <Route path="/order" element={<OrderView currentOrder={currentOrder} setCurrentOrder={setCurrentOrder} user={user} setDirty={setIsDirty} />} />
+                            <Route path="/orders" element={<OrdersListView onEdit={loadOrderForEditing} />} />
+                            <Route path="/picking" element={<PickingView />} />
+                            <Route path="/inventory" element={<InventoryView user={user} onNavigate={navigate} isDirty={isDirty} setIsDirty={setIsDirty} />} />
+                            <Route path="/inventory-sheet/:inventoryId?" element={<NewInventorySheet user={user} onSave={() => navigate('/inventory')} setDirty={setIsDirty} />} />
+                            <Route path="/kanban" element={<KanbanView user={user} />} />
+                            <Route path="/delegations" element={<DelegationsView user={user} onNavigate={navigate} setCurrentOrder={setCurrentOrder} />} />
+                            <Route path="/admin" element={<AdminView user={user} onNavigate={navigate} />} />
+                            <Route path="/admin-users" element={<AdminUsersView user={user} />} />
+                            <Route path="/admin-products" element={<AdminProductsView />} />
+                            <Route path="/shortage-report" element={<ShortageReportView />} />
+                            <Route path="/admin-email" element={<AdminEmailConfigView />} />
+                            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                            <Route path="*" element={<Navigate to="/dashboard" replace />} />
                         </>
                     )}
                 </Routes>
@@ -3923,7 +3936,7 @@ function App() {
     );
 }
 
-// --- Wrapper Aplikacji, który zawiera Router ---
+// --- Wrapper Aplikacji ---
 export default function AppWrapper() {
     return (
         <ErrorBoundary>
