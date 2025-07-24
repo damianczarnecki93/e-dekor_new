@@ -25,15 +25,7 @@ app.use((req, res, next) => {
 
 // --- Konfiguracja CORS ---
 const cors = require('cors');
-const corsOptions = {
-  origin: 'https://dekor.onrender.com', // Tylko domena, na której działa aplikacja
-  methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
-  allowedHeaders: ['Content-Type', 'Authorization'], // Kluczowe: Jawnie zezwól na ten nagłówek
-  credentials: true,
-  optionsSuccessStatus: 204
-};
-app.use(cors(corsOptions));
-app.options('*', cors(corsOptions));
+app.use(cors());
 
 // --- Połączenie z bazą danych ---
 const dbUrl = process.env.DATABASE_URL;
@@ -1480,12 +1472,7 @@ const buildPath = path.join(__dirname, '..', 'build');
 app.use(express.static(buildPath));
 
 app.get('*', (req, res) => {
-  res.sendFile(path.join(buildPath, 'index.html'), (err) => {
-    if (err) {
-      console.error('[SERVER] Błąd podczas wysyłania pliku index.html:', err);
-      res.status(500).send("Błąd serwera podczas próby załadowania aplikacji.");
-    }
-  });
+  res.sendFile(path.join(buildPath, 'index.html'));
 });
 
 const PORT = process.env.PORT || 3001;
