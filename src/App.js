@@ -126,7 +126,7 @@ const API_BASE_URL = '';
 const fetchWithAuth = async (url, options = {}) => {
     const token = localStorage.getItem('userToken');
     const headers = { ...options.headers };
-    if (token) headers['x-auth-token'] = `Bearer ${token}`;
+	if (token) headers['Authorization'] = `Bearer ${token}`;
     if (!(options.body instanceof FormData)) headers['Content-Type'] = 'application/json';
     
     const response = await fetch(url, { ...options, headers });

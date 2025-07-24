@@ -12,20 +12,17 @@ const path = require('path');
 const nodemailer = require('nodemailer');
 const axios = require('axios');
 const app = express();
-
+app.set('trust proxy', 1); 
+app.use(cors());
 app.use(express.json());
-
-// Middleware do logowania wszystkich przychodzących zapytań
 app.use((req, res, next) => {
   console.log('--- Nowe Zapytanie ---');
   console.log('URL:', req.originalUrl);
   console.log('Nagłówki:', req.headers);
   next();
 });
-
-// --- Konfiguracja CORS ---
 const cors = require('cors');
-app.use(cors());
+
 
 // --- Połączenie z bazą danych ---
 const dbUrl = process.env.DATABASE_URL;
@@ -166,8 +163,7 @@ const EmailConfig = mongoose.models.EmailConfig || mongoose.model('EmailConfig',
 
 // --- Middleware ---
 const authMiddleware = (req, res, next) => {
-    // Szukamy tokenu w niestandardowym nagłówku 'x-auth-token'
-    const authHeader = req.headers['x-auth-token'];
+    const authHeader = req.headers.authorization; // Wracamy do standardowego nagłówka
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
         return res.status(401).json({ message: 'Brak tokenu, autoryzacja odrzucona.' });
     }
