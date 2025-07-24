@@ -448,6 +448,23 @@ const api = {
 	},
 };
 
+const DashboardView = ({ user, onNavigate, onUpdateUser }) => { return <div className="p-8">Panel Główny</div>; };
+const MainSearchView = () => { return <div className="p-8">Wyszukiwarka</div>; };
+const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty }) => { return <div className="p-8">Nowe Zamówienie</div>; };
+const OrdersListView = ({ onEdit }) => { return <div className="p-8">Lista Zamówień</div>; };
+const PickingView = () => { return <div className="p-8">Kompletacja</div>; };
+const InventoryView = ({ user, onNavigate, isDirty, setIsDirty }) => { return <div className="p-8">Inwentaryzacja</div>; };
+const NewInventorySheet = ({ user, onSave, setDirty }) => { return <div className="p-8">Nowy Arkusz Inwentaryzacyjny</div>; };
+const KanbanView = ({ user }) => { return <div className="p-8">Tablica Kanban</div>; };
+const DelegationsView = ({ user, onNavigate, setCurrentOrder }) => { return <div className="p-8">Delegacje</div>; };
+const AdminView = ({ user, onNavigate }) => { return <div className="p-8">Panel Admina</div>; };
+const AdminUsersView = ({ user }) => { return <div className="p-8">Zarządzanie Użytkownikami</div>; };
+const AdminProductsView = () => { return <div className="p-8">Zarządzanie Produktami</div>; };
+const ShortageReportView = () => { return <div className="p-8">Raport Braków</div>; };
+const AdminEmailConfigView = () => { return <div className="p-8">Konfiguracja Email</div>; };
+const AuthPage = ({ onLogin }) => { return <div className="p-8">Logowanie</div>; };
+
+
 // --- Komponenty UI ---
 
 const Tooltip = ({ children, text }) => ( <div className="relative flex items-center group">{children}<div className="absolute bottom-full mb-2 w-max px-2 py-1 bg-gray-800 text-white text-xs rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none">{text}</div></div>);
@@ -464,6 +481,35 @@ const Modal = ({ isOpen, onClose, title, children, maxWidth = 'md' }) => {
                 <div className="p-6 overflow-y-auto">{children}</div>
             </div>
         </div>
+    );
+};
+
+const UserChangePasswordModal = ({ isOpen, onClose }) => {
+    const [currentPassword, setCurrentPassword] = useState('');
+    const [newPassword, setNewPassword] = useState('');
+    const [error, setError] = useState('');
+    const { showNotification } = useNotification();
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setError('');
+        if (newPassword.length < 6) { setError('Nowe hasło musi mieć co najmniej 6 znaków.'); return; }
+        try {
+            await api.userChangeOwnPassword(currentPassword, newPassword);
+            showNotification('Hasło zostało zmienione pomyślnie!', 'success');
+            onClose();
+        } catch (err) { setError(err.message); }
+    };
+
+    return (
+        <Modal isOpen={isOpen} onClose={onClose} title="Zmień swoje hasło">
+            <form onSubmit={handleSubmit} className="space-y-4">
+                <div><label className="block mb-2 text-sm font-medium">Aktualne hasło</label><input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} className="w-full p-3 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg" required /></div>
+                <div><label className="block mb-2 text-sm font-medium">Nowe hasło</label><input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="w-full p-3 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg" required /></div>
+                {error && <p className="text-sm text-red-500">{error}</p>}
+                <div className="flex justify-end gap-4 pt-4"><button type="button" onClick={onClose} className="px-4 py-2 bg-gray-200 dark:bg-gray-600 rounded-lg">Anuluj</button><button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg">Zmień hasło</button></div>
+            </form>
+        </Modal>
     );
 };
     
@@ -3715,7 +3761,7 @@ const Sidebar = ({ user, onLogout, onOpenPasswordModal }) => {
             localStorage.setItem('theme', 'light');
         }
     };
-
+    
     const toggleCategory = (category) => {
         setExpandedCategories(prev =>
             prev.includes(category) ? prev.filter(c => c !== category) : [...prev, category]
@@ -3723,13 +3769,7 @@ const Sidebar = ({ user, onLogout, onOpenPasswordModal }) => {
     };
 
     const navConfig = useMemo(() => [
-        {
-            category: 'Główne',
-            items: [
-                { id: 'dashboard', label: 'Panel Główny', icon: Home, roles: ['user', 'administrator'], alwaysVisible: true },
-                { id: 'search', label: 'Wyszukiwarka', icon: Search, roles: ['user', 'administrator'] },
-            ]
-        },
+        { category: 'Główne', items: [ { id: 'dashboard', label: 'Panel Główny', icon: Home, roles: ['user', 'administrator'], alwaysVisible: true }, { id: 'search', label: 'Wyszukiwarka', icon: Search, roles: ['user', 'administrator'] }, ] },
         { category: 'Sprzedaż', items: [ { id: 'order', label: 'Nowe Zamówienie', icon: PlusCircle, roles: ['user', 'administrator'] }, { id: 'orders', label: 'Zamówienia', icon: Archive, roles: ['user', 'administrator'] }, ] },
         { category: 'Magazyn', items: [ { id: 'picking', label: 'Kompletacja', icon: List, roles: ['user', 'administrator'] }, { id: 'inventory', label: 'Inwentaryzacja', icon: Wrench, roles: ['user', 'administrator'] }, ] },
         { category: 'Organizacyjne', items: [ { id: 'kanban', label: 'Tablica Zadań', icon: ClipboardList, roles: ['user', 'administrator'] }, { id: 'delegations', label: 'Delegacje', icon: Plane, roles: ['user', 'administrator'] }, ] },
@@ -3739,22 +3779,12 @@ const Sidebar = ({ user, onLogout, onOpenPasswordModal }) => {
 
     const availableNav = useMemo(() => {
         if (!user) return [];
-        return navConfig
-            .map(category => {
-                const visibleItems = category.items.filter(item => {
-                    if (!item.roles.includes(user.role)) return false;
-                    if (user.role === 'administrator') return true;
-                    return item.alwaysVisible || user.visibleModules?.includes(item.id);
-                });
-                return { ...category, items: visibleItems };
-            })
-            .filter(category => category.items.length > 0);
+        return navConfig.map(category => ({ ...category, items: category.items.filter(item => user.role === 'administrator' || item.roles.includes(user.role) && (item.alwaysVisible || user.visibleModules?.includes(item.id)))})).filter(category => category.items.length > 0);
     }, [user, navConfig]);
-
 
     return (
         <nav className={`w-64 bg-white dark:bg-gray-800 shadow-lg flex flex-col flex-shrink-0 transition-transform duration-300 ease-in-out z-40 fixed lg:static h-full ${isNavOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}>
-            <div className="flex items-center justify-center h-20 border-b border-gray-200 dark:border-gray-700">
+             <div className="flex items-center justify-center h-20 border-b border-gray-200 dark:border-gray-700">
                 <img src={isDarkMode ? "/logo-dark.png" : "/logo.png"} alt="Logo" className="h-10" />
             </div>
             <ul className="flex-grow overflow-y-auto">
@@ -3789,7 +3819,7 @@ const Sidebar = ({ user, onLogout, onOpenPasswordModal }) => {
     );
 };
 
-
+// --- Główny Komponent Aplikacji ---
 function App() {
     const [user, setUser] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -3878,7 +3908,6 @@ function App() {
     );
 }
 
-// --- Wrapper Aplikacji, który zawiera Router ---
 export default function AppWrapper() {
     return (
         <ErrorBoundary>
