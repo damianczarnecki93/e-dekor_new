@@ -14,20 +14,14 @@ const axios = require('axios');
 const app = express();
 // --- Konfiguracja CORS ---
 const cors = require('cors');
-
-const corsOptions = {
-  origin: [
-    'https://system-magazynowy-frontend.onrender.com',
-    'https://dekor.onrender.com'
-  ],
-  methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
-  credentials: true,
-  optionsSuccessStatus: 204
-};
-
-app.use(cors(corsOptions));
-app.options('*', cors(corsOptions));
-
+app.use(cors({
+    origin: [
+        'https://system-magazynowy-frontend.onrender.com',
+        'https://dekor.onrender.com'
+    ],
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+    credentials: true
+}));
 // --- Połączenie z bazą danych ---
 const dbUrl = process.env.DATABASE_URL;
 const jwtSecret = process.env.JWT_SECRET || 'domyslny-sekret-jwt-zmien-to-w-produkcji';
