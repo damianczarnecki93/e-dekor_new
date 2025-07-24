@@ -17,7 +17,7 @@ const app = express();
 
 // --- Konfiguracja CORS ---
 const corsOptions = {
-  origin: 'https://system-magazynowy-frontend.onrender.com',
+  origin: ['https://system-magazynowy-frontend.onrender.com', 'https://dekor.onrender.com'],
   methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
   credentials: true,
   optionsSuccessStatus: 204
