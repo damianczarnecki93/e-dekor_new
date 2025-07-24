@@ -3847,6 +3847,11 @@ function App() {
     const [user, setUser] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     const navigate = useNavigate();
+	
+	const updateUserData = (newUserData) => {
+        setUser(newUserData);
+        localStorage.setItem('userData', JSON.stringify(newUserData));
+    };
 
     const handleLogin = useCallback((data) => {
         localStorage.setItem('userData', JSON.stringify(data.user));
