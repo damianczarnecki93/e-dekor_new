@@ -37,6 +37,14 @@ const corsOptions = {
 app.use(cors(corsOptions));
 // Ta linia jest ważna, aby serwer poprawnie obsługiwał zapytania OPTIONS
 app.options('*', cors(corsOptions));
+// --- Połączenie z bazą danych ---
+const dbUrl = process.env.DATABASE_URL;
+const jwtSecret = process.env.JWT_SECRET || 'domyslny-sekret-jwt-zmien-to-w-produkcji';
+
+if (!dbUrl) {
+    console.error('BŁĄD KRYTYCZNY: Zmienna środowiskowa DATABASE_URL nie jest ustawiona!');
+    process.exit(1);
+}
 
 mongoose.connect(dbUrl)
     .then(() => console.log('Połączono z MongoDB Atlas!'))
