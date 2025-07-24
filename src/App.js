@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, createContext, useContext, useMemo, useRef } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, Link, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, Link, useLocation, useParams } from 'react-router-dom';
 import { Search, List, Wrench, Sun, Moon, LogOut, FileDown, FileText, Printer, Save, CheckCircle, AlertTriangle, Upload, Trash2, XCircle, UserPlus, KeyRound, PlusCircle, MessageSquare, Archive, Edit, Home, Menu, Filter, RotateCcw, FileUp, GitMerge, Eye, Trophy, Crown, BarChart2, Users, Package, StickyNote, Settings, ChevronsUpDown, ChevronUp, ChevronDown, ClipboardList, Plane, ListChecks, Mail, Zap, ClipboardCheck } from 'lucide-react';
 import { format, parseISO, eachDayOfInterval, isValid } from 'date-fns';
 import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
@@ -8,24 +8,17 @@ import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { GoogleMap, useLoadScript, Marker, DirectionsRenderer } from '@react-google-maps/api';
 
-
 // --- Komponent Granicy Błędu (Error Boundary) ---
-
 class ErrorBoundary extends React.Component {
     constructor(props) {
         super(props);
         this.state = { hasError: false, error: null, errorInfo: null };
     }
-
-    static getDerivedStateFromError(error) {
-        return { hasError: true };
-    }
-
+    static getDerivedStateFromError(error) { return { hasError: true }; }
     componentDidCatch(error, errorInfo) {
         console.error("DIAGNOSTYKA (ErrorBoundary): Nieprzechwycony błąd:", error, errorInfo);
         this.setState({ error: error, errorInfo: errorInfo });
     }
-
     render() {
         if (this.state.hasError) {
             return (
@@ -33,30 +26,19 @@ class ErrorBoundary extends React.Component {
                     <AlertTriangle className="w-16 h-16 mb-4" />
                     <h1 className="text-2xl font-bold mb-2">Wystąpił błąd aplikacji</h1>
                     <p className="text-center mb-4">Coś poszło nie tak. Spróbuj odświeżyć stronę lub skontaktuj się z administratorem.</p>
-                    <button
-                        onClick={() => window.location.reload()}
-                        className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
-                    >
-                        Odśwież stronę
-                    </button>
+                    <button onClick={() => window.location.reload()} className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">Odśwież stronę</button>
                     <details className="mt-6 text-left bg-red-100 p-4 rounded-lg w-full max-w-2xl">
                         <summary className="cursor-pointer font-semibold">Szczegóły błędu</summary>
-                        <pre className="mt-2 text-sm whitespace-pre-wrap break-words">
-                            {this.state.error && this.state.error.toString()}
-                            <br />
-                            {this.state.errorInfo && this.state.errorInfo.componentStack}
-                        </pre>
+                        <pre className="mt-2 text-sm whitespace-pre-wrap break-words">{this.state.error && this.state.error.toString()}<br />{this.state.errorInfo && this.state.errorInfo.componentStack}</pre>
                     </details>
                 </div>
             );
         }
-
         return this.props.children;
     }
 }
 
 // --- Kontekst Powiadomień ---
-
 const NotificationContext = createContext();
 const NotificationProvider = ({ children }) => {
     const [notification, setNotification] = useState(null);
@@ -79,6 +61,27 @@ const NotificationProvider = ({ children }) => {
     );
 };
 const useNotification = () => useContext(NotificationContext);
+
+// --- API Client ---
+const API_BASE_URL = '';
+
+const fetchWithAuth = async (url, options = {}) => {
+    const token = localStorage.getItem('userToken');
+    const headers = { ...options.headers };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    if (!(options.body instanceof FormData)) headers['Content-Type'] = 'application/json';
+    
+    const response = await fetch(url, { ...options, headers });
+
+    if (response.status === 401) {
+        localStorage.removeItem('userToken');
+        localStorage.removeItem('userData');
+        window.location.hash = '/login';
+        window.location.reload();
+        throw new Error('Sesja wygasła. Proszę zalogować się ponownie.');
+    }
+    return response;
+};
 
 // --- Hook do sortowania ---
 
@@ -110,28 +113,6 @@ const useSortableData = (items, config = null) => {
     };
 
     return { items: sortedItems, requestSort, sortConfig };
-};
-
-
-// --- API Client ---
-const API_BASE_URL = 'https://dekor.onrender.com';
-
-const fetchWithAuth = async (url, options = {}) => {
-    const token = localStorage.getItem('userToken');
-    const headers = { ...options.headers };
-    if (token) headers['Authorization'] = `Bearer ${token}`;
-    if (!(options.body instanceof FormData)) headers['Content-Type'] = 'application/json';
-    
-    const response = await fetch(url, { ...options, headers });
-
-    if (response.status === 401) {
-        localStorage.removeItem('userToken');
-        localStorage.removeItem('userData');
-        window.location.hash = '/login';
-        window.location.reload();
-        throw new Error('Sesja wygasła. Proszę zalogować się ponownie.');
-    }
-    return response;
 };
 
 const api = {
@@ -471,24 +452,20 @@ const api = {
 
 const Tooltip = ({ children, text }) => ( <div className="relative flex items-center group">{children}<div className="absolute bottom-full mb-2 w-max px-2 py-1 bg-gray-800 text-white text-xs rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none">{text}</div></div>);
 const Modal = ({ isOpen, onClose, title, children, maxWidth = 'md' }) => {
-        if (!isOpen) return null;
-        const maxWidthClass = { sm: 'max-w-sm', md: 'max-w-md', lg: 'max-w-lg', xl: 'max-w-xl', '2xl': 'max-w-2xl', '4xl': 'max-w-4xl' }[maxWidth];
-        return (
-            <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex justify-center items-center p-2 sm:p-4 animate-fade-in">
-                <div className={`bg-white dark:bg-gray-800 rounded-lg shadow-2xl w-full m-4 ${maxWidthClass} flex flex-col max-h-[90vh]`}>
-                    <div className="flex-shrink-0 flex justify-between items-center p-4 border-b border-gray-200 dark:border-gray-700">
-                        <h3 className="text-xl font-semibold text-gray-900 dark:text-white">{title}</h3>
-                        <button onClick={onClose} className="text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg text-sm p-1.5">
-                            <XCircle className="w-6 h-6"/>
-                        </button>
-                    </div>
-                    <div className="p-6 overflow-y-auto">
-                        {children}
-                    </div>
+    if (!isOpen) return null;
+    const maxWidthClass = { sm: 'max-w-sm', md: 'max-w-md', lg: 'max-w-lg', xl: 'max-w-xl', '2xl': 'max-w-2xl', '4xl': 'max-w-4xl' }[maxWidth];
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex justify-center items-center p-2 sm:p-4 animate-fade-in">
+            <div className={`bg-white dark:bg-gray-800 rounded-lg shadow-2xl w-full m-4 ${maxWidthClass} flex flex-col max-h-[90vh]`}>
+                <div className="flex-shrink-0 flex justify-between items-center p-4 border-b border-gray-200 dark:border-gray-700">
+                    <h3 className="text-xl font-semibold text-gray-900 dark:text-white">{title}</h3>
+                    <button onClick={onClose} className="text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg text-sm p-1.5"><XCircle className="w-6 h-6"/></button>
                 </div>
+                <div className="p-6 overflow-y-auto">{children}</div>
             </div>
-        );
-    };
+        </div>
+    );
+};
     
 const ProductDetailsCard = ({ product }) => (
     <div className="mt-6 max-w-4xl mx-auto bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg animate-fade-in">
@@ -3901,6 +3878,7 @@ function App() {
     );
 }
 
+// --- Wrapper Aplikacji, który zawiera Router ---
 export default function AppWrapper() {
     return (
         <ErrorBoundary>
