@@ -26,14 +26,20 @@ app.use((req, res, next) => {
   next();
 });
 
+// --- Konfiguracja CORS ---
 const cors = require('cors');
 
-app.use(cors({
-  origin: 'https://dekor.onrender.com', // Tylko domena, na której działa aplikacja
+const corsOptions = {
+  origin: 'https://dekor.onrender.com', // Adres, na którym działa Twoja aplikacja
   methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+  allowedHeaders: ['Content-Type', 'Authorization'], // KLUCZOWA ZMIANA: Jawnie zezwól na ten nagłówek
   credentials: true,
   optionsSuccessStatus: 204
-}));
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
+
 // --- Połączenie z bazą danych ---
 const dbUrl = process.env.DATABASE_URL;
 const jwtSecret = process.env.JWT_SECRET || 'domyslny-sekret-jwt-zmien-to-w-produkcji';
