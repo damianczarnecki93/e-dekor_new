@@ -166,10 +166,8 @@ const EmailConfig = mongoose.models.EmailConfig || mongoose.model('EmailConfig',
 
 // --- Middleware ---
 const authMiddleware = (req, res, next) => {
-    console.log('--- Wewnątrz authMiddleware ---'); // Dodaj tę linię
-    console.log('Otrzymany nagłówek Authorization:', req.headers.authorization); // Dodaj tę linię
-
-    const authHeader = req.headers.authorization;
+    // Szukamy tokenu w niestandardowym nagłówku 'x-auth-token'
+    const authHeader = req.headers['x-auth-token'];
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
         return res.status(401).json({ message: 'Brak tokenu, autoryzacja odrzucona.' });
     }
