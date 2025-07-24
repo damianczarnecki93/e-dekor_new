@@ -131,11 +131,9 @@ const fetchWithAuth = async (url, options = {}) => {
     
     const response = await fetch(url, { ...options, headers });
 
-    if (response.status === 401) {
-        localStorage.removeItem('userToken');
-        localStorage.removeItem('userData');
-        window.location.hash = '/login';
-        window.location.reload();
+  if (response.status === 401) {
+        // Ta funkcja jest zdefiniowana w komponencie App
+        handleLogout(); 
         throw new Error('Sesja wygasła. Proszę zalogować się ponownie.');
     }
     return response;
@@ -3791,12 +3789,13 @@ function App() {
         }
     }, [isDarkMode]);
 
-    const handleLogout = useCallback(() => {
-    localStorage.removeItem('userToken');
-    localStorage.removeItem('userData');
-    setUser(null);
-    setIsLoading(false);
-}, []);
+     const handleLogout = useCallback(() => {
+        localStorage.removeItem('userToken');
+        localStorage.removeItem('userData');
+        setUser(null);
+        setIsLoading(false);
+        navigate('/login'); // Dodaj tę linię
+    }, [navigate]); // Dodaj navigate do zależności
 
     const handleLogin = useCallback((data) => {
     localStorage.setItem('userToken', data.token);
