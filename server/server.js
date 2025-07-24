@@ -3,7 +3,6 @@ const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
-const cookieParser = require('cookie-parser');
 const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const { Readable } = require('stream');
@@ -13,23 +12,20 @@ const fs = require('fs');
 const path = require('path');
 const nodemailer = require('nodemailer');
 const axios = require('axios');
+
 const app = express();
-app.set('trust proxy', 1);
+const corsOptions = {
+  origin: '*', // Pozwala na żądania z dowolnego źródła
+  methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+  credentials: true,
+  optionsSuccessStatus: 204
+};
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions)); // Umożliwia obsługę zapytań preflight (OPTIONS)
 
-// Middleware
-app.use(cors());
 app.use(express.json());
-app.use(cookieParser()); // Dodaj tę linię
 
-// Twoje logowanie (opcjonalne, ale przydatne)
-app.use((req, res, next) => {
-  console.log('--- Nowe Zapytanie ---');
-  console.log('URL:', req.originalUrl);
-  console.log('Nagłówki:', req.headers);
-  next();
-});
-
-// --- Połączenie z bazą danych ---
+// --- Konfiguracja i połączenie z bazą danych ---
 const dbUrl = process.env.DATABASE_URL;
 const jwtSecret = process.env.JWT_SECRET || 'domyslny-sekret-jwt-zmien-to-w-produkcji';
 
@@ -40,12 +36,7 @@ if (!dbUrl) {
 
 mongoose.connect(dbUrl)
     .then(() => console.log('Połączono z MongoDB Atlas!'))
-    .catch(err => {
-        console.error('Błąd połączenia z MongoDB:', err);
-        process.exit(1); // Zakończ proces, jeśli nie można połączyć się z bazą
-    });
-
-
+    .catch(err => console.error('Błąd połączenia z MongoDB:', err));
 
 // --- Definicje schematów i modeli ---
 
@@ -168,12 +159,12 @@ const EmailConfig = mongoose.models.EmailConfig || mongoose.model('EmailConfig',
 
 // --- Middleware ---
 const authMiddleware = (req, res, next) => {
-    const token = req.cookies.token; // Odczytujemy token z ciasteczka
-
-    if (!token) {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
         return res.status(401).json({ message: 'Brak tokenu, autoryzacja odrzucona.' });
     }
     try {
+        const token = authHeader.split(' ')[1];
         const decoded = jwt.verify(token, jwtSecret);
         req.user = decoded;
         next();
@@ -282,8 +273,6 @@ async function geocodeAddress(address) {
     }
 }
 
-
-
 app.post('/api/orders/:id/process-completion', authMiddleware, async (req, res) => {
     try {
         const { pickedItems, allItems } = req.body;
@@ -356,14 +345,7 @@ app.post('/api/login', async (req, res) => {
         if (!isMatch) return res.status(401).json({ message: 'Nieprawidłowe dane logowania.' });
         const token = jwt.sign({ userId: user._id, role: user.role, username: user.username }, jwtSecret, { expiresIn: '1d' });
         // UPEWNIJ SIĘ, ŻE ZWRACASZ TUTAJ `visibleModules`
-        res.cookie('token', token, {
-    httpOnly: true,
-    secure: true, // Ważne dla HTTPS na Render.com
-    sameSite: 'strict',
-    maxAge: 24 * 60 * 60 * 1000 // Ciasteczko ważne 1 dzień
-});
-
-res.json({ user: { id: user._id, username: user.username, role: user.role, salesGoal: user.salesGoal, manualSales: user.manualSales, visibleModules: user.visibleModules, dashboardLayout: user.dashboardLayout } });
+        res.json({ token, user: { id: user._id, username: user.username, role: user.role, salesGoal: user.salesGoal, manualSales: user.manualSales, visibleModules: user.visibleModules, dashboardLayout: user.dashboardLayout } });
     } catch (error) {
         res.status(500).json({ message: 'Błąd serwera podczas logowania.', error: error.message });
     }
@@ -558,8 +540,6 @@ app.post('/api/admin/users/:id/password', authMiddleware, adminMiddleware, async
     }
 });
 
-
-
 app.delete('/api/admin/users/:id', authMiddleware, adminMiddleware, async (req, res) => {
     try {
         if (req.params.id === req.user.userId) {
@@ -575,11 +555,6 @@ app.delete('/api/admin/users/:id', authMiddleware, adminMiddleware, async (req, 
 
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
-
-app.post('/api/logout', (req, res) => {
-    res.clearCookie('token');
-    res.status(200).json({ message: 'Wylogowano pomyślnie.' });
-});
 
 app.post('/api/admin/upload-products', authMiddleware, adminMiddleware, upload.single('productsFile'), async (req, res) => {
     if (!req.file) return res.status(400).json({ message: 'Nie przesłano pliku.' });
@@ -1481,6 +1456,7 @@ app.post('/api/delegations/:id/visits/:clientIndex/end', authMiddleware, async (
         res.status(500).json({ message: 'Błąd zakończenia wizyty' });
     }
 });
+
 const buildPath = path.join(__dirname, '..', 'build');
 app.use(express.static(buildPath));
 
@@ -1488,6 +1464,7 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(buildPath, 'index.html'));
 });
 
+// --- Start serwera ---
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
     console.log(`Serwer działa na porcie ${PORT}`);
