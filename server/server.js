@@ -15,12 +15,15 @@ const app = express();
 // --- Konfiguracja CORS ---
 const cors = require('cors');
 
-app.use(cors({
-  origin: '*', // Zezwól na żądania z dowolnego źródła
+const corsOptions = {
+  origin: [
+    'https://system-magazynowy-frontend.onrender.com',
+    'https://dekor.onrender.com'
+  ],
   methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
   credentials: true,
   optionsSuccessStatus: 204
-}));
+};
 
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
