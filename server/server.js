@@ -1484,14 +1484,8 @@ app.post('/api/delegations/:id/visits/:clientIndex/end', authMiddleware, async (
 const buildPath = path.join(__dirname, '..', 'build');
 app.use(express.static(buildPath));
 
-// Ten blok MUSI być po wszystkich ścieżkach API
 app.get('*', (req, res) => {
-  res.sendFile(path.join(buildPath, 'index.html'), (err) => {
-    if (err) {
-      console.error('[SERVER] Błąd podczas wysyłania pliku index.html:', err);
-      res.status(500).send("Błąd serwera podczas próby załadowania aplikacji.");
-    }
-  });
+  res.sendFile(path.join(buildPath, 'index.html'));
 });
 
 const PORT = process.env.PORT || 3001;
