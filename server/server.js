@@ -13,14 +13,11 @@ const nodemailer = require('nodemailer');
 const axios = require('axios');
 const app = express();
 
-// Dodajemy middleware do parsowania JSON
 app.use(express.json());
 
 // Middleware do logowania wszystkich przychodzących zapytań
 app.use((req, res, next) => {
   console.log('--- Nowe Zapytanie ---');
-  console.log('Czas:', new Date().toISOString());
-  console.log('Metoda:', req.method);
   console.log('URL:', req.originalUrl);
   console.log('Nagłówki:', req.headers);
   next();
@@ -28,15 +25,13 @@ app.use((req, res, next) => {
 
 // --- Konfiguracja CORS ---
 const cors = require('cors');
-
 const corsOptions = {
-  origin: 'https://dekor.onrender.com', // Adres, na którym działa Twoja aplikacja
+  origin: 'https://dekor.onrender.com', // Tylko domena, na której działa aplikacja
   methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
-  allowedHeaders: ['Content-Type', 'Authorization'], // KLUCZOWA ZMIANA: Jawnie zezwól na ten nagłówek
+  allowedHeaders: ['Content-Type', 'Authorization'], // Kluczowe: Jawnie zezwól na ten nagłówek
   credentials: true,
   optionsSuccessStatus: 204
 };
-
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
 
@@ -179,6 +174,9 @@ const EmailConfig = mongoose.models.EmailConfig || mongoose.model('EmailConfig',
 
 // --- Middleware ---
 const authMiddleware = (req, res, next) => {
+    console.log('--- Wewnątrz authMiddleware ---'); // Dodaj tę linię
+    console.log('Otrzymany nagłówek Authorization:', req.headers.authorization); // Dodaj tę linię
+
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
         return res.status(401).json({ message: 'Brak tokenu, autoryzacja odrzucona.' });
