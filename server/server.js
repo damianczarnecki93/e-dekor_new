@@ -14,22 +14,29 @@ const axios = require('axios');
 const app = express();
 // --- Konfiguracja CORS ---
 const cors = require('cors');
-app.use(cors({
-    origin: [
-        'https://system-magazynowy-frontend.onrender.com',
-        'https://dekor.onrender.com'
-    ],
-    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
-    credentials: true
-}));
-// --- Połączenie z bazą danych ---
-const dbUrl = process.env.DATABASE_URL;
-const jwtSecret = process.env.JWT_SECRET || 'domyslny-sekret-jwt-zmien-to-w-produkcji';
 
-if (!dbUrl) {
-    console.error('BŁĄD KRYTYCZNY: Zmienna środowiskowa DATABASE_URL nie jest ustawiona!');
-    process.exit(1);
-}
+const allowedOrigins = [
+  'https://system-magazynowy-frontend.onrender.com',
+  'https://dekor.onrender.com'
+];
+
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Zezwalaj na zapytania, jeśli pochodzą z dozwolonej domeny LUB jeśli nie mają 'origin' (np. Postman)
+    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      callback(new Error('Polityka CORS nie zezwala na dostęp z tego źródła.'));
+    }
+  },
+  methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+  credentials: true, // Niezbędne do przesyłania ciasteczek i nagłówków autoryzacyjnych
+  optionsSuccessStatus: 204
+};
+
+app.use(cors(corsOptions));
+// Ta linia jest ważna, aby serwer poprawnie obsługiwał zapytania OPTIONS
+app.options('*', cors(corsOptions));
 
 mongoose.connect(dbUrl)
     .then(() => console.log('Połączono z MongoDB Atlas!'))
