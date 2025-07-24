@@ -12,31 +12,14 @@ const path = require('path');
 const nodemailer = require('nodemailer');
 const axios = require('axios');
 const app = express();
-// --- Konfiguracja CORS ---
 const cors = require('cors');
 
-const allowedOrigins = [
-  'https://system-magazynowy-frontend.onrender.com',
-  'https://dekor.onrender.com'
-];
-
-const corsOptions = {
-  origin: function (origin, callback) {
-    // Zezwalaj na zapytania, jeśli pochodzą z dozwolonej domeny LUB jeśli nie mają 'origin' (np. Postman)
-    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
-      callback(null, true);
-    } else {
-      callback(new Error('Polityka CORS nie zezwala na dostęp z tego źródła.'));
-    }
-  },
+app.use(cors({
+  origin: 'https://dekor.onrender.com', // Tylko domena, na której działa aplikacja
   methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
-  credentials: true, // Niezbędne do przesyłania ciasteczek i nagłówków autoryzacyjnych
+  credentials: true,
   optionsSuccessStatus: 204
-};
-
-app.use(cors(corsOptions));
-// Ta linia jest ważna, aby serwer poprawnie obsługiwał zapytania OPTIONS
-app.options('*', cors(corsOptions));
+}));
 // --- Połączenie z bazą danych ---
 const dbUrl = process.env.DATABASE_URL;
 const jwtSecret = process.env.JWT_SECRET || 'domyslny-sekret-jwt-zmien-to-w-produkcji';
@@ -1477,7 +1460,12 @@ const buildPath = path.join(__dirname, '..', 'build');
 app.use(express.static(buildPath));
 
 app.get('*', (req, res) => {
-  res.sendFile(path.join(buildPath, 'index.html'));
+  res.sendFile(path.join(buildPath, 'index.html'), (err) => {
+    if (err) {
+      console.error('[SERVER] Błąd podczas wysyłania pliku index.html:', err);
+      res.status(500).send("Błąd serwera podczas próby załadowania aplikacji.");
+    }
+  });
 });
 
 const PORT = process.env.PORT || 3001;
