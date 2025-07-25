@@ -399,13 +399,14 @@ app.post('/api/crm/import-contacts', authMiddleware, upload.single('contactsFile
 
     try {
         const contactsToImport = [];
-        const readableStream = Readable.from(req.file.buffer.toString('utf8'));
+        // KROK 1: Zmiana dekodowania na UTF-8
+        const fileContent = req.file.buffer.toString('utf8');
+        const readableStream = Readable.from(fileContent);
 
         readableStream
-            .pipe(csv({ headers: ['name', 'company', 'email', 'phone', 'address', 'status', 'notes', 'accountManager'], skipLines: 1 }))
+            .pipe(csv({ headers: ['name', 'company', 'email', 'phone', 'address', 'status', 'notes', 'accountManager'], skipLines: 1, separator: ',' }))
             .on('data', (row) => {
-                // Prosta walidacja - wymagamy przynajmniej nazwy
-                if (row.name) {
+                if (row.name && row.name.trim() !== '') {
                     contactsToImport.push({
                         ...row,
                         ownerId: req.user.userId
@@ -413,18 +414,30 @@ app.post('/api/crm/import-contacts', authMiddleware, upload.single('contactsFile
                 }
             })
             .on('end', async () => {
-                if (contactsToImport.length > 0) {
-                    await Contact.insertMany(contactsToImport);
-                    res.status(201).json({ message: `Pomyślnie zaimportowano ${contactsToImport.length} kontaktów.` });
-                } else {
-                    res.status(400).json({ message: 'Plik nie zawierał poprawnych danych do importu.' });
+                try {
+                    if (contactsToImport.length > 0) {
+                        await Contact.insertMany(contactsToImport);
+                        res.status(201).json({ message: `Pomyślnie zaimportowano ${contactsToImport.length} kontaktów.` });
+                    } else {
+                        res.status(400).json({ message: 'Plik nie zawierał poprawnych danych do importu lub był pusty.' });
+                    }
+                } catch (dbError) {
+                    console.error('Błąd zapisu do bazy danych po imporcie CSV:', dbError);
+                    res.status(500).json({ message: 'Błąd zapisu danych do bazy.', error: dbError.message });
                 }
+            })
+            // KROK 2: Solidna obsługa błędów strumienia, aby zapobiec awarii serwera
+            .on('error', (streamError) => {
+                console.error('Błąd podczas parsowania pliku CSV:', streamError);
+                res.status(500).json({ message: 'Błąd podczas przetwarzania pliku CSV. Sprawdź format i kodowanie pliku.', error: streamError.message });
             });
 
     } catch (error) {
+        console.error('Błąd w endpointcie importu kontaktów:', error);
         res.status(500).json({ message: 'Wystąpił błąd serwera podczas importu.', error: error.message });
     }
 });
+
 
 
 
