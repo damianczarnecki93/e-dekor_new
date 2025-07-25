@@ -666,9 +666,6 @@ app.delete('/api/admin/users/:id', authMiddleware, adminMiddleware, async (req, 
     }
 });
 
-const storage = multer.memoryStorage();
-const upload = multer({ storage: storage });
-
 app.post('/api/admin/upload-products', authMiddleware, adminMiddleware, upload.single('productsFile'), async (req, res) => {
     if (!req.file) return res.status(400).json({ message: 'Nie przesłano pliku.' });
     const { mode } = req.query;
