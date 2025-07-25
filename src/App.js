@@ -3744,14 +3744,18 @@ const getInitialOrder = () => {
         const savedOrder = localStorage.getItem('draftOrder');
         if (savedOrder) {
             const parsed = JSON.parse(savedOrder);
-            if (!parsed._id) { // Upewniamy się, że to wersja robocza
-                return parsed;
+            // Wczytujemy tylko jeśli to wersja robocza (nie ma _id z bazy danych)
+            if (!parsed._id) { 
+                return { ...parsed, isDirty: true }; // Oznaczamy jako "brudny" po wczytaniu
             }
         }
     } catch (error) {
         console.error("Błąd odczytu roboczego zamówienia z localStorage:", error);
+        localStorage.removeItem('draftOrder'); // Czyścimy w razie błędu parsowania
     }
+    // Domyślnie zwracamy czyste zamówienie
     return { customerName: '', items: [], isDirty: false };
+};
 };
 
 const Sidebar = ({ user, onLogout, onOpenPasswordModal, onNewOrder }) => {
@@ -3892,7 +3896,7 @@ function App() {
     const handleLogout = useCallback(async () => {
         localStorage.removeItem('userToken');
         localStorage.removeItem('userData');
-        localStorage.removeItem('draftOrder'); // Czyścimy dane robocze przy wylogowaniu
+        localStorage.removeItem('draftOrder'); // Czyścimy robocze zamówienie przy wylogowaniu
         setUser(null);
         navigate('/login');
     }, [navigate]);
