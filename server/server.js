@@ -314,8 +314,7 @@ app.post('/api/orders/:id/process-completion', authMiddleware, async (req, res) 
 });
 
 
-// --- CRM: API Endpoints ---
-
+// --- CRM: Schemat i Model Danych ---
 const contactSchema = new mongoose.Schema({
     name: { type: String, required: true },
     company: String,
@@ -324,13 +323,13 @@ const contactSchema = new mongoose.Schema({
     address: String,
     status: { type: String, default: 'Lead', enum: ['Lead', 'Klient', 'Utracony', 'Partner'] },
     notes: String,
-	accountManager: { type: String },
     ownerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    accountManager: { type: String }, // DODANE POLE
     createdAt: { type: Date, default: Date.now }
 });
 const Contact = mongoose.models.Contact || mongoose.model('Contact', contactSchema);
 
-// --- Middleware do obsługi plików (przeniesione wyżej) ---
+// --- Middleware do obsługi plików ---
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
@@ -399,44 +398,37 @@ app.post('/api/crm/import-contacts', authMiddleware, upload.single('contactsFile
 
     try {
         const contactsToImport = [];
-        // KROK 1: Zmiana dekodowania na UTF-8
-        const fileContent = req.file.buffer.toString('utf8');
-        const readableStream = Readable.from(fileContent);
+        const readableStream = Readable.from(req.file.buffer.toString('utf8'));
 
         readableStream
-            .pipe(csv({ headers: ['name', 'company', 'email', 'phone', 'address', 'status', 'notes', 'accountManager'], skipLines: 1, separator: ',' }))
+            .pipe(csv({ headers: ['name', 'company', 'email', 'phone', 'address', 'status', 'notes', 'accountManager'], skipLines: 1 }))
             .on('data', (row) => {
-                if (row.name && row.name.trim() !== '') {
-                    contactsToImport.push({
+                if (row.name && row.name.trim()) {
+                    const contactData = {
                         ...row,
                         ownerId: req.user.userId
-                    });
+                    };
+                    // POPRAWKA: Ustaw domyślny status, jeśli w pliku jest pusty
+                    if (!contactData.status || !['Lead', 'Klient', 'Utracony', 'Partner'].includes(contactData.status)) {
+                        contactData.status = 'Lead';
+                    }
+                    contactsToImport.push(contactData);
                 }
             })
             .on('end', async () => {
-                try {
-                    if (contactsToImport.length > 0) {
-                        await Contact.insertMany(contactsToImport);
-                        res.status(201).json({ message: `Pomyślnie zaimportowano ${contactsToImport.length} kontaktów.` });
-                    } else {
-                        res.status(400).json({ message: 'Plik nie zawierał poprawnych danych do importu lub był pusty.' });
-                    }
-                } catch (dbError) {
-                    console.error('Błąd zapisu do bazy danych po imporcie CSV:', dbError);
-                    res.status(500).json({ message: 'Błąd zapisu danych do bazy.', error: dbError.message });
+                if (contactsToImport.length > 0) {
+                    await Contact.insertMany(contactsToImport);
+                    res.status(201).json({ message: `Pomyślnie zaimportowano ${contactsToImport.length} kontaktów.` });
+                } else {
+                    res.status(400).json({ message: 'Plik nie zawierał poprawnych danych do importu.' });
                 }
-            })
-            // KROK 2: Solidna obsługa błędów strumienia, aby zapobiec awarii serwera
-            .on('error', (streamError) => {
-                console.error('Błąd podczas parsowania pliku CSV:', streamError);
-                res.status(500).json({ message: 'Błąd podczas przetwarzania pliku CSV. Sprawdź format i kodowanie pliku.', error: streamError.message });
             });
 
     } catch (error) {
-        console.error('Błąd w endpointcie importu kontaktów:', error);
         res.status(500).json({ message: 'Wystąpił błąd serwera podczas importu.', error: error.message });
     }
 });
+
 
 
 
