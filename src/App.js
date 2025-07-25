@@ -2569,7 +2569,7 @@ const CrmView = ({ user }) => {
         } catch (error) {
             showNotification(error.message, 'error');
         }
-        event.target.value = null; // Reset inputu pliku
+        event.target.value = null;
     };
 
     const filteredContacts = contacts.filter(c =>
@@ -2608,12 +2608,13 @@ const CrmView = ({ user }) => {
                             <th className="p-4">Email</th>
                             <th className="p-4">Telefon</th>
                             <th className="p-4">Status</th>
+                            <th className="p-4">Opiekun</th>
                             <th className="p-4">Akcje</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                         {isLoading ? (
-                            <tr><td colSpan="6" className="p-8 text-center">Ładowanie...</td></tr>
+                            <tr><td colSpan="7" className="p-8 text-center">Ładowanie...</td></tr>
                         ) : filteredContacts.map(contact => (
                             <tr key={contact._id}>
                                 <td className="p-4 font-medium">{contact.name}</td>
@@ -2621,6 +2622,7 @@ const CrmView = ({ user }) => {
                                 <td className="p-4">{contact.email}</td>
                                 <td className="p-4">{contact.phone}</td>
                                 <td className="p-4"><span className="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">{contact.status}</span></td>
+                                <td className="p-4">{contact.accountManager}</td>
                                 <td className="p-4">
                                     <button onClick={() => setModalState({ isOpen: true, contact })} className="p-2 text-blue-500 hover:text-blue-700"><Edit className="w-5 h-5"/></button>
                                     <button onClick={() => handleDelete(contact._id)} className="p-2 text-red-500 hover:text-red-700"><Trash2 className="w-5 h-5"/></button>
@@ -2642,14 +2644,28 @@ const CrmView = ({ user }) => {
 
 const ContactFormModal = ({ isOpen, onClose, onSave, contact }) => {
     const [formData, setFormData] = useState({});
+    const [users, setUsers] = useState([]);
+    const { showNotification } = useNotification();
 
     useEffect(() => {
-        if (contact) {
-            setFormData(contact);
-        } else {
-            setFormData({ name: '', company: '', email: '', phone: '', address: '', status: 'Lead', notes: '' });
+        if (isOpen) {
+            const fetchUsers = async () => {
+                try {
+                    const userList = await api.getUsersList(); 
+                    setUsers(userList);
+                } catch (error) {
+                    showNotification('Nie udało się wczytać listy użytkowników', 'error');
+                }
+            };
+            fetchUsers();
+
+            if (contact) {
+                setFormData(contact);
+            } else {
+                setFormData({ name: '', company: '', email: '', phone: '', address: '', status: 'Lead', notes: '', accountManager: '' });
+            }
         }
-    }, [contact, isOpen]);
+    }, [contact, isOpen, showNotification]);
 
     const handleChange = (e) => {
         const { name, value } = e.target;
@@ -2671,12 +2687,20 @@ const ContactFormModal = ({ isOpen, onClose, onSave, contact }) => {
                     <input name="phone" value={formData.phone || ''} onChange={handleChange} placeholder="Telefon" className="p-2 border rounded-md"/>
                 </div>
                 <input name="address" value={formData.address || ''} onChange={handleChange} placeholder="Adres" className="w-full p-2 border rounded-md"/>
-                <select name="status" value={formData.status || 'Lead'} onChange={handleChange} className="w-full p-2 border rounded-md">
-                    <option>Lead</option>
-                    <option>Klient</option>
-                    <option>Utracony</option>
-                    <option>Partner</option>
-                </select>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <select name="status" value={formData.status || 'Lead'} onChange={handleChange} className="w-full p-2 border rounded-md">
+                        <option>Lead</option>
+                        <option>Klient</option>
+                        <option>Utracony</option>
+                        <option>Partner</option>
+                    </select>
+                    <select name="accountManager" value={formData.accountManager || ''} onChange={handleChange} className="w-full p-2 border rounded-md">
+                        <option value="">-- Brak opiekuna --</option>
+                        {users.map(user => (
+                            <option key={user._id} value={user.username}>{user.username}</option>
+                        ))}
+                    </select>
+                </div>
                 <textarea name="notes" value={formData.notes || ''} onChange={handleChange} placeholder="Notatki..." className="w-full p-2 border rounded-md min-h-[100px]"/>
                 <div className="flex justify-end gap-4 pt-4">
                     <button type="button" onClick={onClose} className="px-4 py-2 bg-gray-200 rounded-lg">Anuluj</button>
@@ -3964,6 +3988,7 @@ const getInitialOrder = () => {
     // Domyślnie zwracamy czyste zamówienie
     return { customerName: '', items: [], isDirty: false };
 };
+
 const Sidebar = ({ user, onLogout, onOpenPasswordModal, onNewOrder }) => {
     const [isDarkMode, setIsDarkMode] = useState(document.documentElement.classList.contains('dark'));
     const [isNavOpen, setIsNavOpen] = useState(false);
