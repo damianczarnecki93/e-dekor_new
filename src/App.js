@@ -868,10 +868,20 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty }) => {
         return sortConfig.direction === 'ascending' ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />;
     };
     
-    useEffect(() => { 
+    useEffect(() => {
         setOrder(currentOrder);
-        setDirty(currentOrder.isDirty || false);
-    }, [currentOrder, setDirty]);
+    }, [currentOrder]);
+
+    useEffect(() => {
+        // Zapisuj w localStorage tylko jeśli to nowe, niezapisane zamówienie (brak _id)
+        if (!order._id) {
+            try {
+                localStorage.setItem('draftOrder', JSON.stringify(order));
+            } catch (error) {
+                console.error("Błąd zapisu roboczego zamówienia do localStorage:", error);
+            }
+        }
+    }, [order]);
     
     const scrollToBottom = () => listEndRef.current?.scrollIntoView({ behavior: "smooth" });
     useEffect(scrollToBottom, [order.items]);
@@ -941,14 +951,22 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty }) => {
     const totalValue = useMemo(() => (order.items || []).reduce((sum, item) => sum + item.price * (item.quantity || 0), 0), [order.items]);
 
     const handleSaveOrder = async () => {
-        if (!order.customerName) { showNotification('Proszę podać nazwę klienta.', 'error'); return; }
+        if (!order.customerName) { 
+            showNotification('Proszę podać nazwę klienta.', 'error'); 
+            return; 
+        }
         try {
             const orderToSave = { ...order, author: user.username };
             const { message, order: savedOrder } = await api.saveOrder(orderToSave);
             showNotification(message, 'success');
-            updateOrder(savedOrder, false);
-        } catch (error) { showNotification(error.message, 'error'); }
+            localStorage.removeItem('draftOrder'); // Czyścimy dane robocze po zapisie
+            setCurrentOrder(savedOrder);
+            setDirty(false);
+        } catch (error) { 
+            showNotification(error.message, 'error'); 
+        }
     };
+
     
     const handleFileImport = async (event) => {
         const file = event.target.files[0];
@@ -3720,7 +3738,23 @@ const DelegationDetails = ({ delegation, onUpdate, onNavigate, setCurrentOrder, 
 
 
 // --- Główny Komponent Aplikacji ---
-const Sidebar = ({ user, onLogout, onOpenPasswordModal }) => {
+
+const getInitialOrder = () => {
+    try {
+        const savedOrder = localStorage.getItem('draftOrder');
+        if (savedOrder) {
+            const parsed = JSON.parse(savedOrder);
+            if (!parsed._id) { // Upewniamy się, że to wersja robocza
+                return parsed;
+            }
+        }
+    } catch (error) {
+        console.error("Błąd odczytu roboczego zamówienia z localStorage:", error);
+    }
+    return { customerName: '', items: [], isDirty: false };
+};
+
+const Sidebar = ({ user, onLogout, onOpenPasswordModal, onNewOrder }) => {
     const [isDarkMode, setIsDarkMode] = useState(document.documentElement.classList.contains('dark'));
     const [isNavOpen, setIsNavOpen] = useState(false);
     const [expandedCategories, setExpandedCategories] = useState(['Główne']);
@@ -3838,7 +3872,7 @@ const availableNav = useMemo(() => {
 function App() {
     const [user, setUser] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
-    const [currentOrder, setCurrentOrder] = useState({ customerName: '', items: [], isDirty: false });
+    const [currentOrder, setCurrentOrder] = useState(getInitialOrder);
     const [isDirty, setIsDirty] = useState(false);
     const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
     const navigate = useNavigate();
@@ -3858,11 +3892,24 @@ function App() {
     const handleLogout = useCallback(async () => {
         localStorage.removeItem('userToken');
         localStorage.removeItem('userData');
+        localStorage.removeItem('draftOrder'); // Czyścimy dane robocze przy wylogowaniu
         setUser(null);
         navigate('/login');
     }, [navigate]);
 
-    // NOWY HOOK: Nasłuchuje na błędy autoryzacji i wylogowuje
+    const handleNewOrder = () => {
+        if (isDirty) {
+            if (!window.confirm("Masz niezapisane zmiany. Czy na pewno chcesz utworzyć nowe zamówienie? Zmiany zostaną utracone.")) {
+                return;
+            }
+        }
+        const newBlankOrder = { customerName: '', items: [], isDirty: false };
+        localStorage.setItem('draftOrder', JSON.stringify(newBlankOrder));
+        setCurrentOrder(newBlankOrder);
+        setIsDirty(false);
+        navigate('/order');
+    };
+
     useEffect(() => {
         const handleAuthError = () => {
             console.log("Wykryto błąd autoryzacji, wylogowywanie...");
@@ -3901,7 +3948,7 @@ function App() {
     return (
         <>
             <div className="flex h-screen bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-sans">
-                {user && <Sidebar user={user} onLogout={handleLogout} onOpenPasswordModal={() => setIsPasswordModalOpen(true)} />}
+                {user && <Sidebar user={user} onLogout={handleLogout} onOpenPasswordModal={() => setIsPasswordModalOpen(true)} onNewOrder={handleNewOrder} />}
                 <main className="flex-1 flex flex-col overflow-hidden">
                     <Routes>
                         {!user ? (
