@@ -69,22 +69,370 @@ const fetchWithAuth = async (url, options = {}) => {
     const token = localStorage.getItem('userToken');
     const headers = { ...options.headers };
     if (token) headers['Authorization'] = `Bearer ${token}`;
-    if (!(options.body instanceof FormData)) headers['Content-Type'] = 'application/json';
+    if (!(options.body instanceof FormData)) {
+        headers['Content-Type'] = 'application/json';
+    }
     
-    const response = await fetch(url, { ...options, headers });
+    const response = await fetch(`${API_BASE_URL}${url}`, { ...options, headers });
 
     if (response.status === 401) {
         localStorage.removeItem('userToken');
         localStorage.removeItem('userData');
-        window.location.hash = '/login';
-        window.location.reload();
         throw new Error('Sesja wygasła. Proszę zalogować się ponownie.');
     }
     return response;
 };
 
-// --- Hook do sortowania ---
+const api = {
+	updateOrderStatus: async (orderId, status) => {
+    const response = await fetchWithAuth(`/api/orders/${orderId}/status`, { 
+        method: 'PUT', 
+        body: JSON.stringify({ status }) 
+    });
+    if (!response.ok) { 
+        const errorData = await response.json(); 
+        throw new Error(errorData.message || 'Błąd aktualizacji statusu'); 
+    }
+    return await response.json();
+	},
+	getShortageReport: async () => {
+		const response = await fetchWithAuth(`/api/reports/shortages`);
+		if (!response.ok) throw new Error('Błąd pobierania raportu braków');
+		return await response.json();
+	},
+    searchProducts: async (searchTerm, filterByQuantity = false) => {
+        const response = await fetchWithAuth(`/api/products?search=${encodeURIComponent(searchTerm)}&filterByQuantity=${filterByQuantity}`);
+        if (!response.ok) { const errorData = await response.json(); throw new Error(errorData.message || 'Błąd wyszukiwania produktów'); }
+        return await response.json();
+    },
+    importOrderFromCsv: async (file) => {
+        const formData = new FormData();
+        formData.append('orderFile', file);
+        const response = await fetchWithAuth(`/api/orders/import-csv`, { method: 'POST', body: formData });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.message || 'Błąd importu pliku');
+        return data;
+    },
+    importMultipleOrdersFromCsv: async (files) => {
+        const formData = new FormData();
+        files.forEach(file => formData.append('orderFiles', file));
+        const response = await fetchWithAuth(`/api/orders/import-multiple-csv`, { method: 'POST', body: formData });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.message || 'Błąd importu plików');
+        return data;
+    },
+	testEmailConfig: async () => {
+    const response = await fetchWithAuth(`/api/admin/test-email`, { method: 'POST' });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || 'Błąd podczas wysyłki testowej');
+    return data;
+	},
+    saveOrder: async (order) => {
+        const url = order._id ? `/api/orders/${order._id}` : `/api/orders`;
+        const method = order._id ? 'PUT' : 'POST';
+        const response = await fetchWithAuth(url, { method, body: JSON.stringify(order) });
+        if (!response.ok) { const errorData = await response.json(); throw new Error(errorData.message || 'Błąd zapisywania zamówienia'); }
+        return await response.json();
+    },
+    getOrders: async (filters = {}) => {
+        const params = new URLSearchParams();
+        for (const [key, value] of Object.entries(filters)) {
+            if (value) {
+                if (Array.isArray(value)) {
+                    value.forEach(item => params.append(key, item));
+                } else {
+                    params.append(key, value);
+                }
+            }
+        }
+        const url = `/api/orders?${params.toString()}`;
+        const response = await fetchWithAuth(url);
+        if (!response.ok) { const errorData = await response.json(); throw new Error(errorData.message || 'Błąd pobierania zamówień'); }
+        return await response.json();
+    },
+    getOrderById: async (id) => {
+        const response = await fetchWithAuth(`/api/orders/${id}`);
+        if (!response.ok) throw new Error('Nie znaleziono zamówienia');
+        return await response.json();
+    },
+    deleteOrder: async (id) => {
+        const response = await fetchWithAuth(`/api/orders/${id}`, { method: 'DELETE' });
+        if (!response.ok) throw new Error('Błąd usuwania zamówienia');
+        return await response.json();
+    },
+    completeOrder: async (orderId, pickedItems) => {
+        const response = await fetchWithAuth(`/api/orders/${orderId}/complete`, { method: 'POST', body: JSON.stringify({ pickedItems }) });
+        if (!response.ok) { const errorData = await response.json(); throw new Error(errorData.message || 'Błąd podczas kompletacji zamówienia'); }
+        return await response.json();
+    },
+    revertOrderCompletion: async (orderId) => {
+        const response = await fetchWithAuth(`/api/orders/${orderId}/revert`, { method: 'POST' });
+        if (!response.ok) throw new Error('Błąd przywracania zamówienia');
+        return await response.json();
+    },
+    uploadProductsFile: async (file, mode) => {
+        const formData = new FormData();
+        formData.append('productsFile', file);
+        const response = await fetchWithAuth(`/api/admin/upload-products?mode=${mode}`, { method: 'POST', body: formData });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.message || 'Błąd wgrywania pliku');
+        return data;
+    },
+    getDashboardStats: async () => {
+        const response = await fetchWithAuth(`/api/dashboard-stats`);
+        if (!response.ok) throw new Error('Błąd pobierania statystyk');
+        return await response.json();
+    },
+    mergeProducts: async () => {
+        const response = await fetchWithAuth(`/api/admin/merge-products`, { method: 'POST' });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.message || 'Błąd łączenia produktów');
+        return data;
+    },
+    saveInventory: async (inventory) => {
+        const url = inventory._id ? `/api/inventories/${inventory._id}` : `/api/inventories`;
+        const method = inventory._id ? 'PUT' : 'POST';
+        const response = await fetchWithAuth(url, { method, body: JSON.stringify(inventory) });
+        if (!response.ok) { const errorData = await response.json(); throw new Error(errorData.message || 'Błąd zapisywania inwentaryzacji'); }
+        return await response.json();
+    },
+    getInventories: async () => {
+        const response = await fetchWithAuth(`/api/inventories`);
+        if (!response.ok) throw new Error('Błąd pobierania inwentaryzacji');
+        return await response.json();
+    },
+    getInventoryById: async (id) => {
+        const response = await fetchWithAuth(`/api/inventories/${id}`);
+        if (!response.ok) throw new Error('Nie znaleziono inwentaryzacji');
+        return await response.json();
+    },
+    deleteInventory: async (id) => {
+        const response = await fetchWithAuth(`/api/inventories/${id}`, { method: 'DELETE' });
+        if (!response.ok) throw new Error('Błąd usuwania inwentaryzacji');
+        return await response.json();
+    },
+    importInventorySheet: async (file) => {
+        const formData = new FormData();
+        formData.append('sheetFile', file);
+        const response = await fetchWithAuth(`/api/inventories/import-sheet`, { method: 'POST', body: formData });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.message || 'Błąd importu arkusza');
+        return data;
+    },
+    importMultipleInventorySheets: async (files) => {
+        const formData = new FormData();
+        files.forEach(file => formData.append('sheetFiles', file));
+        const response = await fetchWithAuth(`/api/inventories/import-multiple-sheets`, { method: 'POST', body: formData });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.message || 'Błąd importu plików');
+        return data;
+    },
+    login: async (username, password) => {
+        const response = await fetch(`${API_BASE_URL}/api/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.message || `Błąd serwera: ${response.status}`);
+        return data;
+    },
+    register: async (username, password) => {
+        const response = await fetch(`${API_BASE_URL}/api/register`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.message);
+        return data;
+    },
+    getUsers: async () => {
+        const response = await fetchWithAuth(`/api/admin/users`);
+        if (!response.ok) throw new Error('Błąd pobierania użytkowników');
+        return await response.json();
+    },
+    getUsersList: async () => {
+        const response = await fetchWithAuth(`/api/users/list`);
+        if (!response.ok) throw new Error('Błąd pobierania listy użytkowników');
+        return await response.json();
+    },
+    approveUser: async (userId) => {
+        const response = await fetchWithAuth(`/api/admin/users/${userId}/approve`, { method: 'POST' });
+        if (!response.ok) throw new Error('Błąd akceptacji użytkownika');
+        return await response.json();
+    },
+    changeUserRole: async (userId, role) => {
+        const response = await fetchWithAuth(`/api/admin/users/${userId}/role`, { method: 'POST', body: JSON.stringify({ role }) });
+        if (!response.ok) throw new Error('Błąd zmiany roli użytkownika');
+        return await response.json();
+    },
+       updateUserModules: async (userId, modules) => {
+        const response = await fetchWithAuth(`/api/admin/users/${userId}/modules`, { method: 'PUT', body: JSON.stringify({ modules }) });
+        if (!response.ok) throw new Error('Błąd aktualizacji modułów użytkownika');
+        return await response.json();
+    },
+	updateUserDashboardLayout: async (layout) => {
+		const response = await fetchWithAuth(`/api/user/dashboard-layout`, { method: 'PUT', body: JSON.stringify({ layout }) });
+		if (!response.ok) throw new Error('Błąd zapisywania układu pulpitu');
+		return await response.json();
+},
+    deleteUser: async (userId) => {
+        const response = await fetchWithAuth(`/api/admin/users/${userId}`, { method: 'DELETE' });
+        if (!response.ok) throw new Error('Błąd usuwania użytkownika');
+        return await response.json();
+    },
+    changePassword: async (userId, password) => {
+        const response = await fetchWithAuth(`/api/admin/users/${userId}/password`, { method: 'POST', body: JSON.stringify({ password }) });
+        if (!response.ok) throw new Error('Błąd zmiany hasła');
+        return await response.json();
+    },
+    userChangeOwnPassword: async (currentPassword, newPassword) => {
+        const response = await fetchWithAuth(`/api/user/password`, { method: 'POST', body: JSON.stringify({ currentPassword, newPassword }) });
+        if (!response.ok) { const errorData = await response.json(); throw new Error(errorData.message || 'Błąd zmiany hasła'); }
+        return await response.json();
+    },
+    getAllProducts: async (page = 1, limit = 20, search = '') => {
+        const params = new URLSearchParams({ page, limit, search });
+        const response = await fetchWithAuth(`/api/admin/all-products?${params.toString()}`);
+        if (!response.ok) throw new Error('Błąd pobierania produktów');
+        return await response.json();
+    },
+    setUserGoal: async (goal) => {
+        const response = await fetchWithAuth(`/api/user/goal`, { method: 'POST', body: JSON.stringify({ goal }) });
+        if (!response.ok) throw new Error('Błąd ustawiania celu');
+        return await response.json();
+    },
+    addManualSales: async (sales) => {
+        const response = await fetchWithAuth(`/api/user/manual-sales`, { method: 'POST', body: JSON.stringify({ sales }) });
+        if (!response.ok) throw new Error('Błąd dodawania sprzedaży');
+        return await response.json();
+    },
+    getNotes: async () => {
+        const response = await fetchWithAuth(`/api/notes`);
+        if (!response.ok) throw new Error('Błąd pobierania notatek');
+        return await response.json();
+    },
+    addNote: async (note) => {
+        const response = await fetchWithAuth(`/api/notes`, { method: 'POST', body: JSON.stringify(note) });
+        if (!response.ok) throw new Error('Błąd dodawania notatki');
+        return await response.json();
+    },
+    deleteNote: async (noteId) => {
+        const response = await fetchWithAuth(`/api/notes/${noteId}`, { method: 'DELETE' });
+        if (!response.ok) throw new Error('Błąd usuwania notatki');
+        return await response.json();
+    },
+    getKanbanTasks: async (userId) => {
+        const url = userId ? `/api/kanban/tasks?userId=${userId}` : `/api/kanban/tasks`;
+        const response = await fetchWithAuth(url);
+        if (!response.ok) throw new Error('Błąd pobierania zadań');
+        return await response.json();
+    },
+    addKanbanTask: async (task) => {
+        const response = await fetchWithAuth(`/api/kanban/tasks`, { method: 'POST', body: JSON.stringify(task) });
+        if (!response.ok) throw new Error('Błąd dodawania zadania');
+        return await response.json();
+    },
+    updateKanbanTask: async (taskId, data) => {
+        const response = await fetchWithAuth(`/api/kanban/tasks/${taskId}`, { method: 'PUT', body: JSON.stringify(data) });
+        if (!response.ok) throw new Error('Błąd aktualizacji zadania');
+        return await response.json();
+    },
+    deleteKanbanTask: async (taskId) => {
+        const response = await fetchWithAuth(`/api/kanban/tasks/${taskId}`, { method: 'DELETE' });
+        if (!response.ok) throw new Error('Błąd usuwania zadania');
+        return await response.json();
+    },
+    getDelegations: async () => {
+        const response = await fetchWithAuth(`/api/delegations`);
+        if (!response.ok) throw new Error('Błąd pobierania delegacji');
+        return await response.json();
+    },
+    addDelegation: async (delegation) => {
+        const response = await fetchWithAuth(`/api/delegations`, { method: 'POST', body: JSON.stringify(delegation) });
+        if (!response.ok) throw new Error('Błąd tworzenia delegacji');
+        return await response.json();
+    },
+	saveDelegation: async (delegation) => {
+        const url = delegation._id 
+            ? `/api/delegations/${delegation._id}` 
+            : `/api/delegations`;
+        const method = delegation._id ? 'PUT' : 'POST';
+        const response = await fetchWithAuth(url, { method, body: JSON.stringify(delegation) });
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || 'Błąd zapisywania delegacji');
+        }
+        return await response.json();
+    },
+    updateDelegationStatus: async (delegationId, status) => {
+        const response = await fetchWithAuth(`/api/delegations/${delegationId}/status`, { method: 'PUT', body: JSON.stringify({ status }) });
+        if (!response.ok) throw new Error('Błąd aktualizacji statusu delegacji');
+        return await response.json();
+    },
+    deleteDelegation: async (delegationId) => {
+        const response = await fetchWithAuth(`/api/delegations/${delegationId}`, { method: 'DELETE' });
+        if (!response.ok) throw new Error('Błąd usuwania delegacji');
+        return await response.json();
+    },
+	 startDelegation: async (delegationId) => {
+        const response = await fetchWithAuth(`/api/delegations/${delegationId}/start`, { method: 'POST' });
+        if (!response.ok) throw new Error('Błąd rozpoczęcia delegacji');
+        return await response.json();
+    },
+    endDelegation: async (delegationId) => {
+        const response = await fetchWithAuth(`/api/delegations/${delegationId}/end`, { method: 'POST' });
+        if (!response.ok) throw new Error('Błąd zakończenia delegacji');
+        return await response.json();
+    },
+    startClientVisit: async (delegationId, clientIndex) => {
+        const response = await fetchWithAuth(`/api/delegations/${delegationId}/visits/${clientIndex}/start`, { method: 'POST' });
+        if (!response.ok) throw new Error('Błąd rozpoczęcia wizyty');
+        return await response.json();
+    },
+	getEmailConfig: async () => {
+        const response = await fetchWithAuth(`/api/admin/email-config`);
+        if (!response.ok) throw new Error('Błąd pobierania konfiguracji email');
+        return await response.json();
+    },
+    saveEmailConfig: async (config) => {
+        const response = await fetchWithAuth(`/api/admin/email-config`, {
+            method: 'POST',
+            body: JSON.stringify(config)
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.message || 'Błąd zapisywania konfiguracji');
+        return data;
+    },
+    endClientVisit: async (delegationId, clientIndex, visitData) => {
+        const response = await fetchWithAuth(`/api/delegations/${delegationId}/visits/${clientIndex}/end`, { method: 'POST', body: JSON.stringify(visitData) });
+        if (!response.ok) throw new Error('Błąd zakończenia wizyty');
+        return await response.json();
+    },
+	processCompletion: async (orderId, pickedItems, allItems) => {
+    const response = await fetchWithAuth(`/api/orders/${orderId}/process-completion`, { 
+        method: 'POST', 
+        body: JSON.stringify({ pickedItems, allItems }) 
+    });
+    if (!response.ok) { 
+        const errorData = await response.json(); 
+        throw new Error(errorData.message || 'Błąd podczas przetwarzania kompletacji'); 
+    }
+    return await response.json();
+	},
+};
 
+// --- Komponenty Pomocnicze i UI ---
+const Tooltip = ({ children, text }) => ( <div className="relative flex items-center group">{children}<div className="absolute bottom-full mb-2 w-max px-2 py-1 bg-gray-800 text-white text-xs rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none">{text}</div></div>);
+const Modal = ({ isOpen, onClose, title, children, maxWidth = 'md' }) => {
+    if (!isOpen) return null;
+    const maxWidthClass = { sm: 'max-w-sm', md: 'max-w-md', lg: 'max-w-lg', xl: 'max-w-xl', '2xl': 'max-w-2xl', '4xl': 'max-w-4xl' }[maxWidth];
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex justify-center items-center p-2 sm:p-4 animate-fade-in">
+            <div className={`bg-white dark:bg-gray-800 rounded-lg shadow-2xl w-full m-4 ${maxWidthClass} flex flex-col max-h-[90vh]`}>
+                <div className="flex-shrink-0 flex justify-between items-center p-4 border-b border-gray-200 dark:border-gray-700">
+                    <h3 className="text-xl font-semibold text-gray-900 dark:text-white">{title}</h3>
+                    <button onClick={onClose} className="text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg text-sm p-1.5"><XCircle className="w-6 h-6"/></button>
+                </div>
+                <div className="p-6 overflow-y-auto">{children}</div>
+            </div>
+        </div>
+    );
+};
+// --- Hook do sortowania ---
 const useSortableData = (items, config = null) => {
     const [sortConfig, setSortConfig] = useState(config);
 
@@ -115,374 +463,8 @@ const useSortableData = (items, config = null) => {
     return { items: sortedItems, requestSort, sortConfig };
 };
 
-const api = {
-	updateOrderStatus: async (orderId, status) => {
-    const response = await fetchWithAuth(`${API_BASE_URL}/api/orders/${orderId}/status`, { 
-        method: 'PUT', 
-        body: JSON.stringify({ status }) 
-    });
-    if (!response.ok) { 
-        const errorData = await response.json(); 
-        throw new Error(errorData.message || 'Błąd aktualizacji statusu'); 
-    }
-    return await response.json();
-	},
 
-	getShortageReport: async () => {
-		const response = await fetchWithAuth(`${API_BASE_URL}/api/reports/shortages`);
-		if (!response.ok) throw new Error('Błąd pobierania raportu braków');
-		return await response.json();
-	},
-    searchProducts: async (searchTerm, filterByQuantity = false) => {
-        const response = await fetchWithAuth(`${API_BASE_URL}/api/products?search=${encodeURIComponent(searchTerm)}&filterByQuantity=${filterByQuantity}`);
-        if (!response.ok) { const errorData = await response.json(); throw new Error(errorData.message || 'Błąd wyszukiwania produktów'); }
-        return await response.json();
-    },
-    importOrderFromCsv: async (file) => {
-        const formData = new FormData();
-        formData.append('orderFile', file);
-        const response = await fetchWithAuth(`${API_BASE_URL}/api/orders/import-csv`, { method: 'POST', body: formData });
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.message || 'Błąd importu pliku');
-        return data;
-    },
-    importMultipleOrdersFromCsv: async (files) => {
-        const formData = new FormData();
-        files.forEach(file => formData.append('orderFiles', file));
-        const response = await fetchWithAuth(`${API_BASE_URL}/api/orders/import-multiple-csv`, { method: 'POST', body: formData });
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.message || 'Błąd importu plików');
-        return data;
-    },
-	testEmailConfig: async () => {
-    const response = await fetchWithAuth(`${API_BASE_URL}/api/admin/test-email`, { method: 'POST' });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.message || 'Błąd podczas wysyłki testowej');
-    return data;
-	},
-    saveOrder: async (order) => {
-        const url = order._id ? `${API_BASE_URL}/api/orders/${order._id}` : `${API_BASE_URL}/api/orders`;
-        const method = order._id ? 'PUT' : 'POST';
-        const response = await fetchWithAuth(url, { method, body: JSON.stringify(order) });
-        if (!response.ok) { const errorData = await response.json(); throw new Error(errorData.message || 'Błąd zapisywania zamówienia'); }
-        return await response.json();
-    },
-    getOrders: async (filters = {}) => {
-        const params = new URLSearchParams();
-        for (const [key, value] of Object.entries(filters)) {
-            if (value) {
-                if (Array.isArray(value)) {
-                    value.forEach(item => params.append(key, item));
-                } else {
-                    params.append(key, value);
-                }
-            }
-        }
-        const url = `${API_BASE_URL}/api/orders?${params.toString()}`;
-        const response = await fetchWithAuth(url);
-        if (!response.ok) { const errorData = await response.json(); throw new Error(errorData.message || 'Błąd pobierania zamówień'); }
-        return await response.json();
-    },
-    getOrderById: async (id) => {
-        const response = await fetchWithAuth(`${API_BASE_URL}/api/orders/${id}`);
-        if (!response.ok) throw new Error('Nie znaleziono zamówienia');
-        return await response.json();
-    },
-    deleteOrder: async (id) => {
-        const response = await fetchWithAuth(`${API_BASE_URL}/api/orders/${id}`, { method: 'DELETE' });
-        if (!response.ok) throw new Error('Błąd usuwania zamówienia');
-        return await response.json();
-    },
-    completeOrder: async (orderId, pickedItems) => {
-        const response = await fetchWithAuth(`${API_BASE_URL}/api/orders/${orderId}/complete`, { method: 'POST', body: JSON.stringify({ pickedItems }) });
-        if (!response.ok) { const errorData = await response.json(); throw new Error(errorData.message || 'Błąd podczas kompletacji zamówienia'); }
-        return await response.json();
-    },
-    revertOrderCompletion: async (orderId) => {
-        const response = await fetchWithAuth(`${API_BASE_URL}/api/orders/${orderId}/revert`, { method: 'POST' });
-        if (!response.ok) throw new Error('Błąd przywracania zamówienia');
-        return await response.json();
-    },
-    uploadProductsFile: async (file, mode) => {
-        const formData = new FormData();
-        formData.append('productsFile', file);
-        const response = await fetchWithAuth(`${API_BASE_URL}/api/admin/upload-products?mode=${mode}`, { method: 'POST', body: formData });
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.message || 'Błąd wgrywania pliku');
-        return data;
-    },
-    getDashboardStats: async () => {
-        const response = await fetchWithAuth(`${API_BASE_URL}/api/dashboard-stats`);
-        if (!response.ok) throw new Error('Błąd pobierania statystyk');
-        return await response.json();
-    },
-    mergeProducts: async () => {
-        const response = await fetchWithAuth(`${API_BASE_URL}/api/admin/merge-products`, { method: 'POST' });
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.message || 'Błąd łączenia produktów');
-        return data;
-    },
-    saveInventory: async (inventory) => {
-        const url = inventory._id ? `${API_BASE_URL}/api/inventories/${inventory._id}` : `${API_BASE_URL}/api/inventories`;
-        const method = inventory._id ? 'PUT' : 'POST';
-        const response = await fetchWithAuth(url, { method, body: JSON.stringify(inventory) });
-        if (!response.ok) { const errorData = await response.json(); throw new Error(errorData.message || 'Błąd zapisywania inwentaryzacji'); }
-        return await response.json();
-    },
-    getInventories: async () => {
-        const response = await fetchWithAuth(`${API_BASE_URL}/api/inventories`);
-        if (!response.ok) throw new Error('Błąd pobierania inwentaryzacji');
-        return await response.json();
-    },
-    getInventoryById: async (id) => {
-        const response = await fetchWithAuth(`${API_BASE_URL}/api/inventories/${id}`);
-        if (!response.ok) throw new Error('Nie znaleziono inwentaryzacji');
-        return await response.json();
-    },
-    deleteInventory: async (id) => {
-        const response = await fetchWithAuth(`${API_BASE_URL}/api/inventories/${id}`, { method: 'DELETE' });
-        if (!response.ok) throw new Error('Błąd usuwania inwentaryzacji');
-        return await response.json();
-    },
-    importInventorySheet: async (file) => {
-        const formData = new FormData();
-        formData.append('sheetFile', file);
-        const response = await fetchWithAuth(`${API_BASE_URL}/api/inventories/import-sheet`, { method: 'POST', body: formData });
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.message || 'Błąd importu arkusza');
-        return data;
-    },
-    importMultipleInventorySheets: async (files) => {
-        const formData = new FormData();
-        files.forEach(file => formData.append('sheetFiles', file));
-        const response = await fetchWithAuth(`${API_BASE_URL}/api/inventories/import-multiple-sheets`, { method: 'POST', body: formData });
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.message || 'Błąd importu plików');
-        return data;
-    },
-    login: async (username, password) => {
-        const response = await fetch(`${API_BASE_URL}/api/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) });
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.message || `Błąd serwera: ${response.status}`);
-        return data;
-    },
-    register: async (username, password) => {
-        const response = await fetch(`${API_BASE_URL}/api/register`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) });
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.message);
-        return data;
-    },
-    getUsers: async () => {
-        const response = await fetchWithAuth(`${API_BASE_URL}/api/admin/users`);
-        if (!response.ok) throw new Error('Błąd pobierania użytkowników');
-        return await response.json();
-    },
-    getUsersList: async () => {
-        const response = await fetchWithAuth(`${API_BASE_URL}/api/users/list`);
-        if (!response.ok) throw new Error('Błąd pobierania listy użytkowników');
-        return await response.json();
-    },
-    approveUser: async (userId) => {
-        const response = await fetchWithAuth(`${API_BASE_URL}/api/admin/users/${userId}/approve`, { method: 'POST' });
-        if (!response.ok) throw new Error('Błąd akceptacji użytkownika');
-        return await response.json();
-    },
-    changeUserRole: async (userId, role) => {
-        const response = await fetchWithAuth(`${API_BASE_URL}/api/admin/users/${userId}/role`, { method: 'POST', body: JSON.stringify({ role }) });
-        if (!response.ok) throw new Error('Błąd zmiany roli użytkownika');
-        return await response.json();
-    },
-       updateUserModules: async (userId, modules) => {
-        const response = await fetchWithAuth(`${API_BASE_URL}/api/admin/users/${userId}/modules`, { method: 'PUT', body: JSON.stringify({ modules }) });
-        if (!response.ok) throw new Error('Błąd aktualizacji modułów użytkownika');
-        return await response.json();
-    },
-	updateUserDashboardLayout: async (layout) => {
-		const response = await fetchWithAuth(`${API_BASE_URL}/api/user/dashboard-layout`, { method: 'PUT', body: JSON.stringify({ layout }) });
-		if (!response.ok) throw new Error('Błąd zapisywania układu pulpitu');
-		return await response.json();
-},
-    deleteUser: async (userId) => {
-        const response = await fetchWithAuth(`${API_BASE_URL}/api/admin/users/${userId}`, { method: 'DELETE' });
-        if (!response.ok) throw new Error('Błąd usuwania użytkownika');
-        return await response.json();
-    },
-    changePassword: async (userId, password) => {
-        const response = await fetchWithAuth(`${API_BASE_URL}/api/admin/users/${userId}/password`, { method: 'POST', body: JSON.stringify({ password }) });
-        if (!response.ok) throw new Error('Błąd zmiany hasła');
-        return await response.json();
-    },
-    userChangeOwnPassword: async (currentPassword, newPassword) => {
-        const response = await fetchWithAuth(`${API_BASE_URL}/api/user/password`, { method: 'POST', body: JSON.stringify({ currentPassword, newPassword }) });
-        if (!response.ok) { const errorData = await response.json(); throw new Error(errorData.message || 'Błąd zmiany hasła'); }
-        return await response.json();
-    },
-    getAllProducts: async (page = 1, limit = 20, search = '') => {
-        const params = new URLSearchParams({ page, limit, search });
-        const response = await fetchWithAuth(`${API_BASE_URL}/api/admin/all-products?${params.toString()}`);
-        if (!response.ok) throw new Error('Błąd pobierania produktów');
-        return await response.json();
-    },
-    setUserGoal: async (goal) => {
-        const response = await fetchWithAuth(`${API_BASE_URL}/api/user/goal`, { method: 'POST', body: JSON.stringify({ goal }) });
-        if (!response.ok) throw new Error('Błąd ustawiania celu');
-        return await response.json();
-    },
-    addManualSales: async (sales) => {
-        const response = await fetchWithAuth(`${API_BASE_URL}/api/user/manual-sales`, { method: 'POST', body: JSON.stringify({ sales }) });
-        if (!response.ok) throw new Error('Błąd dodawania sprzedaży');
-        return await response.json();
-    },
-    getNotes: async () => {
-        const response = await fetchWithAuth(`${API_BASE_URL}/api/notes`);
-        if (!response.ok) throw new Error('Błąd pobierania notatek');
-        return await response.json();
-    },
-    addNote: async (note) => {
-        const response = await fetchWithAuth(`${API_BASE_URL}/api/notes`, { method: 'POST', body: JSON.stringify(note) });
-        if (!response.ok) throw new Error('Błąd dodawania notatki');
-        return await response.json();
-    },
-    deleteNote: async (noteId) => {
-        const response = await fetchWithAuth(`${API_BASE_URL}/api/notes/${noteId}`, { method: 'DELETE' });
-        if (!response.ok) throw new Error('Błąd usuwania notatki');
-        return await response.json();
-    },
-    getKanbanTasks: async (userId) => {
-        const url = userId ? `${API_BASE_URL}/api/kanban/tasks?userId=${userId}` : `${API_BASE_URL}/api/kanban/tasks`;
-        const response = await fetchWithAuth(url);
-        if (!response.ok) throw new Error('Błąd pobierania zadań');
-        return await response.json();
-    },
-    addKanbanTask: async (task) => {
-        const response = await fetchWithAuth(`${API_BASE_URL}/api/kanban/tasks`, { method: 'POST', body: JSON.stringify(task) });
-        if (!response.ok) throw new Error('Błąd dodawania zadania');
-        return await response.json();
-    },
-    updateKanbanTask: async (taskId, data) => {
-        const response = await fetchWithAuth(`${API_BASE_URL}/api/kanban/tasks/${taskId}`, { method: 'PUT', body: JSON.stringify(data) });
-        if (!response.ok) throw new Error('Błąd aktualizacji zadania');
-        return await response.json();
-    },
-    deleteKanbanTask: async (taskId) => {
-        const response = await fetchWithAuth(`${API_BASE_URL}/api/kanban/tasks/${taskId}`, { method: 'DELETE' });
-        if (!response.ok) throw new Error('Błąd usuwania zadania');
-        return await response.json();
-    },
-    getDelegations: async () => {
-        const response = await fetchWithAuth(`${API_BASE_URL}/api/delegations`);
-        if (!response.ok) throw new Error('Błąd pobierania delegacji');
-        return await response.json();
-    },
-    addDelegation: async (delegation) => {
-        const response = await fetchWithAuth(`${API_BASE_URL}/api/delegations`, { method: 'POST', body: JSON.stringify(delegation) });
-        if (!response.ok) throw new Error('Błąd tworzenia delegacji');
-        return await response.json();
-    },
-	saveDelegation: async (delegation) => {
-        const url = delegation._id 
-            ? `${API_BASE_URL}/api/delegations/${delegation._id}` 
-            : `${API_BASE_URL}/api/delegations`;
-        const method = delegation._id ? 'PUT' : 'POST';
-        const response = await fetchWithAuth(url, { method, body: JSON.stringify(delegation) });
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.message || 'Błąd zapisywania delegacji');
-        }
-        return await response.json();
-    },
-    updateDelegationStatus: async (delegationId, status) => {
-        const response = await fetchWithAuth(`${API_BASE_URL}/api/delegations/${delegationId}/status`, { method: 'PUT', body: JSON.stringify({ status }) });
-        if (!response.ok) throw new Error('Błąd aktualizacji statusu delegacji');
-        return await response.json();
-    },
-    deleteDelegation: async (delegationId) => {
-        const response = await fetchWithAuth(`${API_BASE_URL}/api/delegations/${delegationId}`, { method: 'DELETE' });
-        if (!response.ok) throw new Error('Błąd usuwania delegacji');
-        return await response.json();
-    },
-	 startDelegation: async (delegationId) => {
-        const response = await fetchWithAuth(`${API_BASE_URL}/api/delegations/${delegationId}/start`, { method: 'POST' });
-        if (!response.ok) throw new Error('Błąd rozpoczęcia delegacji');
-        return await response.json();
-    },
-    endDelegation: async (delegationId) => {
-        const response = await fetchWithAuth(`${API_BASE_URL}/api/delegations/${delegationId}/end`, { method: 'POST' });
-        if (!response.ok) throw new Error('Błąd zakończenia delegacji');
-        return await response.json();
-    },
-    startClientVisit: async (delegationId, clientIndex) => {
-        const response = await fetchWithAuth(`${API_BASE_URL}/api/delegations/${delegationId}/visits/${clientIndex}/start`, { method: 'POST' });
-        if (!response.ok) throw new Error('Błąd rozpoczęcia wizyty');
-        return await response.json();
-    },
-	getEmailConfig: async () => {
-        const response = await fetchWithAuth(`${API_BASE_URL}/api/admin/email-config`);
-        if (!response.ok) throw new Error('Błąd pobierania konfiguracji email');
-        return await response.json();
-    },
-    saveEmailConfig: async (config) => {
-        const response = await fetchWithAuth(`${API_BASE_URL}/api/admin/email-config`, {
-            method: 'POST',
-            body: JSON.stringify(config)
-        });
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.message || 'Błąd zapisywania konfiguracji');
-        return data;
-    },
-    endClientVisit: async (delegationId, clientIndex, visitData) => {
-        const response = await fetchWithAuth(`${API_BASE_URL}/api/delegations/${delegationId}/visits/${clientIndex}/end`, { method: 'POST', body: JSON.stringify(visitData) });
-        if (!response.ok) throw new Error('Błąd zakończenia wizyty');
-        return await response.json();
-    },
-	processCompletion: async (orderId, pickedItems, allItems) => {
-    const response = await fetchWithAuth(`${API_BASE_URL}/api/orders/${orderId}/process-completion`, { 
-        method: 'POST', 
-        body: JSON.stringify({ pickedItems, allItems }) 
-    });
-    if (!response.ok) { 
-        const errorData = await response.json(); 
-        throw new Error(errorData.message || 'Błąd podczas przetwarzania kompletacji'); 
-    }
-    return await response.json();
-	},
-};
-
-const DashboardView = ({ user, onNavigate, onUpdateUser }) => { return <div className="p-8">Panel Główny</div>; };
-const MainSearchView = () => { return <div className="p-8">Wyszukiwarka</div>; };
-const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty }) => { return <div className="p-8">Nowe Zamówienie</div>; };
-const OrdersListView = ({ onEdit }) => { return <div className="p-8">Lista Zamówień</div>; };
-const PickingView = () => { return <div className="p-8">Kompletacja</div>; };
-const InventoryView = ({ user, onNavigate, isDirty, setIsDirty }) => { return <div className="p-8">Inwentaryzacja</div>; };
-const NewInventorySheet = ({ user, onSave, setDirty }) => { return <div className="p-8">Nowy Arkusz Inwentaryzacyjny</div>; };
-const KanbanView = ({ user }) => { return <div className="p-8">Tablica Kanban</div>; };
-const DelegationsView = ({ user, onNavigate, setCurrentOrder }) => { return <div className="p-8">Delegacje</div>; };
-const AdminView = ({ user, onNavigate }) => { return <div className="p-8">Panel Admina</div>; };
-const AdminUsersView = ({ user }) => { return <div className="p-8">Zarządzanie Użytkownikami</div>; };
-const AdminProductsView = () => { return <div className="p-8">Zarządzanie Produktami</div>; };
-const ShortageReportView = () => { return <div className="p-8">Raport Braków</div>; };
-const AdminEmailConfigView = () => { return <div className="p-8">Konfiguracja Email</div>; };
-const AuthPage = ({ onLogin }) => { return <div className="p-8">Logowanie</div>; };
-
-
-// --- Komponenty UI ---
-
-const Tooltip = ({ children, text }) => ( <div className="relative flex items-center group">{children}<div className="absolute bottom-full mb-2 w-max px-2 py-1 bg-gray-800 text-white text-xs rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none">{text}</div></div>);
-const Modal = ({ isOpen, onClose, title, children, maxWidth = 'md' }) => {
-    if (!isOpen) return null;
-    const maxWidthClass = { sm: 'max-w-sm', md: 'max-w-md', lg: 'max-w-lg', xl: 'max-w-xl', '2xl': 'max-w-2xl', '4xl': 'max-w-4xl' }[maxWidth];
-    return (
-        <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex justify-center items-center p-2 sm:p-4 animate-fade-in">
-            <div className={`bg-white dark:bg-gray-800 rounded-lg shadow-2xl w-full m-4 ${maxWidthClass} flex flex-col max-h-[90vh]`}>
-                <div className="flex-shrink-0 flex justify-between items-center p-4 border-b border-gray-200 dark:border-gray-700">
-                    <h3 className="text-xl font-semibold text-gray-900 dark:text-white">{title}</h3>
-                    <button onClick={onClose} className="text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg text-sm p-1.5"><XCircle className="w-6 h-6"/></button>
-                </div>
-                <div className="p-6 overflow-y-auto">{children}</div>
-            </div>
-        </div>
-    );
-};
+// --- Komponenty Widoków ---
 
 const UserChangePasswordModal = ({ isOpen, onClose }) => {
     const [currentPassword, setCurrentPassword] = useState('');
@@ -512,7 +494,89 @@ const UserChangePasswordModal = ({ isOpen, onClose }) => {
         </Modal>
     );
 };
-    
+
+const LoginView = ({ onLogin, showRegister }) => {
+    const [username, setUsername] = useState('');
+    const [password, setPassword] = useState('');
+    const [error, setError] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setIsLoading(true);
+        setError('');
+        try {
+            const data = await api.login(username, password);
+            onLogin(data);
+        } catch (err) {
+            setError(err.message);
+            setIsLoading(false);
+        }
+    };
+
+    return (
+        <div className="w-full max-w-md p-8 space-y-8 bg-white dark:bg-gray-800 rounded-xl shadow-lg">
+            <div className="text-center"><img src="/logo.png" onError={(e) => { e.currentTarget.src = 'https://placehold.co/150x50/4f46e5/ffffff?text=Logo'; }} alt="Logo" className="mx-auto mb-4 h-12" /><h2 className="text-2xl font-bold text-gray-900 dark:text-white">Zaloguj się do systemu</h2></div>
+            <form className="space-y-6" onSubmit={handleSubmit}>
+                <div><label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">Nazwa użytkownika</label><input type="text" value={username} onChange={(e) => setUsername(e.target.value)} className="w-full p-3 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" required/></div>
+                <div><label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">Hasło</label><input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full p-3 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" required/></div>
+                {error && <p className="text-sm text-red-500 text-center">{error}</p>}
+                <div><button type="submit" disabled={isLoading} className="w-full px-4 py-3 font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-indigo-400">{isLoading ? 'Logowanie...' : 'Zaloguj się'}</button></div>
+            </form>
+            <div className="text-center"><button onClick={showRegister} className="text-sm text-indigo-600 dark:text-indigo-400 hover:underline">Nie masz konta? Zarejestruj się</button></div>
+        </div>
+    );
+};
+
+const RegisterView = ({ showLogin }) => {
+    const [username, setUsername] = useState('');
+    const [password, setPassword] = useState('');
+    const [error, setError] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
+    const { showNotification } = useNotification();
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        if (password.length < 6) {
+            setError('Hasło musi mieć co najmniej 6 znaków.');
+            return;
+        }
+        setIsLoading(true);
+        setError('');
+        try {
+            const data = await api.register(username, password);
+            showNotification(data.message, 'success');
+            showLogin();
+        } catch (err) {
+            setError(err.message);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    return (
+        <div className="w-full max-w-md p-8 space-y-8 bg-white dark:bg-gray-800 rounded-xl shadow-lg">
+            <div className="text-center"><UserPlus className="mx-auto h-12 w-12 text-indigo-500" /><h2 className="mt-4 text-2xl font-bold text-gray-900 dark:text-white">Stwórz nowe konto</h2></div>
+            <form className="space-y-6" onSubmit={handleSubmit}>
+                <div><label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">Nazwa użytkownika</label><input type="text" value={username} onChange={(e) => setUsername(e.target.value)} className="w-full p-3 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" required/></div>
+                <div><label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">Hasło</label><input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full p-3 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" required/></div>
+                {error && <p className="text-sm text-red-500 text-center">{error}</p>}
+                <div><button type="submit" disabled={isLoading} className="w-full px-4 py-3 font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-indigo-400">{isLoading ? 'Rejestracja...' : 'Zarejestruj się'}</button></div>
+            </form>
+            <div className="text-center"><button onClick={showLogin} className="text-sm text-indigo-600 dark:text-indigo-400 hover:underline">Masz już konto? Zaloguj się</button></div>
+        </div>
+    );
+};
+
+const AuthPage = ({ onLogin }) => {
+    const [isLoginView, setIsLoginView] = useState(true);
+    return (
+        <div className="flex items-center justify-center h-screen bg-gray-100 dark:bg-gray-900">
+            {isLoginView ? <LoginView onLogin={onLogin} showRegister={() => setIsLoginView(false)} /> : <RegisterView showLogin={() => setIsLoginView(true)} />}
+        </div>
+    );
+};
+
 const ProductDetailsCard = ({ product }) => (
     <div className="mt-6 max-w-4xl mx-auto bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg animate-fade-in">
         <h2 className="text-2xl font-bold mb-4 text-indigo-600 dark:text-indigo-400">{product.name}</h2>
@@ -524,28 +588,6 @@ const ProductDetailsCard = ({ product }) => (
         </div>
     </div>
 );
-
-// --- Główne Widoki (Moduły) ---
-
-const MainSearchView = () => {
-    const [selectedProduct, setSelectedProduct] = useState(null);
-    const searchInputRef = useRef(null);
-
-    const handleProductSelect = (product) => {
-        setSelectedProduct(product);
-        setTimeout(() => searchInputRef.current?.focus(), 0);
-    };
-
-    return (
-        <div className="p-4 md:p-8">
-            <h1 className="text-3xl font-bold mb-6 text-gray-800 dark:text-white">Szybkie Wyszukiwanie</h1>
-            <SearchView onProductSelect={handleProductSelect} inputRef={searchInputRef} />
-            {selectedProduct && <ProductDetailsCard product={selectedProduct} />}
-        </div>
-    );
-};
-
-// --- Moduł wyszukiwania ---
 
 const SearchView = ({ onProductSelect }) => {
     const [query, setQuery] = useState('');
@@ -636,7 +678,23 @@ const SearchView = ({ onProductSelect }) => {
     );
 };
 
-// --- Pasek wyszukiwania ---
+const MainSearchView = () => {
+    const [selectedProduct, setSelectedProduct] = useState(null);
+    const searchInputRef = useRef(null);
+
+    const handleProductSelect = (product) => {
+        setSelectedProduct(product);
+        setTimeout(() => searchInputRef.current?.focus(), 0);
+    };
+
+    return (
+        <div className="p-4 md:p-8">
+            <h1 className="text-3xl font-bold mb-6 text-gray-800 dark:text-white">Szybkie Wyszukiwanie</h1>
+            <SearchView onProductSelect={handleProductSelect} inputRef={searchInputRef} />
+            {selectedProduct && <ProductDetailsCard product={selectedProduct} />}
+        </div>
+    );
+};
 
 const PinnedInputBar = ({ onProductAdd, onSave, isDirty }) => {
     const [query, setQuery] = useState('');
@@ -680,15 +738,10 @@ const PinnedInputBar = ({ onProductAdd, onSave, isDirty }) => {
     
 	 const handleQueryChange = (e) => {
         const value = e.target.value;
-
-        // Sprawdź, czy długość nie przekracza 13 znaków
         if (value.length > 13) {
-            // Wyświetl komunikat
             alert("Kod EAN nie może przekraczać 13 znaków.");
-            // Wyczyść pole tekstowe
             setQuery('');
         } else {
-            // Jeśli długość jest prawidłowa, zaktualizuj stan
             setQuery(value);
         }
     };
@@ -773,8 +826,6 @@ const PinnedInputBar = ({ onProductAdd, onSave, isDirty }) => {
     );
 };
 
-// --- Moduł Nowe zamówienie ---
-
 const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty }) => {
     const [order, setOrder] = useState(currentOrder);
     const [noteModal, setNoteModal] = useState({ isOpen: false, itemIndex: null, text: '' });
@@ -834,16 +885,15 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty }) => {
         }
     };
 
-const handleStatusChange = async (newStatus) => {
-    try {
-        const { message, order: updatedOrder } = await api.updateOrderStatus(order._id, newStatus);
-        showNotification(message, 'success');
-        // Zaktualizuj stan lokalny
-        updateOrder(updatedOrder, false);
-    } catch (error) {
-        showNotification(error.message, 'error');
-		}
-	};
+    const handleStatusChange = async (newStatus) => {
+        try {
+            const { message, order: updatedOrder } = await api.updateOrderStatus(order._id, newStatus);
+            showNotification(message, 'success');
+            updateOrder(updatedOrder, false);
+        } catch (error) {
+            showNotification(error.message, 'error');
+            }
+        };
 
     const removeItemFromOrder = (itemIndex) => {
         const newItems = [...order.items];
@@ -896,10 +946,7 @@ const handleStatusChange = async (newStatus) => {
             return;
         }
 
-
-        // Wiersze CSV
         const csvRows = order.items.map(item => {
-            // Używamy pierwszego kodu z listy kodów kreskowych jako EAN
             const ean = item.barcodes && item.barcodes.length > 0 ? item.barcodes[0] : '';
             const quantity = item.quantity || 0;
             return `${ean};${quantity}`;
@@ -907,7 +954,6 @@ const handleStatusChange = async (newStatus) => {
 
         const csvContent = csvRows;
 
-        // Tworzenie i pobieranie pliku
         const blob = new Blob([`\uFEFF${csvContent}`], { type: 'text/csv;charset=utf-8;' });
         const link = document.createElement("a");
         const url = URL.createObjectURL(blob);
@@ -1062,11 +1108,6 @@ const handlePrint = () => {
     );
 };
 
-// --- Moduł Listy zamówień ---
-
-// Plik App.js
-// ZASTĄP CAŁY KOMPONENT OrdersListView TYM KODEM:
-
 const OrdersListView = ({ onEdit }) => {
     const [orders, setOrders] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -1079,7 +1120,6 @@ const OrdersListView = ({ onEdit }) => {
     const fetchOrders = useCallback(async () => {
         setIsLoading(true);
         try {
-            // Pobieramy wszystkie zamówienia, ignorując status
             const fetchedOrders = await api.getOrders(filters);
             setOrders(fetchedOrders);
         } catch (error) {
@@ -1093,7 +1133,6 @@ const OrdersListView = ({ onEdit }) => {
         fetchOrders();
     }, [fetchOrders]);
 
-    // Grupujemy zamówienia po stronie klienta
     const groupedOrders = useMemo(() => {
         const groups = {
             'Braki': [],
@@ -1208,8 +1247,6 @@ const OrdersListView = ({ onEdit }) => {
     );
 };
 
-// --- Moduł kompletacji ---
-
 const PickingView = () => {
     const [orders, setOrders] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -1227,10 +1264,8 @@ const PickingView = () => {
     const fetchOrders = useCallback(async () => {
         setIsLoading(true);
         try {
-            // Pobieramy zamówienia ze statusami 'Braki' i 'Zakończono'
             const ordersToPick = await api.getOrders({ status: ['Braki', 'Zakończono'] });
             
-            // Sortujemy, aby zamówienia "Braki" były zawsze na górze listy
             ordersToPick.sort((a, b) => {
                 if (a.status === 'Braki' && b.status !== 'Braki') return -1;
                 if (a.status !== 'Braki' && b.status === 'Braki') return 1;
@@ -1360,7 +1395,7 @@ const PickingView = () => {
                 <h1 className="text-3xl font-bold mb-6 text-gray-800 dark:text-white">Kompletacja Zamówień</h1>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     {orders.map(order => {
-                        const isClickable = true; // Wszystkie zamówienia w tym widoku są do kompletacji
+                        const isClickable = true;
                         const bgColor = {
                             'Braki': 'bg-yellow-50 dark:bg-yellow-900/40',
                             'Zakończono': 'bg-gray-50 dark:bg-gray-800',
@@ -1392,7 +1427,6 @@ const PickingView = () => {
         );
     }
     
-    // Widok wybranego zamówienia (reszta komponentu) pozostaje bez zmian
     return (
         <div className="p-4 md:p-8">
             <button onClick={() => setSelectedOrder(null)} className="mb-4 text-indigo-600 dark:text-indigo-400 hover:underline">&larr; Powrót do listy zamówień</button>
@@ -2054,90 +2088,6 @@ const AdminProductsView = () => {
                 <span>Strona {page} z {totalPages}</span>
                 <button onClick={() => setPage(p => p + 1)} disabled={page >= totalPages} className="px-4 py-2 bg-gray-300 dark:bg-gray-600 rounded-lg disabled:opacity-50">Następna</button>
             </div>
-        </div>
-    );
-};
-
-// --- Moduł Logowania i rejestracji ---
-
-const AuthPage = ({ onLogin }) => {
-    const [isLoginView, setIsLoginView] = useState(true);
-    return (
-        <div className="flex items-center justify-center h-screen bg-gray-100 dark:bg-gray-900">
-            {isLoginView ? <LoginView onLogin={onLogin} showRegister={() => setIsLoginView(false)} /> : <RegisterView showLogin={() => setIsLoginView(true)} />}
-        </div>
-    );
-};
-
-const LoginView = ({ onLogin, showRegister }) => {
-    const [username, setUsername] = useState('');
-    const [password, setPassword] = useState('');
-    const [error, setError] = useState('');
-    const [isLoading, setIsLoading] = useState(false);
-
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        setIsLoading(true);
-        setError('');
-        try {
-            const data = await api.login(username, password);
-            onLogin(data);
-        } catch (err) {
-            setError(err.message);
-            setIsLoading(false);
-        }
-    };
-
-    return (
-        <div className="w-full max-w-md p-8 space-y-8 bg-white dark:bg-gray-800 rounded-xl shadow-lg">
-            <div className="text-center"><img src="/logo.png" onError={(e) => { e.currentTarget.src = 'https://placehold.co/150x50/4f46e5/ffffff?text=Logo'; }} alt="Logo" className="mx-auto mb-4 h-12" /><h2 className="text-2xl font-bold text-gray-900 dark:text-white">Zaloguj się do systemu</h2></div>
-            <form className="space-y-6" onSubmit={handleSubmit}>
-                <div><label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">Nazwa użytkownika</label><input type="text" value={username} onChange={(e) => setUsername(e.target.value)} className="w-full p-3 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" required/></div>
-                <div><label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">Hasło</label><input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full p-3 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" required/></div>
-                {error && <p className="text-sm text-red-500 text-center">{error}</p>}
-                <div><button type="submit" disabled={isLoading} className="w-full px-4 py-3 font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-indigo-400">{isLoading ? 'Logowanie...' : 'Zaloguj się'}</button></div>
-            </form>
-            <div className="text-center"><button onClick={showRegister} className="text-sm text-indigo-600 dark:text-indigo-400 hover:underline">Nie masz konta? Zarejestruj się</button></div>
-        </div>
-    );
-};
-
-const RegisterView = ({ showLogin }) => {
-    const [username, setUsername] = useState('');
-    const [password, setPassword] = useState('');
-    const [error, setError] = useState('');
-    const [isLoading, setIsLoading] = useState(false);
-    const { showNotification } = useNotification();
-
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        if (password.length < 6) {
-            setError('Hasło musi mieć co najmniej 6 znaków.');
-            return;
-        }
-        setIsLoading(true);
-        setError('');
-        try {
-            const data = await api.register(username, password);
-            showNotification(data.message, 'success');
-            showLogin();
-        } catch (err) {
-            setError(err.message);
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    return (
-        <div className="w-full max-w-md p-8 space-y-8 bg-white dark:bg-gray-800 rounded-xl shadow-lg">
-            <div className="text-center"><UserPlus className="mx-auto h-12 w-12 text-indigo-500" /><h2 className="mt-4 text-2xl font-bold text-gray-900 dark:text-white">Stwórz nowe konto</h2></div>
-            <form className="space-y-6" onSubmit={handleSubmit}>
-                <div><label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">Nazwa użytkownika</label><input type="text" value={username} onChange={(e) => setUsername(e.target.value)} className="w-full p-3 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" required/></div>
-                <div><label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">Hasło</label><input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full p-3 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" required/></div>
-                {error && <p className="text-sm text-red-500 text-center">{error}</p>}
-                <div><button type="submit" disabled={isLoading} className="w-full px-4 py-3 font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-indigo-400">{isLoading ? 'Rejestracja...' : 'Zarejestruj się'}</button></div>
-            </form>
-            <div className="text-center"><button onClick={showLogin} className="text-sm text-indigo-600 dark:text-indigo-400 hover:underline">Masz już konto? Zaloguj się</button></div>
         </div>
     );
 };
@@ -3769,17 +3719,63 @@ const Sidebar = ({ user, onLogout, onOpenPasswordModal }) => {
     };
 
     const navConfig = useMemo(() => [
-        { category: 'Główne', items: [ { id: 'dashboard', label: 'Panel Główny', icon: Home, roles: ['user', 'administrator'], alwaysVisible: true }, { id: 'search', label: 'Wyszukiwarka', icon: Search, roles: ['user', 'administrator'] }, ] },
-        { category: 'Sprzedaż', items: [ { id: 'order', label: 'Nowe Zamówienie', icon: PlusCircle, roles: ['user', 'administrator'] }, { id: 'orders', label: 'Zamówienia', icon: Archive, roles: ['user', 'administrator'] }, ] },
-        { category: 'Magazyn', items: [ { id: 'picking', label: 'Kompletacja', icon: List, roles: ['user', 'administrator'] }, { id: 'inventory', label: 'Inwentaryzacja', icon: Wrench, roles: ['user', 'administrator'] }, ] },
-        { category: 'Organizacyjne', items: [ { id: 'kanban', label: 'Tablica Zadań', icon: ClipboardList, roles: ['user', 'administrator'] }, { id: 'delegations', label: 'Delegacje', icon: Plane, roles: ['user', 'administrator'] }, ] },
-		{ category: 'Raporty', items: [ { id: 'shortage-report', label: 'Raport Braków', icon: ClipboardCheck, roles: ['user', 'administrator'] }, ] },
-        { category: 'Administracja', items: [ { id: 'admin', label: 'Panel Admina', icon: Settings, roles: ['administrator'] }, ] }
+        {
+            category: 'Główne',
+            items: [
+                { id: 'dashboard', label: 'Panel Główny', icon: Home, roles: ['user', 'administrator'], alwaysVisible: true },
+                { id: 'search', label: 'Wyszukiwarka', icon: Search, roles: ['user', 'administrator'] },
+            ]
+        },
+        {
+            category: 'Sprzedaż',
+            items: [
+                { id: 'order', label: 'Nowe Zamówienie', icon: PlusCircle, roles: ['user', 'administrator'] },
+                { id: 'orders', label: 'Zamówienia', icon: Archive, roles: ['user', 'administrator'] },
+            ]
+        },
+        {
+            category: 'Magazyn',
+            items: [
+                { id: 'picking', label: 'Kompletacja', icon: List, roles: ['user', 'administrator'] },
+                { id: 'inventory', label: 'Inwentaryzacja', icon: Wrench, roles: ['user', 'administrator'] },
+            ]
+        },
+        {
+            category: 'Organizacyjne',
+            items: [
+                { id: 'kanban', label: 'Tablica Zadań', icon: ClipboardList, roles: ['user', 'administrator'] },
+                { id: 'delegations', label: 'Delegacje', icon: Plane, roles: ['user', 'administrator'] },
+            ]
+        },
+		{
+            category: 'Raporty',
+            items: [
+                 { id: 'shortage-report', label: 'Raport Braków', icon: ClipboardCheck, roles: ['user', 'administrator'] },
+            ]
+        },
+        {
+            category: 'Administracja',
+            items: [
+                 { id: 'admin', label: 'Panel Admina', icon: Settings, roles: ['administrator'] },
+            ]
+        }
     ], []);
 
-    const availableNav = useMemo(() => {
+const availableNav = useMemo(() => {
         if (!user) return [];
-        return navConfig.map(category => ({ ...category, items: category.items.filter(item => user.role === 'administrator' || item.roles.includes(user.role) && (item.alwaysVisible || user.visibleModules?.includes(item.id)))})).filter(category => category.items.length > 0);
+        return navConfig
+            .map(category => {
+                const visibleItems = category.items.filter(item => {
+                    if (!item.roles.includes(user.role)) return false;
+                    if (user.role === 'administrator') return true;
+                    return item.alwaysVisible || user.visibleModules?.includes(item.id);
+                });
+                return { ...category, items: visibleItems };
+            })
+            .filter(category => category.items.length > 0);
+    }, [user, navConfig]);
+	
+	(item => user.role === 'administrator' || item.roles.includes(user.role) && (item.alwaysVisible || user.visibleModules?.includes(item.id)))})).filter(category => category.items.length > 0);
     }, [user, navConfig]);
 
     return (
