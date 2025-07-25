@@ -3964,8 +3964,6 @@ const getInitialOrder = () => {
     // Domyślnie zwracamy czyste zamówienie
     return { customerName: '', items: [], isDirty: false };
 };
-};
-
 const Sidebar = ({ user, onLogout, onOpenPasswordModal, onNewOrder }) => {
     const [isDarkMode, setIsDarkMode] = useState(document.documentElement.classList.contains('dark'));
     const [isNavOpen, setIsNavOpen] = useState(false);
