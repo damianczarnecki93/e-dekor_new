@@ -3762,25 +3762,15 @@ const Sidebar = ({ user, onLogout, onOpenPasswordModal }) => {
     ], []);
 
 const availableNav = useMemo(() => {
-        if (!user) return [];
-        return navConfig
-            .map(category => {
-                const visibleItems = category.items.filter(item => {
-                    if (!item.roles.includes(user.role)) return false;
-                    if (user.role === 'administrator') return true;
-                    return item.alwaysVisible || user.visibleModules?.includes(item.id);
-                });
-                return { ...category, items: visibleItems };
-            })
-            .filter(category => category.items.length > 0);
-    }, [user, navConfig]);
-	
-(item => user.role === 'administrator' || item.roles.includes(user.role) && (item.alwaysVisible || user.visibleModules?.includes(item.id)))
-            })
-        )
+    if (!user) return [];
+    return navConfig
+        .map(category => ({
+            ...category,
+            items: category.items.filter(item => user.role === 'administrator' || item.roles.includes(user.role) && (item.alwaysVisible || user.visibleModules?.includes(item.id)))
+        }))
         .filter(category => category.items.length > 0);
-    }, [user, navConfig]);
-
+}, [user, navConfig]);
+	
     return (
         <nav className={`w-64 bg-white dark:bg-gray-800 shadow-lg flex flex-col flex-shrink-0 transition-transform duration-300 ease-in-out z-40 fixed lg:static h-full ${isNavOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}>
              <div className="flex items-center justify-center h-20 border-b border-gray-200 dark:border-gray-700">
