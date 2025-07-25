@@ -324,6 +324,7 @@ const contactSchema = new mongoose.Schema({
     address: String,
     status: { type: String, default: 'Lead', enum: ['Lead', 'Klient', 'Utracony', 'Partner'] },
     notes: String,
+	accountManager: { type: String },
     ownerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     createdAt: { type: Date, default: Date.now }
 });
@@ -401,7 +402,7 @@ app.post('/api/crm/import-contacts', authMiddleware, upload.single('contactsFile
         const readableStream = Readable.from(req.file.buffer.toString('utf8'));
 
         readableStream
-            .pipe(csv({ headers: ['name', 'company', 'email', 'phone', 'address', 'status', 'notes'], skipLines: 1 }))
+            .pipe(csv({ headers: ['name', 'company', 'email', 'phone', 'address', 'status', 'notes', 'accountManager'], skipLines: 1 }))
             .on('data', (row) => {
                 // Prosta walidacja - wymagamy przynajmniej nazwy
                 if (row.name) {
