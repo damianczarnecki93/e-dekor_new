@@ -510,7 +510,6 @@ const AdminUsersView = ({ user }) => { return <div className="p-8">Zarządzanie 
 const AdminProductsView = () => { return <div className="p-8">Zarządzanie Produktami</div>; };
 const ShortageReportView = () => { return <div className="p-8">Raport Braków</div>; };
 const AdminEmailConfigView = () => { return <div className="p-8">Konfiguracja Email</div>; };
-const AuthPage = ({ onLogin }) => { return <div className="p-8">Logowanie</div>; };
 
 const LoginView = ({ onLogin, showRegister }) => {
     const [username, setUsername] = useState('');
