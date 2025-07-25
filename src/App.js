@@ -397,6 +397,34 @@ const api = {
         if (!response.ok) throw new Error(data.message || 'Błąd zapisywania konfiguracji');
         return data;
     },
+	getContacts: async () => {
+        const response = await fetchWithAuth(`/api/crm/contacts`);
+        if (!response.ok) throw new Error('Błąd pobierania kontaktów');
+        return await response.json();
+    },
+    addContact: async (contactData) => {
+        const response = await fetchWithAuth(`/api/crm/contacts`, { method: 'POST', body: JSON.stringify(contactData) });
+        if (!response.ok) throw new Error('Błąd dodawania kontaktu');
+        return await response.json();
+    },
+    updateContact: async (contactId, contactData) => {
+        const response = await fetchWithAuth(`/api/crm/contacts/${contactId}`, { method: 'PUT', body: JSON.stringify(contactData) });
+        if (!response.ok) throw new Error('Błąd aktualizacji kontaktu');
+        return await response.json();
+    },
+    deleteContact: async (contactId) => {
+        const response = await fetchWithAuth(`/api/crm/contacts/${contactId}`, { method: 'DELETE' });
+        if (!response.ok) throw new Error('Błąd usuwania kontaktu');
+        return await response.json();
+    },
+    importContacts: async (file) => {
+        const formData = new FormData();
+        formData.append('contactsFile', file);
+        const response = await fetchWithAuth(`/api/crm/import-contacts`, { method: 'POST', body: formData });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.message || 'Błąd importu pliku');
+        return data;
+    },
     endClientVisit: async (delegationId, clientIndex, visitData) => {
         const response = await fetchWithAuth(`/api/delegations/${delegationId}/visits/${clientIndex}/end`, { method: 'POST', body: JSON.stringify(visitData) });
         if (!response.ok) throw new Error('Błąd zakończenia wizyty');
@@ -2479,6 +2507,186 @@ const NotesWidget = () => {
     );
 };
 
+const CrmView = ({ user }) => {
+    const [contacts, setContacts] = useState([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [modalState, setModalState] = useState({ isOpen: false, contact: null });
+    const [filter, setFilter] = useState('');
+    const { showNotification } = useNotification();
+    const importFileRef = useRef(null);
+
+    const fetchContacts = useCallback(async () => {
+        setIsLoading(true);
+        try {
+            const data = await api.getContacts();
+            setContacts(data);
+        } catch (error) {
+            showNotification(error.message, 'error');
+        } finally {
+            setIsLoading(false);
+        }
+    }, [showNotification]);
+
+    useEffect(() => {
+        fetchContacts();
+    }, [fetchContacts]);
+
+    const handleSaveContact = async (contactData) => {
+        try {
+            if (modalState.contact?._id) {
+                await api.updateContact(modalState.contact._id, contactData);
+                showNotification('Kontakt zaktualizowany!', 'success');
+            } else {
+                await api.addContact(contactData);
+                showNotification('Kontakt dodany!', 'success');
+            }
+            setModalState({ isOpen: false, contact: null });
+            fetchContacts();
+        } catch (error) {
+            showNotification(error.message, 'error');
+        }
+    };
+
+    const handleDelete = async (contactId) => {
+        if (window.confirm('Czy na pewno chcesz usunąć ten kontakt?')) {
+            try {
+                await api.deleteContact(contactId);
+                showNotification('Kontakt usunięty.', 'success');
+                fetchContacts();
+            } catch (error) {
+                showNotification(error.message, 'error');
+            }
+        }
+    };
+
+    const handleFileImport = async (event) => {
+        const file = event.target.files[0];
+        if (!file) return;
+        try {
+            const result = await api.importContacts(file);
+            showNotification(result.message, 'success');
+            fetchContacts();
+        } catch (error) {
+            showNotification(error.message, 'error');
+        }
+        event.target.value = null; // Reset inputu pliku
+    };
+
+    const filteredContacts = contacts.filter(c =>
+        c.name.toLowerCase().includes(filter.toLowerCase()) ||
+        c.company?.toLowerCase().includes(filter.toLowerCase()) ||
+        c.email?.toLowerCase().includes(filter.toLowerCase())
+    );
+
+    return (
+        <div className="p-4 md:p-8">
+            <div className="flex justify-between items-center mb-6">
+                <h1 className="text-3xl font-bold">Kontakty CRM</h1>
+                <div className="flex gap-2">
+                    <input type="file" ref={importFileRef} onChange={handleFileImport} className="hidden" accept=".csv" />
+                    <button onClick={() => importFileRef.current.click()} className="flex items-center px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600">
+                        <FileUp className="w-5 h-5 mr-2"/> Importuj CSV
+                    </button>
+                    <button onClick={() => setModalState({ isOpen: true, contact: null })} className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
+                        <PlusCircle className="w-5 h-5 mr-2"/> Nowy Kontakt
+                    </button>
+                </div>
+            </div>
+            <input
+                type="text"
+                placeholder="Filtruj kontakty..."
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+                className="w-full max-w-lg p-3 mb-6 bg-white dark:bg-gray-700 border rounded-lg"
+            />
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-x-auto">
+                <table className="w-full text-left">
+                    <thead className="bg-gray-50 dark:bg-gray-700">
+                        <tr>
+                            <th className="p-4">Nazwa</th>
+                            <th className="p-4">Firma</th>
+                            <th className="p-4">Email</th>
+                            <th className="p-4">Telefon</th>
+                            <th className="p-4">Status</th>
+                            <th className="p-4">Akcje</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                        {isLoading ? (
+                            <tr><td colSpan="6" className="p-8 text-center">Ładowanie...</td></tr>
+                        ) : filteredContacts.map(contact => (
+                            <tr key={contact._id}>
+                                <td className="p-4 font-medium">{contact.name}</td>
+                                <td className="p-4">{contact.company}</td>
+                                <td className="p-4">{contact.email}</td>
+                                <td className="p-4">{contact.phone}</td>
+                                <td className="p-4"><span className="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">{contact.status}</span></td>
+                                <td className="p-4">
+                                    <button onClick={() => setModalState({ isOpen: true, contact })} className="p-2 text-blue-500 hover:text-blue-700"><Edit className="w-5 h-5"/></button>
+                                    <button onClick={() => handleDelete(contact._id)} className="p-2 text-red-500 hover:text-red-700"><Trash2 className="w-5 h-5"/></button>
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+            <ContactFormModal
+                isOpen={modalState.isOpen}
+                onClose={() => setModalState({ isOpen: false, contact: null })}
+                onSave={handleSaveContact}
+                contact={modalState.contact}
+            />
+        </div>
+    );
+};
+
+const ContactFormModal = ({ isOpen, onClose, onSave, contact }) => {
+    const [formData, setFormData] = useState({});
+
+    useEffect(() => {
+        if (contact) {
+            setFormData(contact);
+        } else {
+            setFormData({ name: '', company: '', email: '', phone: '', address: '', status: 'Lead', notes: '' });
+        }
+    }, [contact, isOpen]);
+
+    const handleChange = (e) => {
+        const { name, value } = e.target;
+        setFormData(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleSubmit = (e) => {
+        e.preventDefault();
+        onSave(formData);
+    };
+
+    return (
+        <Modal isOpen={isOpen} onClose={onClose} title={contact ? "Edytuj Kontakt" : "Nowy Kontakt"} maxWidth="2xl">
+            <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <input name="name" value={formData.name || ''} onChange={handleChange} placeholder="Imię i nazwisko / Nazwa *" required className="p-2 border rounded-md"/>
+                    <input name="company" value={formData.company || ''} onChange={handleChange} placeholder="Firma" className="p-2 border rounded-md"/>
+                    <input name="email" value={formData.email || ''} onChange={handleChange} placeholder="Email" type="email" className="p-2 border rounded-md"/>
+                    <input name="phone" value={formData.phone || ''} onChange={handleChange} placeholder="Telefon" className="p-2 border rounded-md"/>
+                </div>
+                <input name="address" value={formData.address || ''} onChange={handleChange} placeholder="Adres" className="w-full p-2 border rounded-md"/>
+                <select name="status" value={formData.status || 'Lead'} onChange={handleChange} className="w-full p-2 border rounded-md">
+                    <option>Lead</option>
+                    <option>Klient</option>
+                    <option>Utracony</option>
+                    <option>Partner</option>
+                </select>
+                <textarea name="notes" value={formData.notes || ''} onChange={handleChange} placeholder="Notatki..." className="w-full p-2 border rounded-md min-h-[100px]"/>
+                <div className="flex justify-end gap-4 pt-4">
+                    <button type="button" onClick={onClose} className="px-4 py-2 bg-gray-200 rounded-lg">Anuluj</button>
+                    <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg">Zapisz</button>
+                </div>
+            </form>
+        </Modal>
+    );
+};
+
 // --- Moduł tabeli zadań ---
 
 
@@ -3809,6 +4017,7 @@ const Sidebar = ({ user, onLogout, onOpenPasswordModal, onNewOrder }) => {
             items: [
                 { id: 'kanban', label: 'Tablica Zadań', icon: ClipboardList, roles: ['user', 'administrator'] },
                 { id: 'delegations', label: 'Delegacje', icon: Plane, roles: ['user', 'administrator'] },
+				{ id: 'crm', label: 'Kontakty', icon: Users, roles: ['user', 'administrator'] },
             ]
         },
 		{
@@ -3977,6 +4186,7 @@ function App() {
                                 <Route path="/admin-products" element={<AdminProductsView />} />
                                 <Route path="/shortage-report" element={<ShortageReportView />} />
                                 <Route path="/admin-email" element={<AdminEmailConfigView />} />
+								<Route path="/crm" element={<CrmView user={user} />} />
                                 <Route path="/" element={<Navigate to="/dashboard" replace />} />
                                 <Route path="*" element={<Navigate to="/dashboard" replace />} />
                             </>
