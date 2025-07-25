@@ -339,7 +339,27 @@ const upload = multer({ storage: storage });
 // Pobieranie kontaktów dla zalogowanego użytkownika
 app.get('/api/crm/contacts', authMiddleware, async (req, res) => {
     try {
-        const contacts = await Contact.find({ ownerId: req.user.userId }).sort({ createdAt: -1 });
+        const { search, status, accountManager } = req.query;
+        const query = { ownerId: req.user.userId };
+
+        if (search) {
+            const searchRegex = new RegExp(search, 'i');
+            query.$or = [
+                { name: searchRegex },
+                { company: searchRegex },
+                { email: searchRegex }
+            ];
+        }
+
+        if (status) {
+            query.status = status;
+        }
+
+        if (accountManager) {
+            query.accountManager = accountManager;
+        }
+
+        const contacts = await Contact.find(query).sort({ createdAt: -1 });
         res.json(contacts);
     } catch (error) {
         res.status(500).json({ message: 'Błąd podczas pobierania kontaktów.' });
@@ -428,10 +448,6 @@ app.post('/api/crm/import-contacts', authMiddleware, upload.single('contactsFile
         res.status(500).json({ message: 'Wystąpił błąd serwera podczas importu.', error: error.message });
     }
 });
-
-
-
-
 
 // --- API Endpoints - Uwierzytelnianie ---
 app.post('/api/register', async (req, res) => {
