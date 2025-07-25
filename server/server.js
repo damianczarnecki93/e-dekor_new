@@ -329,6 +329,26 @@ const Contact = mongoose.models.Contact || mongoose.model('Contact', contactSche
 
 // --- CRM: API Endpoints ---
 
+const contactSchema = new mongoose.Schema({
+    name: { type: String, required: true },
+    company: String,
+    email: String,
+    phone: String,
+    address: String,
+    status: { type: String, default: 'Lead', enum: ['Lead', 'Klient', 'Utracony', 'Partner'] },
+    notes: String,
+    ownerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    createdAt: { type: Date, default: Date.now }
+});
+const Contact = mongoose.models.Contact || mongoose.model('Contact', contactSchema);
+
+// --- Middleware do obsługi plików (przeniesione wyżej) ---
+const storage = multer.memoryStorage();
+const upload = multer({ storage: storage });
+
+
+// --- CRM: API Endpoints ---
+
 // Pobieranie kontaktów dla zalogowanego użytkownika
 app.get('/api/crm/contacts', authMiddleware, async (req, res) => {
     try {
