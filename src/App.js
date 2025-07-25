@@ -3775,7 +3775,10 @@ const availableNav = useMemo(() => {
             .filter(category => category.items.length > 0);
     }, [user, navConfig]);
 	
-	(item => user.role === 'administrator' || item.roles.includes(user.role) && (item.alwaysVisible || user.visibleModules?.includes(item.id)))})).filter(category => category.items.length > 0);
+(item => user.role === 'administrator' || item.roles.includes(user.role) && (item.alwaysVisible || user.visibleModules?.includes(item.id)))
+            })
+        )
+        .filter(category => category.items.length > 0);
     }, [user, navConfig]);
 
     return (
