@@ -852,7 +852,7 @@ const PinnedInputBar = ({ onProductAdd, onSave, isDirty }) => {
     );
 };
 
-const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty }) => {
+const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }) => {
     const [order, setOrder] = useState(currentOrder);
     const [noteModal, setNoteModal] = useState({ isOpen: false, itemIndex: null, text: '' });
     const listEndRef = useRef(null);
@@ -868,20 +868,10 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty }) => {
         return sortConfig.direction === 'ascending' ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />;
     };
     
-    useEffect(() => {
+    useEffect(() => { 
         setOrder(currentOrder);
-    }, [currentOrder]);
-
-    useEffect(() => {
-        // Zapisuj w localStorage tylko jeśli to nowe, niezapisane zamówienie (brak _id)
-        if (!order._id) {
-            try {
-                localStorage.setItem('draftOrder', JSON.stringify(order));
-            } catch (error) {
-                console.error("Błąd zapisu roboczego zamówienia do localStorage:", error);
-            }
-        }
-    }, [order]);
+        setDirty(currentOrder.isDirty || false);
+    }, [currentOrder, setDirty]);
     
     const scrollToBottom = () => listEndRef.current?.scrollIntoView({ behavior: "smooth" });
     useEffect(scrollToBottom, [order.items]);
@@ -951,22 +941,16 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty }) => {
     const totalValue = useMemo(() => (order.items || []).reduce((sum, item) => sum + item.price * (item.quantity || 0), 0), [order.items]);
 
     const handleSaveOrder = async () => {
-        if (!order.customerName) { 
-            showNotification('Proszę podać nazwę klienta.', 'error'); 
-            return; 
-        }
+        if (!order.customerName) { showNotification('Proszę podać nazwę klienta.', 'error'); return; }
         try {
             const orderToSave = { ...order, author: user.username };
             const { message, order: savedOrder } = await api.saveOrder(orderToSave);
             showNotification(message, 'success');
-            localStorage.removeItem('draftOrder'); // Czyścimy dane robocze po zapisie
+            localStorage.removeItem('draftOrder');
             setCurrentOrder(savedOrder);
             setDirty(false);
-        } catch (error) { 
-            showNotification(error.message, 'error'); 
-        }
+        } catch (error) { showNotification(error.message, 'error'); }
     };
-
     
     const handleFileImport = async (event) => {
         const file = event.target.files[0];
@@ -1043,7 +1027,6 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty }) => {
 
     doc.save(`Zamowienie-${order.customerName.replace(/\s/g, '_') || 'nowe'}.pdf`);
 };
-
 const handlePrint = () => {
     const content = printRef.current;
     if (content) {
@@ -1065,6 +1048,10 @@ const handlePrint = () => {
                 <div className="flex flex-wrap gap-2 justify-between items-center mb-4">
                     <h1 className="text-2xl md:text-3xl font-bold text-gray-800 dark:text-white">{order._id ? `Edycja Zamówienia` : 'Nowe Zamówienie'}</h1>
                     <div className="flex gap-2">
+                       {/* --- NOWY PRZYCISK --- */}
+                       <button onClick={onNewOrder} className="flex items-center justify-center p-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors">
+                            <PlusCircle className="w-5 h-5"/> <span className="hidden sm:inline ml-2">Nowe</span>
+                        </button>
                        <button onClick={handleExportCsv} className="flex items-center justify-center p-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
                             <FileText className="w-5 h-5"/> <span className="hidden sm:inline ml-2">CSV</span>
                         </button>
