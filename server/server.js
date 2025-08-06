@@ -314,6 +314,141 @@ app.post('/api/orders/:id/process-completion', authMiddleware, async (req, res) 
 });
 
 
+// --- CRM: Schemat i Model Danych ---
+const contactSchema = new mongoose.Schema({
+    name: { type: String, required: true },
+    company: String,
+    email: String,
+    phone: String,
+    address: String,
+    status: { type: String, default: 'Lead', enum: ['Lead', 'Klient', 'Utracony', 'Partner'] },
+    notes: String,
+    ownerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    accountManager: { type: String }, // DODANE POLE
+    createdAt: { type: Date, default: Date.now }
+});
+const Contact = mongoose.models.Contact || mongoose.model('Contact', contactSchema);
+
+// --- Middleware do obsługi plików ---
+const storage = multer.memoryStorage();
+const upload = multer({ storage: storage });
+
+
+// --- CRM: API Endpoints ---
+
+// Pobieranie kontaktów dla zalogowanego użytkownika
+app.get('/api/crm/contacts', authMiddleware, async (req, res) => {
+    try {
+        const { search, status, accountManager } = req.query;
+        const query = { ownerId: req.user.userId };
+
+        if (search) {
+            const searchRegex = new RegExp(search, 'i');
+            query.$or = [
+                { name: searchRegex },
+                { company: searchRegex },
+                { email: searchRegex }
+            ];
+        }
+
+        if (status) {
+            query.status = status;
+        }
+
+        if (accountManager) {
+            query.accountManager = accountManager;
+        }
+
+        const contacts = await Contact.find(query).sort({ createdAt: -1 });
+        res.json(contacts);
+    } catch (error) {
+        res.status(500).json({ message: 'Błąd podczas pobierania kontaktów.' });
+    }
+});
+
+// Dodawanie nowego kontaktu
+app.post('/api/crm/contacts', authMiddleware, async (req, res) => {
+    try {
+        const newContact = new Contact({
+            ...req.body,
+            ownerId: req.user.userId
+        });
+        await newContact.save();
+        res.status(201).json(newContact);
+    } catch (error) {
+        res.status(400).json({ message: 'Błąd podczas tworzenia kontaktu.', error: error.message });
+    }
+});
+
+// Aktualizacja kontaktu
+app.put('/api/crm/contacts/:id', authMiddleware, async (req, res) => {
+    try {
+        const updatedContact = await Contact.findOneAndUpdate(
+            { _id: req.params.id, ownerId: req.user.userId },
+            req.body,
+            { new: true }
+        );
+        if (!updatedContact) {
+            return res.status(404).json({ message: 'Nie znaleziono kontaktu lub brak uprawnień.' });
+        }
+        res.json(updatedContact);
+    } catch (error) {
+        res.status(400).json({ message: 'Błąd podczas aktualizacji kontaktu.', error: error.message });
+    }
+});
+
+// Usuwanie kontaktu
+app.delete('/api/crm/contacts/:id', authMiddleware, async (req, res) => {
+    try {
+        const deletedContact = await Contact.findOneAndDelete({ _id: req.params.id, ownerId: req.user.userId });
+        if (!deletedContact) {
+            return res.status(404).json({ message: 'Nie znaleziono kontaktu lub brak uprawnień.' });
+        }
+        res.json({ message: 'Kontakt usunięty.' });
+    } catch (error) {
+        res.status(500).json({ message: 'Błąd podczas usuwania kontaktu.' });
+    }
+});
+
+// Import kontaktów z pliku CSV
+app.post('/api/crm/import-contacts', authMiddleware, upload.single('contactsFile'), async (req, res) => {
+    if (!req.file) {
+        return res.status(400).json({ message: 'Nie przesłano pliku.' });
+    }
+
+    try {
+        const contactsToImport = [];
+        const readableStream = Readable.from(req.file.buffer.toString('utf8'));
+
+        readableStream
+            .pipe(csv({ headers: ['name', 'company', 'email', 'phone', 'address', 'status', 'notes', 'accountManager'], skipLines: 1 }))
+            .on('data', (row) => {
+                if (row.name && row.name.trim()) {
+                    const contactData = {
+                        ...row,
+                        ownerId: req.user.userId
+                    };
+                    // POPRAWKA: Ustaw domyślny status, jeśli w pliku jest pusty
+                    if (!contactData.status || !['Lead', 'Klient', 'Utracony', 'Partner'].includes(contactData.status)) {
+                        contactData.status = 'Lead';
+                    }
+                    contactsToImport.push(contactData);
+                }
+            })
+            .on('end', async () => {
+                if (contactsToImport.length > 0) {
+                    await Contact.insertMany(contactsToImport);
+                    res.status(201).json({ message: `Pomyślnie zaimportowano ${contactsToImport.length} kontaktów.` });
+                } else {
+                    res.status(400).json({ message: 'Plik nie zawierał poprawnych danych do importu.' });
+                }
+            });
+
+    } catch (error) {
+        res.status(500).json({ message: 'Wystąpił błąd serwera podczas importu.', error: error.message });
+    }
+});
+
 // --- API Endpoints - Uwierzytelnianie ---
 app.post('/api/register', async (req, res) => {
     try {
@@ -552,9 +687,6 @@ app.delete('/api/admin/users/:id', authMiddleware, adminMiddleware, async (req, 
         res.status(500).json({ message: 'Błąd podczas usuwania użytkownika.' });
     }
 });
-
-const storage = multer.memoryStorage();
-const upload = multer({ storage: storage });
 
 app.post('/api/admin/upload-products', authMiddleware, adminMiddleware, upload.single('productsFile'), async (req, res) => {
     if (!req.file) return res.status(400).json({ message: 'Nie przesłano pliku.' });
