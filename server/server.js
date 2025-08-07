@@ -76,15 +76,8 @@ const orderSchema = new mongoose.Schema({
         enum: ['Zapisane', 'Skompletowane', 'Zakończono', 'Braki'] 
     },
     date: { type: Date, default: Date.now },
-    isDirty: { type: Boolean, default: false }
-	status: { 
-        type: String, 
-        default: 'Zapisane', 
-        enum: ['Zapisane', 'Skompletowane', 'Zakończono', 'Braki'] 
-    },
-    date: { type: Date, default: Date.now },
     isDirty: { type: Boolean, default: false },
-    isArchived: { type: Boolean, default: false } // DODAJ TĘ LINIĘ
+    isArchived: { type: Boolean, default: false }
 });
 const Order = mongoose.models.Order || mongoose.model('Order', orderSchema);
 
