@@ -4015,7 +4015,7 @@ const Sidebar = ({ user, onLogout, onOpenPasswordModal, onNewOrder, isNavOpen, s
         { category: 'Główne', items: [ { id: 'dashboard', label: 'Panel Główny', icon: Home, roles: ['user', 'administrator'], alwaysVisible: true }, { id: 'search', label: 'Wyszukiwarka', icon: Search, roles: ['user', 'administrator'] }, ] },
         { category: 'Sprzedaż', items: [ { id: 'order', label: 'Nowe Zamówienie', icon: PlusCircle, roles: ['user', 'administrator'], action: onNewOrder }, { id: 'orders', label: 'Zamówienia', icon: Archive, roles: ['user', 'administrator'] }, ] },
         { category: 'Magazyn', items: [ { id: 'picking', label: 'Kompletacja', icon: List, roles: ['user', 'administrator'] }, { id: 'inventory', label: 'Inwentaryzacja', icon: Wrench, roles: ['user', 'administrator'] }, ] },
-        { category: 'Organizacyjne', items: [ { id: 'kanban', label: 'Tablica Zadań', icon: ClipboardList, roles: ['user', 'administrator'] }, { id: 'delegations', label: 'Delegacje', icon: Plane, roles: ['user', 'administrator'] }, ] },
+        { category: 'Organizacyjne', items: [ { id: 'kanban', label: 'Tablica Zadań', icon: ClipboardList, roles: ['user', 'administrator'] }, { id: 'delegations', label: 'Delegacje', icon: Plane, roles: ['user', 'administrator'] }, { id: 'crm', label: 'Kontakty', icon: Users, roles: ['user', 'administrator'] }, ] },
 		{ category: 'Raporty', items: [ { id: 'shortage-report', label: 'Raport Braków', icon: ClipboardCheck, roles: ['user', 'administrator'] }, ] },
         { category: 'Administracja', items: [ { id: 'admin', label: 'Panel Admina', icon: Settings, roles: ['administrator'] }, ] }
     ], [onNewOrder]);
@@ -4187,6 +4187,7 @@ function App() {
                                     <Route path="/inventory-sheet/:inventoryId" element={<NewInventorySheet user={user} onSave={() => navigate('/inventory')} setDirty={setIsDirty} />} />
                                     <Route path="/kanban" element={<KanbanView user={user} />} />
                                     <Route path="/delegations" element={<DelegationsView user={user} onNavigate={navigate} setCurrentOrder={setCurrentOrder} />} />
+									<Route path="/crm" element={<CrmView user={user} />} />
                                     <Route path="/admin" element={<AdminView user={user} onNavigate={navigate} />} />
                                     <Route path="/admin-users" element={<AdminUsersView user={user} />} />
                                     <Route path="/admin-products" element={<AdminProductsView />} />
