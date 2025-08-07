@@ -76,8 +76,7 @@ const fetchWithAuth = async (url, options = {}) => {
     const response = await fetch(`${API_BASE_URL}${url}`, { ...options, headers });
 
     if (response.status === 401) {
-        localStorage.removeItem('userToken');
-        localStorage.removeItem('userData');
+        window.dispatchEvent(new Event('auth-error'));
         throw new Error('Sesja wygasła. Proszę zalogować się ponownie.');
     }
     return response;
@@ -493,6 +492,23 @@ const useSortableData = (items, config = null) => {
 
 
 // --- Komponenty Widoków ---
+
+const Tooltip = ({ children, text }) => ( <div className="relative flex items-center group">{children}<div className="absolute bottom-full mb-2 w-max px-2 py-1 bg-gray-800 text-white text-xs rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none">{text}</div></div>);
+const Modal = ({ isOpen, onClose, title, children, maxWidth = 'md' }) => {
+    if (!isOpen) return null;
+    const maxWidthClass = { sm: 'max-w-sm', md: 'max-w-md', lg: 'max-w-lg', xl: 'max-w-xl', '2xl': 'max-w-2xl', '4xl': 'max-w-4xl' }[maxWidth];
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex justify-center items-center p-2 sm:p-4 animate-fade-in">
+            <div className={`bg-white dark:bg-gray-800 rounded-lg shadow-2xl w-full m-4 ${maxWidthClass} flex flex-col max-h-[90vh]`}>
+                <div className="flex-shrink-0 flex justify-between items-center p-4 border-b border-gray-200 dark:border-gray-700">
+                    <h3 className="text-xl font-semibold text-gray-900 dark:text-white">{title}</h3>
+                    <button onClick={onClose} className="text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg text-sm p-1.5"><XCircle className="w-6 h-6"/></button>
+                </div>
+                <div className="p-6 overflow-y-auto">{children}</div>
+            </div>
+        </div>
+    );
+};
 
 const UserChangePasswordModal = ({ isOpen, onClose }) => {
     const [currentPassword, setCurrentPassword] = useState('');
@@ -3990,27 +4006,25 @@ const DelegationDetails = ({ delegation, onUpdate, onNavigate, setCurrentOrder, 
 
 // --- Główny Komponent Aplikacji ---
 
-const getInitialOrder = () => {
-    try {
-        const savedOrder = localStorage.getItem('draftOrder');
-        if (savedOrder) {
-            const parsed = JSON.parse(savedOrder);
-            // Wczytujemy tylko jeśli to wersja robocza (nie ma _id z bazy danych)
-            if (!parsed._id) { 
-                return { ...parsed, isDirty: true }; // Oznaczamy jako "brudny" po wczytaniu
-            }
-        }
-    } catch (error) {
-        console.error("Błąd odczytu roboczego zamówienia z localStorage:", error);
-        localStorage.removeItem('draftOrder'); // Czyścimy w razie błędu parsowania
-    }
-    // Domyślnie zwracamy czyste zamówienie
-    return { customerName: '', items: [], isDirty: false };
-};
+const DashboardView = ({ user, onNavigate, onUpdateUser }) => { return <div className="p-8">Panel Główny</div>; };
+const MainSearchView = () => { return <div className="p-8">Wyszukiwarka</div>; };
+const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }) => { return <div className="p-8">Nowe Zamówienie</div>; };
+const OrdersListView = ({ onEdit }) => { return <div className="p-8">Lista Zamówień</div>; };
+const PickingView = () => { return <div className="p-8">Kompletacja</div>; };
+const InventoryView = ({ user, onNavigate, isDirty, setIsDirty }) => { return <div className="p-8">Inwentaryzacja</div>; };
+const NewInventorySheet = ({ user, onSave, setDirty }) => { return <div className="p-8">Nowy Arkusz Inwentaryzacyjny</div>; };
+const KanbanView = ({ user }) => { return <div className="p-8">Tablica Kanban</div>; };
+const DelegationsView = ({ user, onNavigate, setCurrentOrder }) => { return <div className="p-8">Delegacje</div>; };
+const AdminView = ({ user, onNavigate }) => { return <div className="p-8">Panel Admina</div>; };
+const AdminUsersView = ({ user }) => { return <div className="p-8">Zarządzanie Użytkownikami</div>; };
+const AdminProductsView = () => { return <div className="p-8">Zarządzanie Produktami</div>; };
+const ShortageReportView = () => { return <div className="p-8">Raport Braków</div>; };
+const AdminEmailConfigView = () => { return <div className="p-8">Konfiguracja Email</div>; };
+const AuthPage = ({ onLogin }) => { return <div className="p-8">Logowanie</div>; };
 
-const Sidebar = ({ user, onLogout, onOpenPasswordModal, onNewOrder }) => {
+// --- Komponent Nawigacji (Sidebar) ---
+const Sidebar = ({ user, onLogout, onOpenPasswordModal, onNewOrder, isNavOpen, setIsNavOpen }) => {
     const [isDarkMode, setIsDarkMode] = useState(document.documentElement.classList.contains('dark'));
-    const [isNavOpen, setIsNavOpen] = useState(false);
     const [expandedCategories, setExpandedCategories] = useState(['Główne']);
     const location = useLocation();
 
@@ -4033,59 +4047,19 @@ const Sidebar = ({ user, onLogout, onOpenPasswordModal, onNewOrder }) => {
     };
 
     const navConfig = useMemo(() => [
-        {
-            category: 'Główne',
-            items: [
-                { id: 'dashboard', label: 'Panel Główny', icon: Home, roles: ['user', 'administrator'], alwaysVisible: true },
-                { id: 'search', label: 'Wyszukiwarka', icon: Search, roles: ['user', 'administrator'] },
-            ]
-        },
-        {
-            category: 'Sprzedaż',
-            items: [
-                { id: 'order', label: 'Nowe Zamówienie', icon: PlusCircle, roles: ['user', 'administrator'] },
-                { id: 'orders', label: 'Zamówienia', icon: Archive, roles: ['user', 'administrator'] },
-            ]
-        },
-        {
-            category: 'Magazyn',
-            items: [
-                { id: 'picking', label: 'Kompletacja', icon: List, roles: ['user', 'administrator'] },
-                { id: 'inventory', label: 'Inwentaryzacja', icon: Wrench, roles: ['user', 'administrator'] },
-            ]
-        },
-        {
-            category: 'Organizacyjne',
-            items: [
-                { id: 'kanban', label: 'Tablica Zadań', icon: ClipboardList, roles: ['user', 'administrator'] },
-                { id: 'delegations', label: 'Delegacje', icon: Plane, roles: ['user', 'administrator'] },
-				{ id: 'crm', label: 'Kontakty', icon: Users, roles: ['user', 'administrator'] },
-            ]
-        },
-		{
-            category: 'Raporty',
-            items: [
-                 { id: 'shortage-report', label: 'Raport Braków', icon: ClipboardCheck, roles: ['user', 'administrator'] },
-            ]
-        },
-        {
-            category: 'Administracja',
-            items: [
-                 { id: 'admin', label: 'Panel Admina', icon: Settings, roles: ['administrator'] },
-            ]
-        }
-    ], []);
+        { category: 'Główne', items: [ { id: 'dashboard', label: 'Panel Główny', icon: Home, roles: ['user', 'administrator'], alwaysVisible: true }, { id: 'search', label: 'Wyszukiwarka', icon: Search, roles: ['user', 'administrator'] }, ] },
+        { category: 'Sprzedaż', items: [ { id: 'order', label: 'Nowe Zamówienie', icon: PlusCircle, roles: ['user', 'administrator'], action: onNewOrder }, { id: 'orders', label: 'Zamówienia', icon: Archive, roles: ['user', 'administrator'] }, ] },
+        { category: 'Magazyn', items: [ { id: 'picking', label: 'Kompletacja', icon: List, roles: ['user', 'administrator'] }, { id: 'inventory', label: 'Inwentaryzacja', icon: Wrench, roles: ['user', 'administrator'] }, ] },
+        { category: 'Organizacyjne', items: [ { id: 'kanban', label: 'Tablica Zadań', icon: ClipboardList, roles: ['user', 'administrator'] }, { id: 'delegations', label: 'Delegacje', icon: Plane, roles: ['user', 'administrator'] }, ] },
+		{ category: 'Raporty', items: [ { id: 'shortage-report', label: 'Raport Braków', icon: ClipboardCheck, roles: ['user', 'administrator'] }, ] },
+        { category: 'Administracja', items: [ { id: 'admin', label: 'Panel Admina', icon: Settings, roles: ['administrator'] }, ] }
+    ], [onNewOrder]);
 
-const availableNav = useMemo(() => {
-    if (!user) return [];
-    return navConfig
-        .map(category => ({
-            ...category,
-            items: category.items.filter(item => user.role === 'administrator' || item.roles.includes(user.role) && (item.alwaysVisible || user.visibleModules?.includes(item.id)))
-        }))
-        .filter(category => category.items.length > 0);
-}, [user, navConfig]);
-	
+    const availableNav = useMemo(() => {
+        if (!user) return [];
+        return navConfig.map(category => ({ ...category, items: category.items.filter(item => user.role === 'administrator' || item.roles.includes(user.role) && (item.alwaysVisible || user.visibleModules?.includes(item.id)))})).filter(category => category.items.length > 0);
+    }, [user, navConfig]);
+
     return (
         <nav className={`w-64 bg-white dark:bg-gray-800 shadow-lg flex flex-col flex-shrink-0 transition-transform duration-300 ease-in-out z-40 fixed lg:static h-full ${isNavOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}>
              <div className="flex items-center justify-center h-20 border-b border-gray-200 dark:border-gray-700">
@@ -4100,7 +4074,7 @@ const availableNav = useMemo(() => {
                         </h3>
                         {expandedCategories.includes(category.category) && category.items.map(item => (
                             <li key={item.id}>
-                                <Link to={`/${item.id}`} onClick={() => setIsNavOpen(false)} className={`w-full flex items-center justify-start h-12 px-6 text-base transition-colors duration-200 text-left ${location.pathname.startsWith(`/${item.id}`) ? 'bg-indigo-50 dark:bg-gray-700 text-indigo-600 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'}`}>
+                                <Link to={`/${item.id}`} onClick={() => { if(item.action) item.action(); setIsNavOpen(false); }} className={`w-full flex items-center justify-start h-12 px-6 text-base transition-colors duration-200 text-left ${location.pathname.startsWith(`/${item.id}`) ? 'bg-indigo-50 dark:bg-gray-700 text-indigo-600 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'}`}>
                                     <item.icon className="h-5 w-5" />
                                     <span className="ml-4">{item.label}</span>
                                 </Link>
@@ -4124,13 +4098,31 @@ const availableNav = useMemo(() => {
 };
 
 // --- Główny Komponent Aplikacji ---
+const getInitialOrder = () => {
+    try {
+        const savedOrder = localStorage.getItem('draftOrder');
+        if (savedOrder) {
+            const parsed = JSON.parse(savedOrder);
+            if (!parsed._id) { 
+                return { ...parsed, isDirty: true };
+            }
+        }
+    } catch (error) {
+        console.error("Błąd odczytu roboczego zamówienia z localStorage:", error);
+        localStorage.removeItem('draftOrder');
+    }
+    return { customerName: '', items: [], isDirty: false };
+};
+
 function App() {
     const [user, setUser] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     const [currentOrder, setCurrentOrder] = useState(getInitialOrder);
     const [isDirty, setIsDirty] = useState(false);
     const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
+    const [isNavOpen, setIsNavOpen] = useState(false); // Stan dla mobilnego menu
     const navigate = useNavigate();
+    const location = useLocation();
 
     const updateUserData = (newUserData) => {
         setUser(newUserData);
@@ -4147,7 +4139,7 @@ function App() {
     const handleLogout = useCallback(async () => {
         localStorage.removeItem('userToken');
         localStorage.removeItem('userData');
-        localStorage.removeItem('draftOrder'); // Czyścimy robocze zamówienie przy wylogowaniu
+        localStorage.removeItem('draftOrder');
         setUser(null);
         navigate('/login');
     }, [navigate]);
@@ -4203,37 +4195,44 @@ function App() {
     return (
         <>
             <div className="flex h-screen bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-sans">
-                {user && <Sidebar user={user} onLogout={handleLogout} onOpenPasswordModal={() => setIsPasswordModalOpen(true)} onNewOrder={handleNewOrder} />}
+                {user && <Sidebar user={user} onLogout={handleLogout} onOpenPasswordModal={() => setIsPasswordModalOpen(true)} onNewOrder={handleNewOrder} isNavOpen={isNavOpen} setIsNavOpen={setIsNavOpen} />}
                 <main className="flex-1 flex flex-col overflow-y-auto">
-                    <Routes>
-                        {!user ? (
-                            <>
-                                <Route path="/login" element={<AuthPage onLogin={handleLogin} />} />
-                                <Route path="*" element={<Navigate to="/login" replace />} />
-                            </>
-                        ) : (
-                            <>
-                                <Route path="/dashboard" element={<DashboardView user={user} onNavigate={navigate} onUpdateUser={updateUserData} />} />
-                                <Route path="/search" element={<MainSearchView />} />
-                                <Route path="/order" element={<OrderView currentOrder={currentOrder} setCurrentOrder={setCurrentOrder} user={user} setDirty={setIsDirty} />} />
-                                <Route path="/orders" element={<OrdersListView onEdit={loadOrderForEditing} />} />
-                                <Route path="/picking" element={<PickingView />} />
-                                <Route path="/inventory" element={<InventoryView user={user} onNavigate={navigate} isDirty={isDirty} setIsDirty={setIsDirty} />} />
-                                <Route path="/inventory-sheet" element={<NewInventorySheet user={user} onSave={() => navigate('/inventory')} setDirty={setIsDirty} />} />
-                                <Route path="/inventory-sheet/:inventoryId" element={<NewInventorySheet user={user} onSave={() => navigate('/inventory')} setDirty={setIsDirty} />} />
-                                <Route path="/kanban" element={<KanbanView user={user} />} />
-                                <Route path="/delegations" element={<DelegationsView user={user} onNavigate={navigate} setCurrentOrder={setCurrentOrder} />} />
-                                <Route path="/admin" element={<AdminView user={user} onNavigate={navigate} />} />
-                                <Route path="/admin-users" element={<AdminUsersView user={user} />} />
-                                <Route path="/admin-products" element={<AdminProductsView />} />
-                                <Route path="/shortage-report" element={<ShortageReportView />} />
-                                <Route path="/admin-email" element={<AdminEmailConfigView />} />
-								<Route path="/crm" element={<CrmView user={user} />} />
-                                <Route path="/" element={<Navigate to="/dashboard" replace />} />
-                                <Route path="*" element={<Navigate to="/dashboard" replace />} />
-                            </>
-                        )}
-                    </Routes>
+                    {user && (
+                        <div className="lg:hidden p-2 bg-white dark:bg-gray-800 border-b dark:border-gray-700 flex justify-between items-center sticky top-0 z-30">
+                            <button onClick={() => setIsNavOpen(!isNavOpen)} className="p-2 rounded-md"><Menu className="w-6 h-6" /></button>
+                            <span className="font-semibold">{/* Można dodać tytuł widoku */}</span>
+                        </div>
+                    )}
+                    <div className="flex-1 overflow-y-auto">
+                        <Routes>
+                            {!user ? (
+                                <>
+                                    <Route path="/login" element={<AuthPage onLogin={handleLogin} />} />
+                                    <Route path="*" element={<Navigate to="/login" replace />} />
+                                </>
+                            ) : (
+                                <>
+                                    <Route path="/dashboard" element={<DashboardView user={user} onNavigate={navigate} onUpdateUser={updateUserData} />} />
+                                    <Route path="/search" element={<MainSearchView />} />
+                                    <Route path="/order" element={<OrderView currentOrder={currentOrder} setCurrentOrder={setCurrentOrder} user={user} setDirty={setIsDirty} onNewOrder={handleNewOrder} />} />
+                                    <Route path="/orders" element={<OrdersListView onEdit={loadOrderForEditing} />} />
+                                    <Route path="/picking" element={<PickingView />} />
+                                    <Route path="/inventory" element={<InventoryView user={user} onNavigate={navigate} isDirty={isDirty} setIsDirty={setIsDirty} />} />
+                                    <Route path="/inventory-sheet" element={<NewInventorySheet user={user} onSave={() => navigate('/inventory')} setDirty={setIsDirty} />} />
+                                    <Route path="/inventory-sheet/:inventoryId" element={<NewInventorySheet user={user} onSave={() => navigate('/inventory')} setDirty={setIsDirty} />} />
+                                    <Route path="/kanban" element={<KanbanView user={user} />} />
+                                    <Route path="/delegations" element={<DelegationsView user={user} onNavigate={navigate} setCurrentOrder={setCurrentOrder} />} />
+                                    <Route path="/admin" element={<AdminView user={user} onNavigate={navigate} />} />
+                                    <Route path="/admin-users" element={<AdminUsersView user={user} />} />
+                                    <Route path="/admin-products" element={<AdminProductsView />} />
+                                    <Route path="/shortage-report" element={<ShortageReportView />} />
+                                    <Route path="/admin-email" element={<AdminEmailConfigView />} />
+                                    <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                                    <Route path="*" element={<Navigate to="/dashboard" replace />} />
+                                </>
+                            )}
+                        </Routes>
+                    </div>
                 </main>
             </div>
             <UserChangePasswordModal isOpen={isPasswordModalOpen} onClose={() => setIsPasswordModalOpen(false)} />
@@ -4252,3 +4251,4 @@ export default function AppWrapper() {
         </ErrorBoundary>
     );
 }
+
