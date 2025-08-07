@@ -112,7 +112,17 @@ const api = {
         if (!response.ok) throw new Error(data.message || 'Błąd importu pliku');
         return data;
     },
-    importMultipleOrdersFromCsv: async (files) => {
+    archiveOrder: async (orderId) => {
+    const response = await fetchWithAuth(`/api/orders/${orderId}/archive`, { method: 'POST' });
+    if (!response.ok) throw new Error('Błąd archiwizacji zamówienia');
+    return await response.json();
+},
+unarchiveOrder: async (orderId) => {
+    const response = await fetchWithAuth(`/api/orders/${orderId}/unarchive`, { method: 'POST' });
+    if (!response.ok) throw new Error('Błąd przywracania zamówienia');
+    return await response.json();
+},
+	importMultipleOrdersFromCsv: async (files) => {
         const formData = new FormData();
         files.forEach(file => formData.append('orderFiles', file));
         const response = await fetchWithAuth(`/api/orders/import-multiple-csv`, { method: 'POST', body: formData });
@@ -1171,7 +1181,7 @@ const OrdersListView = ({ onEdit }) => {
     const [isLoading, setIsLoading] = useState(true);
     const [modalState, setModalState] = useState({ isOpen: false, orderId: null, type: '' });
     const { showNotification } = useNotification();
-    const [filters, setFilters] = useState({ customer: '', author: '', dateFrom: '', dateTo: '' });
+    const [filters, setFilters] = useState({ customer: '', author: '', dateFrom: '', dateTo: '', showArchived: false });
     const [showFilters, setShowFilters] = useState(false);
     const importMultipleRef = useRef(null);
 
@@ -1191,20 +1201,20 @@ const OrdersListView = ({ onEdit }) => {
         fetchOrders();
     }, [fetchOrders]);
 
-    const groupedOrders = useMemo(() => {
-        const groups = {
-            'Braki': [],
-            'Zapisane': [],
-            'Skompletowane': [],
-            'Zakończono': [],
-        };
-        orders.forEach(order => {
-            if (groups[order.status]) {
-                groups[order.status].push(order);
+    const handleArchiveToggle = async (orderId, isArchived) => {
+        try {
+            if (isArchived) {
+                await api.unarchiveOrder(orderId);
+                showNotification('Zamówienie przywrócone!', 'success');
+            } else {
+                await api.archiveOrder(orderId);
+                showNotification('Zamówienie zarchiwizowane!', 'success');
             }
-        });
-        return groups;
-    }, [orders]);
+            fetchOrders();
+        } catch (error) {
+            showNotification(error.message, 'error');
+        }
+    };
     
     const handleDelete = async () => {
         try {
@@ -1214,14 +1224,25 @@ const OrdersListView = ({ onEdit }) => {
             fetchOrders();
         } catch (error) { showNotification(error.message, 'error'); }
     };
+	
+	  const groupedOrders = useMemo(() => {
+        const groups = {
+            'Braki': [],
+            'Zapisane': [],
+            'Skompletowane': [],
+            'Zakończono': [],
+        };
+        orders.forEach(order => {
+            if (groups[order.status]) {
+                groups[order.status].push(order);
     
     const handleFilterChange = (e) => {
-        const { name, value } = e.target;
-        setFilters(prev => ({...prev, [name]: value}));
+        const { name, value, type, checked } = e.target;
+        setFilters(prev => ({...prev, [name]: type === 'checkbox' ? checked : value}));
     };
     
     const resetFilters = () => {
-        setFilters({ customer: '', author: '', dateFrom: '', dateTo: '' });
+        setFilters({ customer: '', author: '', dateFrom: '', dateTo: '', showArchived: false });
     };
 
     const handleMultipleFileImport = async (event) => {
@@ -1236,74 +1257,65 @@ const OrdersListView = ({ onEdit }) => {
         }
         event.target.value = null;
     };
-    
+     const activeOrders = orders.filter(o => !o.isArchived);
+    const archivedOrders = orders.filter(o => o.isArchived);
+
     return (
-        <>
-            <div className="p-4 md:p-8">
-                <div className="flex flex-wrap gap-2 justify-between items-center mb-4">
-                    <h1 className="text-2xl md:text-3xl font-bold text-gray-800 dark:text-white">Wszystkie Zamówienia</h1>
-                    <div className="flex items-center gap-2 flex-wrap">
-                        <input type="file" ref={importMultipleRef} onChange={handleMultipleFileImport} className="hidden" accept=".csv" multiple />
-                        <button onClick={() => importMultipleRef.current.click()} className="flex items-center p-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600"><FileUp className="w-5 h-5"/><span className="hidden sm:inline ml-2">Importuj</span></button>
-                        <button onClick={() => setShowFilters(!showFilters)} className="flex items-center p-2 bg-gray-200 dark:bg-gray-700 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600"><Filter className="w-5 h-5"/><span className="hidden sm:inline ml-2">Filtry</span></button>
+        <div className="p-4 md:p-8">
+            <div className="flex flex-wrap gap-2 justify-between items-center mb-4">
+                <h1 className="text-2xl md:text-3xl font-bold text-gray-800 dark:text-white">Zamówienia</h1>
+                <div className="flex items-center gap-2 flex-wrap">
+                    <button onClick={() => setShowFilters(!showFilters)} className="flex items-center p-2 bg-gray-200 dark:bg-gray-700 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600"><Filter className="w-5 h-5"/><span className="hidden sm:inline ml-2">Filtry</span></button>
+                </div>
+            </div>
+            {showFilters && (
+                <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg mb-6 shadow-sm animate-fade-in">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-center">
+                        <input type="text" name="customer" value={filters.customer} onChange={handleFilterChange} placeholder="Klient" className="p-2 border rounded-md bg-white dark:bg-gray-700"/>
+                        <input type="text" name="author" value={filters.author} onChange={handleFilterChange} placeholder="Autor" className="p-2 border rounded-md bg-white dark:bg-gray-700"/>
+                        <input type="date" name="dateFrom" value={filters.dateFrom} onChange={handleFilterChange} className="p-2 border rounded-md bg-white dark:bg-gray-700"/>
+                        <input type="date" name="dateTo" value={filters.dateTo} onChange={handleFilterChange} className="p-2 border rounded-md bg-white dark:bg-gray-700"/>
+                        <label className="flex items-center gap-2"><input type="checkbox" name="showArchived" checked={filters.showArchived} onChange={handleFilterChange} /> Pokaż zarchiwizowane</label>
+                        <button onClick={resetFilters} className="px-4 py-2 bg-gray-300 dark:bg-gray-600 rounded-lg text-sm">Wyczyść</button>
                     </div>
                 </div>
-                {showFilters && (
-                    <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg mb-6 shadow-sm animate-fade-in">
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                            <input type="text" name="customer" value={filters.customer} onChange={handleFilterChange} placeholder="Klient" className="p-2 border rounded-md bg-white dark:bg-gray-700"/>
-                            <input type="text" name="author" value={filters.author} onChange={handleFilterChange} placeholder="Autor" className="p-2 border rounded-md bg-white dark:bg-gray-700"/>
-                            <input type="date" name="dateFrom" value={filters.dateFrom} onChange={handleFilterChange} className="p-2 border rounded-md bg-white dark:bg-gray-700"/>
-                            <input type="date" name="dateTo" value={filters.dateTo} onChange={handleFilterChange} className="p-2 border rounded-md bg-white dark:bg-gray-700"/>
-                        </div>
-                        <div className="flex justify-end gap-2 mt-4"><button onClick={resetFilters} className="px-4 py-2 bg-gray-300 dark:bg-gray-600 rounded-lg text-sm">Wyczyść filtry</button></div>
+            )}
+            <div className="space-y-6">
+                {/* Renderowanie Aktywnych Zamówień */}
+                {!filters.showArchived && (
+                    <div>
+                        <h2 className="text-xl font-bold mb-3">Aktywne Zamówienia</h2>
+                        {/* Tutaj wklej kod tabeli dla aktywnych zamówień */}
                     </div>
                 )}
-                <div className="space-y-6">
-                    {Object.entries(groupedOrders).map(([status, orderList]) => (
-                        orderList.length > 0 && (
-                            <div key={status}>
-                                <h2 className="text-xl font-bold mb-3 text-gray-700 dark:text-gray-300">{status} ({orderList.length})</h2>
-                                <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-x-auto">
-                                    <table className="w-full text-left text-sm">
-                                        <thead className="bg-gray-50 dark:bg-gray-700">
-                                            <tr>
-                                                <th className="p-3">Klient</th>
-                                                <th className="p-3 hidden md:table-cell">Autor</th>
-                                                <th className="p-3 hidden sm:table-cell">Data</th>
-                                                <th className="p-3 text-right">Wartość</th>
-                                                <th className="p-3 text-center">Akcje</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                                            {orderList.map(order => (
-                                                <tr key={order._id}>
-                                                    <td className="p-3 font-medium">{order.customerName}</td>
-                                                    <td className="p-3 hidden md:table-cell">{order.author}</td>
-                                                    <td className="p-3 hidden sm:table-cell">{new Date(order.date).toLocaleDateString()}</td>
-                                                    <td className="p-3 text-right font-semibold">{(order.total || 0).toFixed(2)}</td>
-                                                    <td className="p-3 text-center whitespace-nowrap">
-                                                        <Tooltip text="Edytuj/Pokaż"><button onClick={() => onEdit(order._id)} className="p-2 text-blue-500 hover:text-blue-700"><Edit className="w-5 h-5"/></button></Tooltip>
-                                                        <Tooltip text="Usuń"><button onClick={() => setModalState({ isOpen: true, orderId: order._id, type: 'delete' })} className="p-2 text-red-500 hover:text-red-700"><Trash2 className="w-5 h-5"/></button></Tooltip>
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        )
-                    ))}
-                </div>
-                 {orders.length === 0 && !isLoading && <p className="text-center text-gray-500 mt-8">Brak zamówień do wyświetlenia.</p>}
+
+                {/* Renderowanie Zarchiwizowanych Zamówień */}
+                {filters.showArchived && (
+                     <div>
+                        <h2 className="text-xl font-bold mb-3">Archiwum</h2>
+                        <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-x-auto">
+                            <table className="w-full text-left text-sm">
+                                {/* Nagłówki tabeli */}
+                                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                                    {archivedOrders.map(order => (
+                                        <tr key={order._id}>
+                                            <td className="p-3 font-medium">{order.customerName}</td>
+                                            <td className="p-3 text-center whitespace-nowrap">
+                                                <Tooltip text="Przywróć"><button onClick={() => handleArchiveToggle(order._id, true)} className="p-2 text-green-500 hover:text-green-700"><RotateCcw className="w-5 h-5"/></button></Tooltip>
+                                                <Tooltip text="Usuń"><button onClick={() => setModalState({ isOpen: true, orderId: order._id, type: 'delete' })} className="p-2 text-red-500 hover:text-red-700"><Trash2 className="w-5 h-5"/></button></Tooltip>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                )}
             </div>
-            <Modal isOpen={modalState.isOpen} onClose={() => setModalState({ isOpen: false })} title="Potwierdź usunięcie">
-                <p>Czy na pewno chcesz usunąć to zamówienie? Tej operacji nie można cofnąć.</p>
-                <div className="flex justify-end gap-4 mt-6"><button onClick={() => setModalState({ isOpen: false })} className="px-4 py-2 bg-gray-200 dark:bg-gray-600 rounded-lg">Anuluj</button><button onClick={handleDelete} className="px-4 py-2 bg-red-600 text-white rounded-lg">Usuń</button></div>
-            </Modal>
-        </>
+        </div>
     );
 };
+
 
 const PickingView = () => {
     const [orders, setOrders] = useState([]);

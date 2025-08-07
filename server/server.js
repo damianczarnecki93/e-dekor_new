@@ -77,7 +77,14 @@ const orderSchema = new mongoose.Schema({
     },
     date: { type: Date, default: Date.now },
     isDirty: { type: Boolean, default: false }
-	
+	status: { 
+        type: String, 
+        default: 'Zapisane', 
+        enum: ['Zapisane', 'Skompletowane', 'Zakończono', 'Braki'] 
+    },
+    date: { type: Date, default: Date.now },
+    isDirty: { type: Boolean, default: false },
+    isArchived: { type: Boolean, default: false } // DODAJ TĘ LINIĘ
 });
 const Order = mongoose.models.Order || mongoose.model('Order', orderSchema);
 
@@ -1081,9 +1088,13 @@ app.put('/api/orders/:id', authMiddleware, async (req, res) => {
 });
 app.get('/api/orders', authMiddleware, async (req, res) => {
     try {
-        const { status, customer, author, dateFrom, dateTo } = req.query;
+        const { status, customer, author, dateFrom, dateTo, showArchived } = req.query;
         let query = {};
-		if (status && status.length > 0) {
+
+        // Domyślnie pokazuj tylko niezarchiwizowane
+        query.isArchived = showArchived === 'true' ? true : false;
+
+        if (status && status.length > 0) {
             if (Array.isArray(status)) {
                 query.status = { $in: status };
             } else {
@@ -1125,6 +1136,25 @@ app.post('/api/orders/:id/complete', authMiddleware, async (req, res) => {
         res.status(200).json({ message: 'Zamówienie skompletowane pomyślnie!', order });
     } catch (error) {
         res.status(500).json({ message: 'Wystąpił błąd serwera.', error: error.message });
+    }
+});
+app.post('/api/orders/:id/archive', authMiddleware, async (req, res) => {
+    try {
+        const order = await Order.findByIdAndUpdate(req.params.id, { isArchived: true }, { new: true });
+        if (!order) return res.status(404).json({ message: 'Nie znaleziono zamówienia.' });
+        res.json({ message: 'Zamówienie zarchiwizowane.', order });
+    } catch (error) {
+        res.status(500).json({ message: 'Błąd podczas archiwizacji.' });
+    }
+});
+
+app.post('/api/orders/:id/unarchive', authMiddleware, async (req, res) => {
+    try {
+        const order = await Order.findByIdAndUpdate(req.params.id, { isArchived: false }, { new: true });
+        if (!order) return res.status(404).json({ message: 'Nie znaleziono zamówienia.' });
+        res.json({ message: 'Zamówienie przywrócone.', order });
+    } catch (error) {
+        res.status(500).json({ message: 'Błąd podczas przywracania.' });
     }
 });
 app.post('/api/orders/:id/revert', authMiddleware, async (req, res) => {
