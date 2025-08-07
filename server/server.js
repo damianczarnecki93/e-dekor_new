@@ -1085,7 +1085,7 @@ app.get('/api/orders', authMiddleware, async (req, res) => {
         let query = {};
 
         // Domyślnie pokazuj tylko niezarchiwizowane
-        query.isArchived = showArchived === 'true' ? true : false;
+        query.isArchived = showArchived === 'true' ? true : { $ne: true };
 
         if (status && status.length > 0) {
             if (Array.isArray(status)) {
