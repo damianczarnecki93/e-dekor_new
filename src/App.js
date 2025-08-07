@@ -3987,24 +3987,6 @@ const DelegationDetails = ({ delegation, onUpdate, onNavigate, setCurrentOrder, 
 };
 
 
-// --- Główny Komponent Aplikacji ---
-
-const DashboardView = ({ user, onNavigate, onUpdateUser }) => { return <div className="p-8">Panel Główny</div>; };
-const MainSearchView = () => { return <div className="p-8">Wyszukiwarka</div>; };
-const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }) => { return <div className="p-8">Nowe Zamówienie</div>; };
-const OrdersListView = ({ onEdit }) => { return <div className="p-8">Lista Zamówień</div>; };
-const PickingView = () => { return <div className="p-8">Kompletacja</div>; };
-const InventoryView = ({ user, onNavigate, isDirty, setIsDirty }) => { return <div className="p-8">Inwentaryzacja</div>; };
-const NewInventorySheet = ({ user, onSave, setDirty }) => { return <div className="p-8">Nowy Arkusz Inwentaryzacyjny</div>; };
-const KanbanView = ({ user }) => { return <div className="p-8">Tablica Kanban</div>; };
-const DelegationsView = ({ user, onNavigate, setCurrentOrder }) => { return <div className="p-8">Delegacje</div>; };
-const AdminView = ({ user, onNavigate }) => { return <div className="p-8">Panel Admina</div>; };
-const AdminUsersView = ({ user }) => { return <div className="p-8">Zarządzanie Użytkownikami</div>; };
-const AdminProductsView = () => { return <div className="p-8">Zarządzanie Produktami</div>; };
-const ShortageReportView = () => { return <div className="p-8">Raport Braków</div>; };
-const AdminEmailConfigView = () => { return <div className="p-8">Konfiguracja Email</div>; };
-const AuthPage = ({ onLogin }) => { return <div className="p-8">Logowanie</div>; };
-
 // --- Komponent Nawigacji (Sidebar) ---
 const Sidebar = ({ user, onLogout, onOpenPasswordModal, onNewOrder, isNavOpen, setIsNavOpen }) => {
     const [isDarkMode, setIsDarkMode] = useState(document.documentElement.classList.contains('dark'));
