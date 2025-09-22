@@ -777,12 +777,10 @@ const PinnedInputBar = ({ onProductAdd, onSave, isDirty }) => {
         return () => clearTimeout(handler);
     }, [query, showNotification]);
 
-    const handleAdd = (product) => {
+ const handleAdd = (product) => {
+        // Usunięto walidację, aby umożliwić przekazanie pustej/zerowej ilości
+        // Komponent nadrzędny zinterpretuje to jako "dodaj 1"
         const qty = Number(quantity);
-        if (isNaN(qty) || qty <= 0) {
-            showNotification('Wprowadź poprawną ilość.', 'error');
-            return;
-        }
         onProductAdd(product, qty);
         setSuggestions([]);
         setQuery('');
@@ -790,7 +788,7 @@ const PinnedInputBar = ({ onProductAdd, onSave, isDirty }) => {
         inputRef.current?.focus();
     };
     
- const handleQueryChange = (e) => {
+	 const handleQueryChange = (e) => {
         const value = e.target.value;
         if (value.length > 13) {
             showNotification("Kod EAN nie może przekraczać 13 znaków.", "error");
@@ -914,7 +912,7 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty }) => {
     const scrollToBottom = () => listEndRef.current?.scrollIntoView({ behavior: "smooth" });
     useEffect(scrollToBottom, [order.items]);
 
-const updateOrder = (updates, isDirtyFlag = true) => {
+    const updateOrder = (updates, isDirtyFlag = true) => {
         const newOrder = { ...order, ...updates, isDirty: isDirtyFlag };
         setOrder(newOrder);
         setCurrentOrder(newOrder);
@@ -923,7 +921,6 @@ const updateOrder = (updates, isDirtyFlag = true) => {
 
     const addProductToOrder = (product, quantity) => {
         const newItems = [...(order.items || [])];
-        // Używamy unikalnego identyfikatora, który działa też dla produktów spoza listy
         const uniqueIdentifier = product.isCustom ? `custom-${product.barcodes[0]}` : product._id;
 
         const existingItemIndex = newItems.findIndex(item => {
@@ -931,12 +928,15 @@ const updateOrder = (updates, isDirtyFlag = true) => {
             return itemIdentifier === uniqueIdentifier;
         });
 
+        // Sprawdzamy, czy to skan/szybkie dodanie (ilość pusta, 0 lub 1)
+        const isScan = !quantity || quantity <= 1;
+
         if (existingItemIndex > -1) {
-            // Jeśli produkt już istnieje na liście, zwiększ jego ilość o 1 (kolejny skan)
-            newItems[existingItemIndex].quantity += 1;
+            // Produkt istnieje: jeśli to skan, zwiększ o 1. Jeśli ręcznie, dodaj podaną ilość.
+            newItems[existingItemIndex].quantity += isScan ? 1 : quantity;
         } else {
-            // Jeśli to nowy produkt, dodaj go z domyślną ilością 1 (pierwszy skan)
-            newItems.push({ ...product, quantity: 1, note: '' });
+            // Nowy produkt: jeśli to skan, dodaj 1. Jeśli ręcznie, dodaj podaną ilość.
+            newItems.push({ ...product, quantity: isScan ? 1 : quantity, note: '' });
         }
         updateOrder({ items: newItems });
     };
