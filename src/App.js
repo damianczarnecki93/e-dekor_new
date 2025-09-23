@@ -4126,6 +4126,8 @@ const availableNav = useMemo(() => {
         </nav>
     );
 };
+}
+
 
 // --- Główny Komponent Aplikacji ---
 function App() {
