@@ -4036,49 +4036,6 @@ const DelegationDetails = ({ delegation, onUpdate, onNavigate, setCurrentOrder, 
 
 
 // --- Główny Komponent Aplikacji ---
-
-const getInitialOrder = () => {
-    try {
-        const savedOrder = localStorage.getItem('draftOrder');
-        if (savedOrder) {
-            const parsed = JSON.parse(savedOrder);
-            // Wczytujemy tylko jeśli to wersja robocza (nie ma _id z bazy danych)
-            if (!parsed._id) { 
-                return { ...parsed, isDirty: true }; // Oznaczamy jako "brudny" po wczytaniu
-            }
-        }
-    } catch (error) {
-        console.error("Błąd odczytu roboczego zamówienia z localStorage:", error);
-        localStorage.removeItem('draftOrder'); // Czyścimy w razie błędu parsowania
-    }
-    // Domyślnie zwracamy czyste zamówienie
-    return { customerName: '', items: [], isDirty: false };
-};
-
-const Sidebar = ({ user, onLogout, onOpenPasswordModal, onNewOrder }) => {
-    const [isDarkMode, setIsDarkMode] = useState(document.documentElement.classList.contains('dark'));
-    const [isNavOpen, setIsNavOpen] = useState(false);
-    const [expandedCategories, setExpandedCategories] = useState(['Główne']);
-    const location = useLocation();
-
-    const toggleTheme = () => {
-        const newIsDarkMode = !isDarkMode;
-        setIsDarkMode(newIsDarkMode);
-        if (newIsDarkMode) {
-            document.documentElement.classList.add('dark');
-            localStorage.setItem('theme', 'dark');
-        } else {
-            document.documentElement.classList.remove('dark');
-            localStorage.setItem('theme', 'light');
-        }
-    };
-    
-    const toggleCategory = (category) => {
-        setExpandedCategories(prev =>
-            prev.includes(category) ? prev.filter(c => c !== category) : [...prev, category]
-        );
-    };
-
     const navConfig = useMemo(() => [
         {
             category: 'Główne',
