@@ -78,7 +78,6 @@ const fetchWithAuth = async (url, options = {}) => {
     if (response.status === 401) {
         localStorage.removeItem('userToken');
         localStorage.removeItem('userData');
-        window.dispatchEvent(new Event('auth-error')); // Custom event for auth errors
         throw new Error('Sesja wygasła. Proszę zalogować się ponownie.');
     }
     return response;
@@ -759,50 +758,8 @@ const PinnedInputBar = ({ onProductAdd, onSave, isDirty }) => {
     const { showNotification } = useNotification();
     const inputRef = useRef(null);
 
-    const processEan = useCallback(async (ean) => {
-        setIsLoading(true);
-        try {
-            const results = await api.searchProducts(ean);
-            if (results.length > 0) {
-                const matchedProduct = results.find(p => p.barcodes.includes(ean));
-                onProductAdd(matchedProduct || results[0], 1);
-            } else {
-                const customItem = {
-                    _id: `custom-${ean}`, name: `EAN: ${ean}`, product_code: 'SPOZA LISTY',
-                    barcodes: [ean], price: 0, isCustom: true,
-                };
-                onProductAdd(customItem, 1);
-            }
-        } catch (error) {
-            showNotification(error.message, 'error');
-        } finally {
-            setQuery('');
-            setSuggestions([]);
-            setIsLoading(false);
-        }
-    }, [onProductAdd, showNotification]);
-
-    // Effect to handle automatic adding for EAN codes (for scanners without "Enter")
     useEffect(() => {
-        const ean = query.trim();
-        // More flexible regex for EAN-8, UPC-A (12), and EAN-13
-        if (/^(\d{8}|\d{12,13})$/.test(ean)) {
-            const handler = setTimeout(() => processEan(ean), 100); // Delay to prevent partial scans
-            return () => clearTimeout(handler);
-        }
-    }, [query, processEan]);
-
-    // Effect to re-focus the input after an item is added
-    useEffect(() => {
-        if (!isLoading) {
-            inputRef.current?.focus();
-        }
-    }, [isLoading]);
-
-    // Effect for showing suggestions for manual TEXT search
-    useEffect(() => {
-        const isNumeric = /^\d+$/.test(query.trim());
-        if (query.length < 2 || isNumeric) {
+        if (query.length < 2) {
             setSuggestions([]);
             return;
         }
@@ -820,47 +777,61 @@ const PinnedInputBar = ({ onProductAdd, onSave, isDirty }) => {
         return () => clearTimeout(handler);
     }, [query, showNotification]);
 
-    const handleAddFromSuggestion = (product) => {
+ const handleAdd = (product) => {
+        // Usunięto walidację, aby umożliwić przekazanie pustej/zerowej ilości
+        // Komponent nadrzędny zinterpretuje to jako "dodaj 1"
         const qty = Number(quantity);
-        onProductAdd(product, qty > 0 ? qty : 1);
+        onProductAdd(product, qty);
         setSuggestions([]);
         setQuery('');
         setQuantity(1);
+        inputRef.current?.focus();
     };
     
-    const handleQueryChange = (e) => {
-        setQuery(e.target.value);
+	 const handleQueryChange = (e) => {
+        const value = e.target.value;
+        if (value.length > 13) {
+            showNotification("Kod EAN nie może przekraczać 13 znaków.", "error");
+            setQuery(value.substring(0, 13)); // Obcina wartość zamiast ją czyścić
+        } else {
+            setQuery(value);
+        }
     };
 	
     const handleKeyDown = async (e) => {
         if (e.key === 'Enter' && query.trim() !== '') {
             e.preventDefault();
-            const searchTerm = query.trim();
             
-            // Handle EAN codes entered with Enter key
-            if (/^(\d{8}|\d{12,13})$/.test(searchTerm)) {
-                processEan(searchTerm);
+            const exactMatch = suggestions.find(s => s.barcodes.includes(query.trim()) || s.product_code === query.trim());
+            if (exactMatch) {
+                handleAdd(exactMatch);
                 return;
             }
 
-            // Handle text search from suggestions or direct query
-            if (suggestions.length > 0) {
-                handleAddFromSuggestion(suggestions[0]);
-                return;
-            }
-            setIsLoading(true);
-            try {
-                const results = await api.searchProducts(searchTerm);
-                if (results.length > 0) {
-                    handleAddFromSuggestion(results[0]);
-                } else {
-                    showNotification('Nie znaleziono produktu.', 'error');
+            if (suggestions.length === 0) {
+                try {
+                    const results = await api.searchProducts(query.trim());
+                    if (results.length === 1) {
+                        handleAdd(results[0]);
+                        return;
+                    } else if (results.length > 1) {
+                        setSuggestions(results);
+                        return;
+                    }
+                } catch (error) {
+                    // Ignoruj błąd
                 }
-            } catch (error) {
-                 showNotification(error.message, 'error');
-            } finally {
-                setIsLoading(false);
             }
+
+            const customItem = {
+                _id: `custom-${Date.now()}`,
+                name: `EAN: ${query}`,
+                product_code: 'SPOZA LISTY',
+                barcodes: [query],
+                price: 0,
+                isCustom: true,
+            };
+            handleAdd(customItem);
         }
     };
 
@@ -870,7 +841,7 @@ const PinnedInputBar = ({ onProductAdd, onSave, isDirty }) => {
                 {suggestions.length > 0 && (
                     <ul className="absolute bottom-full mb-2 w-full bg-white dark:bg-gray-700 border rounded-lg shadow-xl max-h-60 overflow-y-auto z-30">
                         {suggestions.map(p => (
-                            <li key={p._id} onClick={() => handleAddFromSuggestion(p)} className="p-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 border-b last:border-b-0">
+                            <li key={p._id} onClick={() => handleAdd(p)} className="p-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 border-b last:border-b-0">
                                 <p className="font-semibold">{p.name}</p>
                                 <p className="text-sm text-gray-500">{p.product_code}</p>
                             </li>
@@ -884,7 +855,7 @@ const PinnedInputBar = ({ onProductAdd, onSave, isDirty }) => {
                         value={query}
                         onChange={handleQueryChange}
                         onKeyDown={handleKeyDown}
-                        placeholder="Zeskanuj EAN lub wyszukaj produkt..."
+                        placeholder="Wyszukaj lub zeskanuj produkt..."
                         className="w-full p-3 bg-gray-100 dark:bg-gray-700 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     />
                     <input
@@ -928,6 +899,7 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty }) => {
     }, [currentOrder]);
 
     useEffect(() => {
+        // Zapisuj w localStorage tylko jeśli to nowe, niezapisane zamówienie (brak _id)
         if (!order._id) {
             try {
                 localStorage.setItem('draftOrder', JSON.stringify(order));
@@ -956,12 +928,15 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty }) => {
             return itemIdentifier === uniqueIdentifier;
         });
 
-        const isScanOrQuickAdd = !quantity || quantity <= 1;
+        // Sprawdzamy, czy to skan/szybkie dodanie (ilość pusta, 0 lub 1)
+        const isScan = !quantity || quantity <= 1;
 
         if (existingItemIndex > -1) {
-            newItems[existingItemIndex].quantity += isScanOrQuickAdd ? 1 : quantity;
+            // Produkt istnieje: jeśli to skan, zwiększ o 1. Jeśli ręcznie, dodaj podaną ilość.
+            newItems[existingItemIndex].quantity += isScan ? 1 : quantity;
         } else {
-            newItems.push({ ...product, quantity: isScanOrQuickAdd ? 1 : quantity, note: '' });
+            // Nowy produkt: jeśli to skan, dodaj 1. Jeśli ręcznie, dodaj podaną ilość.
+            newItems.push({ ...product, quantity: isScan ? 1 : quantity, note: '' });
         }
         updateOrder({ items: newItems });
     };
@@ -1021,7 +996,7 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty }) => {
             const orderToSave = { ...order, author: user.username };
             const { message, order: savedOrder } = await api.saveOrder(orderToSave);
             showNotification(message, 'success');
-            localStorage.removeItem('draftOrder');
+            localStorage.removeItem('draftOrder'); // Czyścimy dane robocze po zapisie
             setCurrentOrder(savedOrder);
             setDirty(false);
         } catch (error) { 
@@ -4036,6 +4011,49 @@ const DelegationDetails = ({ delegation, onUpdate, onNavigate, setCurrentOrder, 
 
 
 // --- Główny Komponent Aplikacji ---
+
+const getInitialOrder = () => {
+    try {
+        const savedOrder = localStorage.getItem('draftOrder');
+        if (savedOrder) {
+            const parsed = JSON.parse(savedOrder);
+            // Wczytujemy tylko jeśli to wersja robocza (nie ma _id z bazy danych)
+            if (!parsed._id) { 
+                return { ...parsed, isDirty: true }; // Oznaczamy jako "brudny" po wczytaniu
+            }
+        }
+    } catch (error) {
+        console.error("Błąd odczytu roboczego zamówienia z localStorage:", error);
+        localStorage.removeItem('draftOrder'); // Czyścimy w razie błędu parsowania
+    }
+    // Domyślnie zwracamy czyste zamówienie
+    return { customerName: '', items: [], isDirty: false };
+};
+
+const Sidebar = ({ user, onLogout, onOpenPasswordModal, onNewOrder }) => {
+    const [isDarkMode, setIsDarkMode] = useState(document.documentElement.classList.contains('dark'));
+    const [isNavOpen, setIsNavOpen] = useState(false);
+    const [expandedCategories, setExpandedCategories] = useState(['Główne']);
+    const location = useLocation();
+
+    const toggleTheme = () => {
+        const newIsDarkMode = !isDarkMode;
+        setIsDarkMode(newIsDarkMode);
+        if (newIsDarkMode) {
+            document.documentElement.classList.add('dark');
+            localStorage.setItem('theme', 'dark');
+        } else {
+            document.documentElement.classList.remove('dark');
+            localStorage.setItem('theme', 'light');
+        }
+    };
+    
+    const toggleCategory = (category) => {
+        setExpandedCategories(prev =>
+            prev.includes(category) ? prev.filter(c => c !== category) : [...prev, category]
+        );
+    };
+
     const navConfig = useMemo(() => [
         {
             category: 'Główne',
@@ -4126,18 +4144,20 @@ const availableNav = useMemo(() => {
         </nav>
     );
 };
-}
-
 
 // --- Główny Komponent Aplikacji ---
 function App() {
     const [user, setUser] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
-    const [currentOrder, setCurrentOrder] = useState(() => getInitialOrder());
+    const [currentOrder, setCurrentOrder] = useState(getInitialOrder);
     const [isDirty, setIsDirty] = useState(false);
     const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
     const navigate = useNavigate();
-    const location = useLocation();
+
+    const updateUserData = (newUserData) => {
+        setUser(newUserData);
+        localStorage.setItem('userData', JSON.stringify(newUserData));
+    };
 
     const handleLogin = useCallback((data) => {
         localStorage.setItem('userToken', data.token);
@@ -4146,24 +4166,16 @@ function App() {
         navigate('/dashboard');
     }, [navigate]);
 
-    const handleLogout = useCallback(() => {
+    const handleLogout = useCallback(async () => {
         localStorage.removeItem('userToken');
         localStorage.removeItem('userData');
-        localStorage.removeItem('draftOrder');
+        localStorage.removeItem('draftOrder'); // Czyścimy robocze zamówienie przy wylogowaniu
         setUser(null);
         navigate('/login');
     }, [navigate]);
 
-    useEffect(() => {
-        const handleAuthError = () => {
-            handleLogout();
-        };
-        window.addEventListener('auth-error', handleAuthError);
-        return () => window.removeEventListener('auth-error', handleAuthError);
-    }, [handleLogout]);
-
     const handleNewOrder = () => {
-        if (isDirty && location.pathname.startsWith('/order')) {
+        if (isDirty) {
             if (!window.confirm("Masz niezapisane zmiany. Czy na pewno chcesz utworzyć nowe zamówienie? Zmiany zostaną utracone.")) {
                 return;
             }
@@ -4175,13 +4187,26 @@ function App() {
         navigate('/order');
     };
 
+    useEffect(() => {
+        const handleAuthError = () => {
+            console.log("Wykryto błąd autoryzacji, wylogowywanie...");
+            handleLogout();
+        };
+
+        window.addEventListener('auth-error', handleAuthError);
+
+        return () => {
+            window.removeEventListener('auth-error', handleAuthError);
+        };
+    }, [handleLogout]);
+
     const loadOrderForEditing = async (orderId) => {
         try {
             const order = await api.getOrderById(orderId);
             setCurrentOrder(order);
             navigate('/order');
         } catch (error) {
-            showNotification(error.message, 'error');
+            console.error("Błąd ładowania zamówienia", error);
         }
     };
     
@@ -4210,12 +4235,23 @@ function App() {
                             </>
                         ) : (
                             <>
-                                <Route path="/dashboard" element={<DashboardView user={user} onNavigate={navigate} />} />
+                                <Route path="/dashboard" element={<DashboardView user={user} onNavigate={navigate} onUpdateUser={updateUserData} />} />
                                 <Route path="/search" element={<MainSearchView />} />
                                 <Route path="/order" element={<OrderView currentOrder={currentOrder} setCurrentOrder={setCurrentOrder} user={user} setDirty={setIsDirty} />} />
                                 <Route path="/orders" element={<OrdersListView onEdit={loadOrderForEditing} />} />
                                 <Route path="/picking" element={<PickingView />} />
-                                {/* Add other routes here */}
+                                <Route path="/inventory" element={<InventoryView user={user} onNavigate={navigate} isDirty={isDirty} setIsDirty={setIsDirty} />} />
+                                <Route path="/inventory-sheet" element={<NewInventorySheet user={user} onSave={() => navigate('/inventory')} setDirty={setIsDirty} />} />
+                                <Route path="/inventory-sheet/:inventoryId" element={<NewInventorySheet user={user} onSave={() => navigate('/inventory')} setDirty={setIsDirty} />} />
+                                <Route path="/kanban" element={<KanbanView user={user} />} />
+                                <Route path="/delegations" element={<DelegationsView user={user} onNavigate={navigate} setCurrentOrder={setCurrentOrder} />} />
+                                <Route path="/admin" element={<AdminView user={user} onNavigate={navigate} />} />
+                                <Route path="/admin-users" element={<AdminUsersView user={user} />} />
+                                <Route path="/admin-products" element={<AdminProductsView />} />
+                                <Route path="/shortage-report" element={<ShortageReportView />} />
+                                <Route path="/admin-email" element={<AdminEmailConfigView />} />
+								<Route path="/crm" element={<CrmView user={user} />} />
+                                <Route path="/" element={<Navigate to="/dashboard" replace />} />
                                 <Route path="*" element={<Navigate to="/dashboard" replace />} />
                             </>
                         )}
@@ -4226,79 +4262,6 @@ function App() {
         </>
     );
 }
-
-const getInitialOrder = () => {
-    try {
-        const savedOrder = localStorage.getItem('draftOrder');
-        if (savedOrder) {
-            const parsed = JSON.parse(savedOrder);
-            if (!parsed._id) { 
-                return { ...parsed, isDirty: true };
-            }
-        }
-    } catch (error) {
-        console.error("Błąd odczytu roboczego zamówienia z localStorage:", error);
-        localStorage.removeItem('draftOrder');
-    }
-    return { customerName: '', items: [], isDirty: false };
-};
-
-const Sidebar = ({ user, onLogout, onOpenPasswordModal, onNewOrder }) => {
-    const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('theme') === 'dark');
-    const [isNavOpen, setIsNavOpen] = useState(false);
-    const location = useLocation();
-
-    useEffect(() => {
-        if (isDarkMode) {
-            document.documentElement.classList.add('dark');
-        } else {
-            document.documentElement.classList.remove('dark');
-        }
-    }, [isDarkMode]);
-
-    const toggleTheme = () => {
-        localStorage.setItem('theme', !isDarkMode ? 'dark' : 'light');
-        setIsDarkMode(!isDarkMode);
-    };
-
-    const navItems = useMemo(() => [
-        { id: 'dashboard', label: 'Panel Główny', icon: Home, roles: ['user', 'administrator'] },
-        { id: 'search', label: 'Wyszukiwarka', icon: Search, roles: ['user', 'administrator'] },
-        { id: 'order', label: 'Nowe Zamówienie', icon: PlusCircle, roles: ['user', 'administrator'], action: onNewOrder },
-        { id: 'orders', label: 'Zamówienia', icon: Archive, roles: ['user', 'administrator'] },
-        { id: 'picking', label: 'Kompletacja', icon: List, roles: ['user', 'administrator'] },
-        { id: 'inventory', label: 'Inwentaryzacja', icon: Wrench, roles: ['user', 'administrator'] },
-        { id: 'admin', label: 'Panel Admina', icon: Settings, roles: ['administrator'] },
-    ].filter(item => item.roles.includes(user.role)), [user.role, onNewOrder]);
-	
-    return (
-        <nav className={`w-64 bg-white dark:bg-gray-800 shadow-lg flex flex-col flex-shrink-0 transition-transform duration-300 ease-in-out z-40 fixed lg:static h-full ${isNavOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}>
-             <div className="flex items-center justify-center h-20 border-b border-gray-200 dark:border-gray-700">
-                <img src={isDarkMode ? "/logo-dark.png" : "/logo.png"} onError={(e) => { e.currentTarget.style.display = 'none'; }} alt="Logo" className="h-10" />
-            </div>
-            <ul className="flex-grow overflow-y-auto">
-                {navItems.map(item => (
-                    <li key={item.id}>
-                        <Link to={`/${item.id}`} onClick={(e) => { if(item.action) { e.preventDefault(); item.action(); } setIsNavOpen(false); }} className={`w-full flex items-center justify-start h-12 px-6 text-base transition-colors duration-200 text-left ${location.pathname.startsWith(`/${item.id}`) ? 'bg-indigo-50 dark:bg-gray-700 text-indigo-600 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'}`}>
-                            <item.icon className="h-5 w-5" />
-                            <span className="ml-4">{item.label}</span>
-                        </Link>
-                    </li>
-                ))}
-            </ul>
-            <div className="p-4 border-t border-gray-200 dark:border-gray-700">
-                <div className="flex items-center justify-between mb-4">
-                    <div><p className="font-semibold">{user.username}</p><p className="text-sm text-gray-500">{user.role}</p></div>
-                    <div className="flex items-center">
-                        <Tooltip text="Zmień hasło"><button onClick={() => { onOpenPasswordModal(); setIsNavOpen(false); }} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600"><KeyRound className="h-6 w-6 text-gray-500" /></button></Tooltip>
-                        <Tooltip text="Wyloguj"><button onClick={onLogout} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600"><LogOut className="h-6 w-6 text-gray-500" /></button></Tooltip>
-                    </div>
-                </div>
-                <Tooltip text="Zmień motyw"><button onClick={toggleTheme} className="w-full flex justify-center p-2 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600">{isDarkMode ? <Sun className="h-6 w-6 text-yellow-400" /> : <Moon className="h-6 w-6 text-indigo-500" />}</button></Tooltip>
-            </div>
-        </nav>
-    );
-};
 
 export default function AppWrapper() {
     return (
@@ -4311,5 +4274,3 @@ export default function AppWrapper() {
         </ErrorBoundary>
     );
 }
-
-
