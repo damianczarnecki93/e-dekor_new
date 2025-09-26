@@ -759,7 +759,7 @@ const MainSearchView = () => {
     );
 };
 
-const PinnedInputBar = ({ onProductAdd, onSave, isDirty }) => {
+const PinnedInputBar = ({ onProductAdd }) => {
     const [query, setQuery] = useState('');
     const [quantity, setQuantity] = useState(1);
     const [suggestions, setSuggestions] = useState([]);
@@ -786,13 +786,13 @@ const PinnedInputBar = ({ onProductAdd, onSave, isDirty }) => {
         return () => clearTimeout(handler);
     }, [query, showNotification]);
 
-    const handleAdd = (product) => {
+    const handleAdd = (product, isScan = false) => {
         const qty = Number(quantity);
         if (isNaN(qty) || qty <= 0) {
             showNotification('Wprowadź poprawną ilość.', 'error');
             return;
         }
-        onProductAdd(product, qty);
+        onProductAdd(product, qty, isScan);
         setSuggestions([]);
         setQuery('');
         setQuantity(1);
@@ -815,7 +815,7 @@ const PinnedInputBar = ({ onProductAdd, onSave, isDirty }) => {
             
             const exactMatch = suggestions.find(s => s.barcodes.includes(query.trim()) || s.product_code === query.trim());
             if (exactMatch) {
-                handleAdd(exactMatch);
+                handleAdd(exactMatch, true);
                 return;
             }
 
@@ -823,7 +823,7 @@ const PinnedInputBar = ({ onProductAdd, onSave, isDirty }) => {
                 try {
                     const results = await api.searchProducts(query.trim());
                     if (results.length === 1) {
-                        handleAdd(results[0]);
+                        handleAdd(results[0], true);
                         return;
                     } else if (results.length > 1) {
                         setSuggestions(results);
@@ -842,7 +842,7 @@ const PinnedInputBar = ({ onProductAdd, onSave, isDirty }) => {
                 price: 0,
                 isCustom: true,
             };
-            handleAdd(customItem);
+            handleAdd(customItem, true);
         }
     };
 
@@ -852,7 +852,7 @@ const PinnedInputBar = ({ onProductAdd, onSave, isDirty }) => {
                 {suggestions.length > 0 && (
                     <ul className="absolute bottom-full mb-2 w-full bg-white dark:bg-gray-700 border rounded-lg shadow-xl max-h-60 overflow-y-auto z-30">
                         {suggestions.map(p => (
-                            <li key={p._id} onClick={() => handleAdd(p)} className="p-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 border-b last:border-b-0">
+                            <li key={p._id} onClick={() => handleAdd(p, false)} className="p-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 border-b last:border-b-0">
                                 <p className="font-semibold">{p.name}</p>
                                 <p className="text-sm text-gray-500">{p.product_code}</p>
                             </li>
@@ -871,18 +871,17 @@ const PinnedInputBar = ({ onProductAdd, onSave, isDirty }) => {
                     />
                     <input
                         type="number"
+                        inputMode="numeric"
                         value={quantity}
                         onFocus={(e) => e.target.select()}
                         onChange={(e) => setQuantity(e.target.value)}
                         onKeyDown={handleKeyDown}
                         className="w-20 sm:w-24 p-3 text-center bg-gray-100 dark:bg-gray-700 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     />
-                    {onSave && (
-                        <button onClick={onSave} className="flex items-center justify-center px-3 sm:px-5 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-blue-400" disabled={!isDirty}>
-                            <Save className="w-5 h-5"/>
-                            <span className="hidden sm:inline ml-2">{isDirty ? 'Zapisz' : 'Zapisano'}</span>
-                        </button>
-                    )}
+                     <button onClick={() => handleKeyDown({ key: 'Enter', preventDefault: () => {} })} className="flex items-center justify-center px-3 sm:px-5 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors">
+                        <PlusCircle className="w-5 h-5"/>
+                        <span className="hidden sm:inline ml-2">Dodaj</span>
+                    </button>
                 </div>
             </div>
         </div>
@@ -920,15 +919,18 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
         setDirty(isDirtyFlag);
     };
 
-    const addProductToOrder = (product, quantity) => {
+    const addProductToOrder = (product, quantity, isScan = false) => {
         const newItems = [...(order.items || [])];
         const existingItemIndex = newItems.findIndex(item => item._id === product._id && !item.isCustom);
         if (existingItemIndex > -1) { 
-            newItems[existingItemIndex].quantity += quantity;
+            newItems[existingItemIndex].quantity = Number(newItems[existingItemIndex].quantity) + Number(quantity);
         } else { 
-            newItems.push({ ...product, quantity: quantity, note: '' });
+            newItems.push({ ...product, quantity: Number(quantity), note: '' });
         }
         updateOrder({ items: newItems });
+        if (isScan) {
+             handleSaveOrder(true);
+        }
     };
 
     const updateQuantity = (itemIndex, newQuantityStr) => {
@@ -977,16 +979,21 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
 
     const totalValue = useMemo(() => (order.items || []).reduce((sum, item) => sum + item.price * (item.quantity || 0), 0), [order.items]);
 
-    const handleSaveOrder = async () => {
-        if (!order.customerName) { showNotification('Proszę podać nazwę klienta.', 'error'); return; }
+    const handleSaveOrder = async (isAutoSave = false) => {
+        if (!order.customerName) { 
+            if (!isAutoSave) showNotification('Proszę podać nazwę klienta.', 'error'); 
+            return; 
+        }
         try {
             const orderToSave = { ...order, author: user.username };
             const { message, order: savedOrder } = await api.saveOrder(orderToSave);
-            showNotification(message, 'success');
+            if (!isAutoSave) showNotification(message, 'success');
             localStorage.removeItem('draftOrder');
             setCurrentOrder(savedOrder);
             setDirty(false);
-        } catch (error) { showNotification(error.message, 'error'); }
+        } catch (error) { 
+            if (!isAutoSave) showNotification(error.message, 'error'); 
+        }
     };
     
     const handleFileImport = async (event) => {
@@ -1085,7 +1092,10 @@ const handlePrint = () => {
                 <div className="flex flex-wrap gap-2 justify-between items-center mb-4">
                     <h1 className="text-2xl md:text-3xl font-bold text-gray-800 dark:text-white">{order._id ? `Edycja Zamówienia` : 'Nowe Zamówienie'}</h1>
                     <div className="flex gap-2">
-                       {/* --- NOWY PRZYCISK --- */}
+                        <button onClick={() => handleSaveOrder()} className="flex items-center justify-center px-3 sm:px-5 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-blue-400" disabled={!order.isDirty}>
+                            <Save className="w-5 h-5"/>
+                            <span className="hidden sm:inline ml-2">{order.isDirty ? 'Zapisz' : 'Zapisano'}</span>
+                        </button>
                        <button onClick={onNewOrder} className="flex items-center justify-center p-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors">
                             <PlusCircle className="w-5 h-5"/> <span className="hidden sm:inline ml-2">Nowe</span>
                         </button>
@@ -1145,7 +1155,7 @@ const handlePrint = () => {
                                         <td className="hidden md:table-cell p-2">{item.product_code}</td>
                                         <td className="p-2 text-right">{item.price.toFixed(2)}</td>
                                         <td className="p-2 text-center">
-                                            <input type="number" value={item.quantity || ''} onChange={(e) => updateQuantity(index, e.target.value)} onFocus={(e) => e.target.select()} className="w-16 text-center bg-transparent border rounded-md p-1 focus:ring-2 focus:ring-indigo-500 outline-none"/>
+                                            <input type="number" inputMode="numeric" value={item.quantity || ''} onChange={(e) => updateQuantity(index, e.target.value)} onFocus={(e) => e.target.select()} className="w-16 text-center bg-transparent border rounded-md p-1 focus:ring-2 focus:ring-indigo-500 outline-none"/>
                                         </td>
                                         <td className="p-2 text-right font-semibold">{(item.price * (item.quantity || 0)).toFixed(2)}</td>
                                         <td className="p-2 text-center whitespace-nowrap">
