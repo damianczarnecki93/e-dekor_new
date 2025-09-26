@@ -503,40 +503,6 @@ const Modal = ({ isOpen, onClose, title, children, maxWidth = 'md' }) => {
     );
 };
 
-const VirtualKeyboard = ({ onInput, onBackspace, onEnter, onClose }) => {
-    const keys = [ '1', '2', '3', '4', '5', '6', '7', '8', '9', 'C', '0', '⌫' ];
-
-    const handleKeyClick = (key) => {
-        if (key === 'C') {
-            onBackspace(true); // Clear all
-        } else if (key === '⌫') {
-            onBackspace();
-        } else {
-            onInput(key);
-        }
-    };
-
-    return (
-        <div className="fixed bottom-0 left-0 right-0 bg-gray-200 dark:bg-gray-900 p-2 z-50">
-            <div className="flex justify-end mb-1">
-                 <button onClick={onClose} className="px-3 py-1 text-xs bg-red-500 text-white rounded-md">Zamknij</button>
-            </div>
-            <div className="grid grid-cols-3 gap-2">
-                {keys.map(key => (
-                    <button
-                        key={key}
-                        onClick={() => handleKeyClick(key)}
-                        className="p-4 bg-white dark:bg-gray-700 rounded-lg text-2xl font-bold shadow-md hover:bg-gray-100 dark:hover:bg-gray-600"
-                    >
-                        {key}
-                    </button>
-                ))}
-                <button onClick={onEnter} className="p-4 bg-green-500 dark:bg-green-700 rounded-lg text-2xl font-bold shadow-md col-span-3">Enter</button>
-            </div>
-        </div>
-    );
-};
-
 const UserChangePasswordModal = ({ isOpen, onClose }) => {
     const [currentPassword, setCurrentPassword] = useState('');
     const [newPassword, setNewPassword] = useState('');
@@ -800,198 +766,125 @@ const PinnedInputBar = ({ onProductAdd }) => {
     const [isLoading, setIsLoading] = useState(false);
     const { showNotification } = useNotification();
     const inputRef = useRef(null);
-    const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
-    const [activeInput, setActiveInput] = useState(null);
-    const lastClickTime = useRef(0);
-    const lastClickedInput = useRef(null);
-    const [isQuantityInputFresh, setIsQuantityInputFresh] = useState(true);
-
-    const handleAdd = useCallback((product) => {
-        const qty = Number(quantity);
-        if (isNaN(qty) || qty <= 0) {
-            showNotification('Wprowadź poprawną ilość.', 'error');
-            return;
-        }
-        onProductAdd(product, qty);
-        setSuggestions([]);
-        setQuery('');
-        setQuantity(1);
-        setIsQuantityInputFresh(true);
-        inputRef.current?.focus();
-    }, [quantity, onProductAdd, showNotification]);
-
-    const handleKeyDown = useCallback(async (e) => {
-        if (e.key === 'Enter' && query.trim() !== '') {
-            e.preventDefault();
-            const exactMatch = suggestions.find(s => s.barcodes.includes(query.trim()) || s.product_code === query.trim());
-            if (exactMatch) {
-                handleAdd(exactMatch);
-                return;
-            }
-            if (suggestions.length === 0) {
-                try {
-                    const results = await api.searchProducts(query.trim());
-                    if (results.length === 1) {
-                        handleAdd(results[0]);
-                    } else if (results.length > 1) {
-                        setSuggestions(results);
-                    } else {
-                        showNotification('Nie znaleziono produktu.', 'error');
-                    }
-                } catch (error) {}
-            }
-        }
-    }, [query, suggestions, handleAdd]);
-
-    const handleQueryChange = (e) => { setQuery(e.target.value); };
 
     useEffect(() => {
-        const trimmedQuery = query.trim();
-        const isEanLike = /^\d{8,13}$/.test(trimmedQuery);
-
-        if (isEanLike) {
-            const handleScan = async () => {
-                setIsLoading(true);
-                setSuggestions([]);
-                try {
-                    const results = await api.searchProducts(trimmedQuery);
-                    if (results.length > 0) {
-                        handleAdd(results[0]);
-                    } else {
-                        showNotification(`Produkt o kodzie ${trimmedQuery} nie został znaleziony.`, 'error');
-                        setQuery('');
-                    }
-                } catch (error) { showNotification(error.message, 'error'); }
-                finally { setIsLoading(false); }
-            };
-            handleScan();
-            return;
-        }
-
-        if (trimmedQuery.length < 2) {
+        if (query.length < 2) {
             setSuggestions([]);
             return;
         }
         const handler = setTimeout(async () => {
             setIsLoading(true);
             try {
-                const results = await api.searchProducts(trimmedQuery);
+                const results = await api.searchProducts(query);
                 setSuggestions(results);
-            } catch (error) { showNotification(error.message, 'error'); }
-            finally { setIsLoading(false); }
+            } catch (error) {
+                showNotification(error.message, 'error');
+            } finally {
+                setIsLoading(false);
+            }
         }, 300);
         return () => clearTimeout(handler);
-    }, [query, showNotification, handleAdd]);
+    }, [query, showNotification]);
 
-    const handleManualAddClick = () => { handleKeyDown({ key: 'Enter', preventDefault: () => {} }); };
-
-    const handleKeyboardInput = (char) => {
-        if (activeInput === 'query') {
-            setQuery(prev => prev + char);
-        } else if (activeInput === 'quantity') {
-            if (isQuantityInputFresh) {
-                setQuantity(char);
-                setIsQuantityInputFresh(false);
-            } else {
-                setQuantity(prev => String(prev) + char);
-            }
+    const handleAdd = (product, isScan = false) => {
+        const qty = Number(quantity);
+        if (isNaN(qty) || qty <= 0) {
+            showNotification('Wprowadź poprawną ilość.', 'error');
+            return;
         }
+        onProductAdd(product, qty, isScan);
+        setSuggestions([]);
+        setQuery('');
+        setQuantity(1);
+        inputRef.current?.focus();
     };
-
-    const handleKeyboardBackspace = (clearAll = false) => {
-        if (activeInput === 'query') {
-            setQuery(prev => clearAll ? '' : prev.slice(0, -1));
-        } else if (activeInput === 'quantity') {
-            if (clearAll || String(quantity).length === 1) {
-                setQuantity(1);
-                setIsQuantityInputFresh(true);
-            } else {
-                setQuantity(prev => String(prev).slice(0, -1));
-            }
-        }
-    };
-
-    const handleKeyboardEnter = () => {
-        setIsKeyboardVisible(false);
-        handleKeyDown({ key: 'Enter', preventDefault: () => {} });
-    };
-
-    const handleInputClick = (e, inputName) => {
-        e.preventDefault();
-        const target = e.currentTarget;
-        const now = Date.now();
-
-        if (inputName === 'quantity') {
-            setIsQuantityInputFresh(true);
-            target.select();
-        }
-
-        if (inputName === 'query' && lastClickedInput.current === 'query' && (now - lastClickTime.current < 400)) {
-            setIsKeyboardVisible(false);
-            target.removeAttribute('inputmode');
-            target.focus();
-            target.select();
+    
+	 const handleQueryChange = (e) => {
+        const value = e.target.value;
+        if (value.length > 13) {
+            alert("Kod EAN nie może przekraczać 13 znaków.");
+            setQuery('');
         } else {
-            setIsKeyboardVisible(true);
-            setActiveInput(inputName);
-            target.setAttribute('inputmode', 'none');
+            setQuery(value);
         }
-        lastClickTime.current = now;
-        lastClickedInput.current = inputName;
+    };
+	
+    const handleKeyDown = async (e) => {
+        if (e.key === 'Enter' && query.trim() !== '') {
+            e.preventDefault();
+            
+            const exactMatch = suggestions.find(s => s.barcodes.includes(query.trim()) || s.product_code === query.trim());
+            if (exactMatch) {
+                handleAdd(exactMatch, true);
+                return;
+            }
+
+            if (suggestions.length === 0) {
+                try {
+                    const results = await api.searchProducts(query.trim());
+                    if (results.length === 1) {
+                        handleAdd(results[0], true);
+                        return;
+                    } else if (results.length > 1) {
+                        setSuggestions(results);
+                        return;
+                    }
+                } catch (error) {
+                    // Ignoruj błąd
+                }
+            }
+
+            const customItem = {
+                _id: `custom-${Date.now()}`,
+                name: `EAN: ${query}`,
+                product_code: 'SPOZA LISTY',
+                barcodes: [query],
+                price: 0,
+                isCustom: true,
+            };
+            handleAdd(customItem, true);
+        }
     };
 
     return (
-        <>
-            <div className={`fixed bottom-0 left-0 lg:left-64 right-0 bg-white dark:bg-gray-800 border-t dark:border-gray-700 shadow-top z-30 p-4 transition-all duration-300 ${isKeyboardVisible ? 'pb-56' : ''}`}>
-                <div className="max-w-4xl mx-auto relative">
-                    {suggestions.length > 0 && (
-                        <ul className="absolute bottom-full mb-2 w-full bg-white dark:bg-gray-700 border rounded-lg shadow-xl max-h-60 overflow-y-auto z-40">
-                            {suggestions.map(p => (
-                                <li key={p._id} onClick={() => handleAdd(p)} className="p-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 border-b last:border-b-0">
-                                    <p className="font-semibold">{p.name}</p>
-                                    <p className="text-sm text-gray-500">{p.product_code}</p>
-                                </li>
-                            ))}
-                        </ul>
-                    )}
-                    <div className="flex items-center gap-2 sm:gap-4">
-                        <input
-                            ref={inputRef}
-                            type="text"
-                            value={query}
-                            onChange={handleQueryChange}
-                            onKeyDown={handleKeyDown}
-                            onClick={(e) => handleInputClick(e, 'query')}
-                            placeholder="Wyszukaj lub zeskanuj produkt..."
-                            className="w-full p-3 bg-gray-100 dark:bg-gray-700 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                            inputMode="none"
-                        />
-                        <input
-                            type="number"
-                            value={quantity}
-                            onFocus={(e) => { e.target.select(); setIsQuantityInputFresh(true); }}
-                            onChange={(e) => setQuantity(e.target.value)}
-                            onKeyDown={handleKeyDown}
-                            onClick={(e) => handleInputClick(e, 'quantity')}
-                            className="w-20 sm:w-24 p-3 text-center bg-gray-100 dark:bg-gray-700 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                            inputMode="none"
-                        />
-                        <button onClick={handleManualAddClick} className="flex items-center justify-center px-3 sm:px-5 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
-                            <PlusCircle className="w-5 h-5"/>
-                            <span className="hidden sm:inline ml-2">Dodaj</span>
-                        </button>
-                    </div>
+        <div className="fixed bottom-0 left-0 lg:left-64 right-0 bg-white dark:bg-gray-800 border-t dark:border-gray-700 shadow-top z-20 p-4">
+            <div className="max-w-4xl mx-auto relative">
+                {suggestions.length > 0 && (
+                    <ul className="absolute bottom-full mb-2 w-full bg-white dark:bg-gray-700 border rounded-lg shadow-xl max-h-60 overflow-y-auto z-30">
+                        {suggestions.map(p => (
+                            <li key={p._id} onClick={() => handleAdd(p, false)} className="p-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 border-b last:border-b-0">
+                                <p className="font-semibold">{p.name}</p>
+                                <p className="text-sm text-gray-500">{p.product_code}</p>
+                            </li>
+                        ))}
+                    </ul>
+                )}
+                <div className="flex items-center gap-2 sm:gap-4">
+                    <input
+                        ref={inputRef}
+                        type="text"
+                        value={query}
+                        onChange={handleQueryChange}
+                        onKeyDown={handleKeyDown}
+                        placeholder="Wyszukaj lub zeskanuj produkt..."
+                        className="w-full p-3 bg-gray-100 dark:bg-gray-700 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                    <input
+                        type="number"
+                        inputMode="numeric"
+                        value={quantity}
+                        onFocus={(e) => e.target.select()}
+                        onChange={(e) => setQuantity(e.target.value)}
+                        onKeyDown={handleKeyDown}
+                        className="w-20 sm:w-24 p-3 text-center bg-gray-100 dark:bg-gray-700 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                     <button onClick={() => handleKeyDown({ key: 'Enter', preventDefault: () => {} })} className="flex items-center justify-center px-3 sm:px-5 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors">
+                        <PlusCircle className="w-5 h-5"/>
+                        <span className="hidden sm:inline ml-2">Dodaj</span>
+                    </button>
                 </div>
             </div>
-            {isKeyboardVisible && (
-                <VirtualKeyboard
-                    onInput={handleKeyboardInput}
-                    onBackspace={handleKeyboardBackspace}
-                    onEnter={handleKeyboardEnter}
-                    onClose={() => setIsKeyboardVisible(false)}
-                />
-            )}
-        </>
+        </div>
     );
 };
 
@@ -1001,7 +894,6 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
     const listEndRef = useRef(null);
     const printRef = useRef(null);
     const importFileRef = useRef(null);
-    const isInitialMount = useRef(true);
     const { showNotification } = useNotification();
     const { items: sortedItems, requestSort, sortConfig } = useSortableData(order.items || []);
 
@@ -1012,7 +904,7 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
         return sortConfig.direction === 'ascending' ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />;
     };
     
-    useEffect(() => {
+    useEffect(() => { 
         setOrder(currentOrder);
         setDirty(currentOrder.isDirty || false);
     }, [currentOrder, setDirty]);
@@ -1027,15 +919,18 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
         setDirty(isDirtyFlag);
     };
 
-    const addProductToOrder = (product, quantity) => {
+    const addProductToOrder = (product, quantity, isScan = false) => {
         const newItems = [...(order.items || [])];
         const existingItemIndex = newItems.findIndex(item => item._id === product._id && !item.isCustom);
-        if (existingItemIndex > -1) {
-            newItems[existingItemIndex].quantity += quantity;
-        } else {
-            newItems.push({ ...product, quantity: quantity, note: '' });
+        if (existingItemIndex > -1) { 
+            newItems[existingItemIndex].quantity = Number(newItems[existingItemIndex].quantity) + Number(quantity);
+        } else { 
+            newItems.push({ ...product, quantity: Number(quantity), note: '' });
         }
         updateOrder({ items: newItems });
+        if (isScan) {
+             handleSaveOrder(true);
+        }
     };
 
     const updateQuantity = (itemIndex, newQuantityStr) => {
@@ -1084,51 +979,22 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
 
     const totalValue = useMemo(() => (order.items || []).reduce((sum, item) => sum + item.price * (item.quantity || 0), 0), [order.items]);
 
-    const saveOrderLogic = useCallback(async (orderToSave, isAutoSave = false) => {
-        if (!orderToSave.customerName && !isAutoSave) {
-            showNotification('Proszę podać nazwę klienta.', 'error');
-            return;
+    const handleSaveOrder = async (isAutoSave = false) => {
+        if (!order.customerName) { 
+            if (!isAutoSave) showNotification('Proszę podać nazwę klienta.', 'error'); 
+            return; 
         }
-        if (!orderToSave.customerName && isAutoSave) {
-            return;
-        }
-
         try {
-            const payload = { ...orderToSave, author: user.username };
-            const { message, order: savedOrder } = await api.saveOrder(payload);
-
-            const finalOrder = { ...savedOrder, isDirty: false };
-            setOrder(finalOrder);
-            setCurrentOrder(finalOrder);
-            setDirty(false);
+            const orderToSave = { ...order, author: user.username };
+            const { message, order: savedOrder } = await api.saveOrder(orderToSave);
+            if (!isAutoSave) showNotification(message, 'success');
             localStorage.removeItem('draftOrder');
-
-            if (!isAutoSave) {
-                showNotification(message || 'Zamówienie zapisane!', 'success');
-            }
-        } catch (error) {
-            showNotification(error.message, 'error');
+            setCurrentOrder(savedOrder);
+            setDirty(false);
+        } catch (error) { 
+            if (!isAutoSave) showNotification(error.message, 'error'); 
         }
-    }, [user.username, setCurrentOrder, setDirty, showNotification]);
-
-    const handleSaveOrder = () => {
-        saveOrderLogic(order, false);
     };
-
-    useEffect(() => {
-        if (isInitialMount.current) {
-            isInitialMount.current = false;
-            return;
-        }
-
-        if (order.isDirty) {
-            const handler = setTimeout(() => {
-                saveOrderLogic(order, true);
-            }, 1500);
-
-            return () => clearTimeout(handler);
-        }
-    }, [order, saveOrderLogic]);
     
     const handleFileImport = async (event) => {
         const file = event.target.files[0];
@@ -1226,7 +1092,10 @@ const handlePrint = () => {
                 <div className="flex flex-wrap gap-2 justify-between items-center mb-4">
                     <h1 className="text-2xl md:text-3xl font-bold text-gray-800 dark:text-white">{order._id ? `Edycja Zamówienia` : 'Nowe Zamówienie'}</h1>
                     <div className="flex gap-2">
-                       {/* --- NOWY PRZYCISK --- */}
+                        <button onClick={() => handleSaveOrder()} className="flex items-center justify-center px-3 sm:px-5 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-blue-400" disabled={!order.isDirty}>
+                            <Save className="w-5 h-5"/>
+                            <span className="hidden sm:inline ml-2">{order.isDirty ? 'Zapisz' : 'Zapisano'}</span>
+                        </button>
                        <button onClick={onNewOrder} className="flex items-center justify-center p-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors">
                             <PlusCircle className="w-5 h-5"/> <span className="hidden sm:inline ml-2">Nowe</span>
                         </button>
@@ -1239,10 +1108,6 @@ const handlePrint = () => {
                         <input type="file" ref={importFileRef} onChange={handleFileImport} className="hidden" accept=".csv" />
                         <button onClick={() => importFileRef.current.click()} className="flex items-center justify-center p-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors">
                             <FileUp className="w-5 h-5"/> <span className="hidden sm:inline ml-2">Importuj</span>
-                        </button>
-                        <button onClick={handleSaveOrder} className="flex items-center justify-center px-3 sm:px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-blue-400" disabled={!order.isDirty}>
-                            <Save className="w-5 h-5"/>
-                            <span className="hidden sm:inline ml-2">{order.isDirty ? 'Zapisz' : 'Zapisano'}</span>
                         </button>
                     </div>
                 </div>
@@ -1290,7 +1155,7 @@ const handlePrint = () => {
                                         <td className="hidden md:table-cell p-2">{item.product_code}</td>
                                         <td className="p-2 text-right">{item.price.toFixed(2)}</td>
                                         <td className="p-2 text-center">
-                                            <input type="number" value={item.quantity || ''} onChange={(e) => updateQuantity(index, e.target.value)} onFocus={(e) => e.target.select()} className="w-16 text-center bg-transparent border rounded-md p-1 focus:ring-2 focus:ring-indigo-500 outline-none"/>
+                                            <input type="number" inputMode="numeric" value={item.quantity || ''} onChange={(e) => updateQuantity(index, e.target.value)} onFocus={(e) => e.target.select()} className="w-16 text-center bg-transparent border rounded-md p-1 focus:ring-2 focus:ring-indigo-500 outline-none"/>
                                         </td>
                                         <td className="p-2 text-right font-semibold">{(item.price * (item.quantity || 0)).toFixed(2)}</td>
                                         <td className="p-2 text-center whitespace-nowrap">
@@ -4197,7 +4062,7 @@ const Sidebar = ({ user, onLogout, onOpenPasswordModal, onNewOrder, isNavOpen, s
             localStorage.setItem('theme', 'light');
         }
     };
-
+    
     const toggleCategory = (category) => {
         setExpandedCategories(prev =>
             prev.includes(category) ? prev.filter(c => c !== category) : [...prev, category]
@@ -4261,7 +4126,7 @@ const getInitialOrder = () => {
         const savedOrder = localStorage.getItem('draftOrder');
         if (savedOrder) {
             const parsed = JSON.parse(savedOrder);
-            if (!parsed._id) {
+            if (!parsed._id) { 
                 return { ...parsed, isDirty: true };
             }
         }
