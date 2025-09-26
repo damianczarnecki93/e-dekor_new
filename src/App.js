@@ -877,7 +877,7 @@ const PinnedInputBar = ({ onProductAdd, onSave, isDirty }) => {
                     <input
                         type="number"
                         value={quantity}
-                        onFocus={(e) => e.target.select()}
+                        onFocus={(e) => setTimeout(() => e.target.select(), 0)}
                         onChange={(e) => setQuantity(e.target.value)}
                         onKeyDown={handleKeyDown}
                         className="w-20 sm:w-24 p-3 text-center bg-gray-100 dark:bg-gray-700 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -1150,7 +1150,7 @@ const handlePrint = () => {
                                         <td className="hidden md:table-cell p-2">{item.product_code}</td>
                                         <td className="p-2 text-right">{item.price.toFixed(2)}</td>
                                         <td className="p-2 text-center">
-                                            <input type="number" value={item.quantity || ''} onChange={(e) => updateQuantity(index, e.target.value)} onFocus={(e) => e.target.select()} className="w-16 text-center bg-transparent border rounded-md p-1 focus:ring-2 focus:ring-indigo-500 outline-none"/>
+                                            <input type="number" value={item.quantity || ''} onChange={(e) => updateQuantity(index, e.target.value)} onFocus={(e) => setTimeout(() => e.target.select(), 0)} className="w-16 text-center bg-transparent border rounded-md p-1 focus:ring-2 focus:ring-indigo-500 outline-none"/>
                                         </td>
                                         <td className="p-2 text-right font-semibold">{(item.price * (item.quantity || 0)).toFixed(2)}</td>
                                         <td className="p-2 text-center whitespace-nowrap">
