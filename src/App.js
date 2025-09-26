@@ -823,15 +823,12 @@ const PinnedInputBar = ({ onProductAdd, onSave, isDirty }) => {
                 setIsLoading(true);
                 try {
                     const results = await api.searchProducts(trimmedQuery);
-                    if (results.length === 1) {
-                        // If exactly one result, add it automatically.
+                    if (results.length >= 1) {
+                        // If one or more results, add the first one automatically.
                         handleAdd(results[0], true);
                     } else {
-                        // For 0 or multiple results, show suggestions for user to resolve.
-                        setSuggestions(results);
-                        if (results.length === 0) {
-                            showNotification(`Nie znaleziono produktu dla kodu: ${trimmedQuery}`, 'error');
-                        }
+                        // For 0 results, show notification.
+                        showNotification(`Nie znaleziono produktu dla kodu: ${trimmedQuery}`, 'error');
                     }
                 } catch (error) {
                     showNotification(error.message, 'error');
