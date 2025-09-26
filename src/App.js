@@ -980,19 +980,32 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
     const totalValue = useMemo(() => (order.items || []).reduce((sum, item) => sum + item.price * (item.quantity || 0), 0), [order.items]);
 
     const handleSaveOrder = async (isAutoSave = false) => {
-        if (!order.customerName) { 
-            if (!isAutoSave) showNotification('Proszę podać nazwę klienta.', 'error'); 
-            return; 
+        let orderToSave = { ...order };
+
+        if (isAutoSave && !orderToSave.customerName) {
+            orderToSave.customerName = `Robocze ${format(new Date(), 'dd.MM.yyyy HH:mm')}`;
         }
+
+        if (!orderToSave.customerName) {
+            if (!isAutoSave) showNotification('Proszę podać nazwę klienta.', 'error');
+            return;
+        }
+
         try {
-            const orderToSave = { ...order, author: user.username };
-            const { message, order: savedOrder } = await api.saveOrder(orderToSave);
-            if (!isAutoSave) showNotification(message, 'success');
-            localStorage.removeItem('draftOrder');
+            const finalOrderPayload = { ...orderToSave, author: user.username };
+            const { message, order: savedOrder } = await api.saveOrder(finalOrderPayload);
+
+            if (!isAutoSave) {
+                showNotification(message, 'success');
+            }
+
             setCurrentOrder(savedOrder);
             setDirty(false);
-        } catch (error) { 
-            if (!isAutoSave) showNotification(error.message, 'error'); 
+            localStorage.removeItem('draftOrder');
+        } catch (error) {
+            if (!isAutoSave) {
+                showNotification(error.message, 'error');
+            }
         }
     };
     
