@@ -818,36 +818,48 @@ const PinnedInputBar = ({ onProductAdd, onSave, isDirty }) => {
             e.preventDefault();
             const trimmedQuery = query.trim();
 
-            const exactMatch = suggestions.find(s => s.barcodes.includes(trimmedQuery) || s.product_code === trimmedQuery);
-            if (exactMatch) {
-                handleAdd(exactMatch, isQueryScan);
-                return;
-            }
-
-            if (suggestions.length === 0) {
+            // Special handling for barcode scans
+            if (isQueryScan) {
+                setIsLoading(true);
                 try {
                     const results = await api.searchProducts(trimmedQuery);
                     if (results.length === 1) {
-                        handleAdd(results[0], isQueryScan);
-                        return;
-                    } else if (results.length > 1) {
+                        // If exactly one result, add it automatically.
+                        handleAdd(results[0], true);
+                    } else {
+                        // For 0 or multiple results, show suggestions for user to resolve.
                         setSuggestions(results);
-                        return;
+                        if (results.length === 0) {
+                            showNotification(`Nie znaleziono produktu dla kodu: ${trimmedQuery}`, 'error');
+                        }
                     }
                 } catch (error) {
-                    // Ignoruj błąd
+                    showNotification(error.message, 'error');
+                } finally {
+                    setIsLoading(false);
                 }
+                return;
             }
 
-            const customItem = {
-                _id: `custom-${Date.now()}`,
-                name: `EAN: ${trimmedQuery}`,
-                product_code: 'SPOZA LISTY',
-                barcodes: [trimmedQuery],
-                price: 0,
-                isCustom: true,
-            };
-            handleAdd(customItem, isQueryScan);
+            // Standard handling for manual search
+            // If suggestions are already visible, do nothing on enter, let the user click.
+            if (suggestions.length > 0) {
+                return;
+            }
+
+            // If no suggestions, fetch them.
+            setIsLoading(true);
+            try {
+                const results = await api.searchProducts(trimmedQuery);
+                setSuggestions(results);
+                if (results.length === 0) {
+                    showNotification(`Nie znaleziono produktów dla: "${trimmedQuery}"`, 'error');
+                }
+            } catch (error) {
+                showNotification(error.message, 'error');
+            } finally {
+                setIsLoading(false);
+            }
         }
     };
 
