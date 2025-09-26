@@ -764,6 +764,7 @@ const PinnedInputBar = ({ onProductAdd, onSave, isDirty }) => {
     const [quantity, setQuantity] = useState(1);
     const [suggestions, setSuggestions] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
+    const [isQueryScan, setIsQueryScan] = useState(false);
     const { showNotification } = useNotification();
     const inputRef = useRef(null);
 
@@ -786,8 +787,8 @@ const PinnedInputBar = ({ onProductAdd, onSave, isDirty }) => {
         return () => clearTimeout(handler);
     }, [query, showNotification]);
 
-    const handleAdd = (product) => {
-        const qty = Number(quantity);
+    const handleAdd = (product, isScan = false) => {
+        const qty = isScan ? 1 : Number(quantity);
         if (isNaN(qty) || qty <= 0) {
             showNotification('Wprowadź poprawną ilość.', 'error');
             return;
@@ -796,6 +797,7 @@ const PinnedInputBar = ({ onProductAdd, onSave, isDirty }) => {
         setSuggestions([]);
         setQuery('');
         setQuantity(1);
+        setIsQueryScan(false);
         inputRef.current?.focus();
     };
     
@@ -804,26 +806,29 @@ const PinnedInputBar = ({ onProductAdd, onSave, isDirty }) => {
         if (value.length > 13) {
             alert("Kod EAN nie może przekraczać 13 znaków.");
             setQuery('');
+            setIsQueryScan(false);
         } else {
             setQuery(value);
+            setIsQueryScan(/^\d{8,13}$/.test(value.trim()));
         }
     };
 	
     const handleKeyDown = async (e) => {
         if (e.key === 'Enter' && query.trim() !== '') {
             e.preventDefault();
-            
-            const exactMatch = suggestions.find(s => s.barcodes.includes(query.trim()) || s.product_code === query.trim());
+            const trimmedQuery = query.trim();
+
+            const exactMatch = suggestions.find(s => s.barcodes.includes(trimmedQuery) || s.product_code === trimmedQuery);
             if (exactMatch) {
-                handleAdd(exactMatch);
+                handleAdd(exactMatch, isQueryScan);
                 return;
             }
 
             if (suggestions.length === 0) {
                 try {
-                    const results = await api.searchProducts(query.trim());
+                    const results = await api.searchProducts(trimmedQuery);
                     if (results.length === 1) {
-                        handleAdd(results[0]);
+                        handleAdd(results[0], isQueryScan);
                         return;
                     } else if (results.length > 1) {
                         setSuggestions(results);
@@ -836,13 +841,13 @@ const PinnedInputBar = ({ onProductAdd, onSave, isDirty }) => {
 
             const customItem = {
                 _id: `custom-${Date.now()}`,
-                name: `EAN: ${query}`,
+                name: `EAN: ${trimmedQuery}`,
                 product_code: 'SPOZA LISTY',
-                barcodes: [query],
+                barcodes: [trimmedQuery],
                 price: 0,
                 isCustom: true,
             };
-            handleAdd(customItem);
+            handleAdd(customItem, isQueryScan);
         }
     };
 
@@ -852,7 +857,7 @@ const PinnedInputBar = ({ onProductAdd, onSave, isDirty }) => {
                 {suggestions.length > 0 && (
                     <ul className="absolute bottom-full mb-2 w-full bg-white dark:bg-gray-700 border rounded-lg shadow-xl max-h-60 overflow-y-auto z-30">
                         {suggestions.map(p => (
-                            <li key={p._id} onClick={() => handleAdd(p)} className="p-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 border-b last:border-b-0">
+                            <li key={p._id} onClick={() => handleAdd(p, isQueryScan)} className="p-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 border-b last:border-b-0">
                                 <p className="font-semibold">{p.name}</p>
                                 <p className="text-sm text-gray-500">{p.product_code}</p>
                             </li>
