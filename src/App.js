@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, createContext, useContext, useMemo, useRef } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, Link, useLocation, useParams } from 'react-router-dom';
-import { Search, List, Wrench, Sun, Moon, LogOut, FileDown, FileText, Printer, Save, CheckCircle, AlertTriangle, Upload, Trash2, XCircle, UserPlus, KeyRound, PlusCircle, MessageSquare, Archive, Edit, Home, Menu, Filter, RotateCcw, FileUp, GitMerge, Eye, Trophy, Crown, BarChart2, Users, Package, StickyNote, Settings, ChevronsUpDown, ChevronUp, ChevronDown, ClipboardList, Plane, ListChecks, Mail, Zap, ClipboardCheck, } from 'lucide-react';
+import { Search, List, Wrench, Sun, Moon, LogOut, FileDown, FileText, Printer, Save, CheckCircle, AlertTriangle, Upload, Trash2, XCircle, UserPlus, KeyRound, PlusCircle, MessageSquare, Archive, Edit, Home, Menu, Filter, RotateCcw, FileUp, GitMerge, Eye, Trophy, Crown, BarChart2, Users, Package, StickyNote, Settings, ChevronsUpDown, ChevronUp, ChevronDown, ClipboardList, Plane, ListChecks, Mail, Zap, ClipboardCheck } from 'lucide-react';
 import { format, parseISO, eachDayOfInterval, isValid } from 'date-fns';
 import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 import { pl } from 'date-fns/locale';
@@ -76,7 +76,9 @@ const fetchWithAuth = async (url, options = {}) => {
     const response = await fetch(`${API_BASE_URL}${url}`, { ...options, headers });
 
     if (response.status === 401) {
-        window.dispatchEvent(new Event('auth-error'));
+        localStorage.removeItem('userToken');
+        localStorage.removeItem('userData');
+        window.dispatchEvent(new Event('auth-error')); // Custom event for auth errors
         throw new Error('Sesja wygasła. Proszę zalogować się ponownie.');
     }
     return response;
@@ -112,17 +114,7 @@ const api = {
         if (!response.ok) throw new Error(data.message || 'Błąd importu pliku');
         return data;
     },
-    archiveOrder: async (orderId) => {
-    const response = await fetchWithAuth(`/api/orders/${orderId}/archive`, { method: 'POST' });
-    if (!response.ok) throw new Error('Błąd archiwizacji zamówienia');
-    return await response.json();
-},
-unarchiveOrder: async (orderId) => {
-    const response = await fetchWithAuth(`/api/orders/${orderId}/unarchive`, { method: 'POST' });
-    if (!response.ok) throw new Error('Błąd przywracania zamówienia');
-    return await response.json();
-},
-	importMultipleOrdersFromCsv: async (files) => {
+    importMultipleOrdersFromCsv: async (files) => {
         const formData = new FormData();
         files.forEach(file => formData.append('orderFiles', file));
         const response = await fetchWithAuth(`/api/orders/import-multiple-csv`, { method: 'POST', body: formData });
@@ -452,6 +444,23 @@ unarchiveOrder: async (orderId) => {
 	},
 };
 
+// --- Komponenty Pomocnicze i UI ---
+const Tooltip = ({ children, text }) => ( <div className="relative flex items-center group">{children}<div className="absolute bottom-full mb-2 w-max px-2 py-1 bg-gray-800 text-white text-xs rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none">{text}</div></div>);
+const Modal = ({ isOpen, onClose, title, children, maxWidth = 'md' }) => {
+    if (!isOpen) return null;
+    const maxWidthClass = { sm: 'max-w-sm', md: 'max-w-md', lg: 'max-w-lg', xl: 'max-w-xl', '2xl': 'max-w-2xl', '4xl': 'max-w-4xl' }[maxWidth];
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex justify-center items-center p-2 sm:p-4 animate-fade-in">
+            <div className={`bg-white dark:bg-gray-800 rounded-lg shadow-2xl w-full m-4 ${maxWidthClass} flex flex-col max-h-[90vh]`}>
+                <div className="flex-shrink-0 flex justify-between items-center p-4 border-b border-gray-200 dark:border-gray-700">
+                    <h3 className="text-xl font-semibold text-gray-900 dark:text-white">{title}</h3>
+                    <button onClick={onClose} className="text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg text-sm p-1.5"><XCircle className="w-6 h-6"/></button>
+                </div>
+                <div className="p-6 overflow-y-auto">{children}</div>
+            </div>
+        </div>
+    );
+};
 // --- Hook do sortowania ---
 const useSortableData = (items, config = null) => {
     const [sortConfig, setSortConfig] = useState(config);
@@ -485,23 +494,6 @@ const useSortableData = (items, config = null) => {
 
 
 // --- Komponenty Widoków ---
-
-const Tooltip = ({ children, text }) => ( <div className="relative flex items-center group">{children}<div className="absolute bottom-full mb-2 w-max px-2 py-1 bg-gray-800 text-white text-xs rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none">{text}</div></div>);
-const Modal = ({ isOpen, onClose, title, children, maxWidth = 'md' }) => {
-    if (!isOpen) return null;
-    const maxWidthClass = { sm: 'max-w-sm', md: 'max-w-md', lg: 'max-w-lg', xl: 'max-w-xl', '2xl': 'max-w-2xl', '4xl': 'max-w-4xl' }[maxWidth];
-    return (
-        <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex justify-center items-center p-2 sm:p-4 animate-fade-in">
-            <div className={`bg-white dark:bg-gray-800 rounded-lg shadow-2xl w-full m-4 ${maxWidthClass} flex flex-col max-h-[90vh]`}>
-                <div className="flex-shrink-0 flex justify-between items-center p-4 border-b border-gray-200 dark:border-gray-700">
-                    <h3 className="text-xl font-semibold text-gray-900 dark:text-white">{title}</h3>
-                    <button onClick={onClose} className="text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg text-sm p-1.5"><XCircle className="w-6 h-6"/></button>
-                </div>
-                <div className="p-6 overflow-y-auto">{children}</div>
-            </div>
-        </div>
-    );
-};
 
 const UserChangePasswordModal = ({ isOpen, onClose }) => {
     const [currentPassword, setCurrentPassword] = useState('');
@@ -764,12 +756,53 @@ const PinnedInputBar = ({ onProductAdd, onSave, isDirty }) => {
     const [quantity, setQuantity] = useState(1);
     const [suggestions, setSuggestions] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
-    const [isQueryScan, setIsQueryScan] = useState(false);
     const { showNotification } = useNotification();
     const inputRef = useRef(null);
 
+    const processEan = useCallback(async (ean) => {
+        setIsLoading(true);
+        try {
+            const results = await api.searchProducts(ean);
+            if (results.length > 0) {
+                const matchedProduct = results.find(p => p.barcodes.includes(ean));
+                onProductAdd(matchedProduct || results[0], 1);
+            } else {
+                const customItem = {
+                    _id: `custom-${ean}`, name: `EAN: ${ean}`, product_code: 'SPOZA LISTY',
+                    barcodes: [ean], price: 0, isCustom: true,
+                };
+                onProductAdd(customItem, 1);
+            }
+        } catch (error) {
+            showNotification(error.message, 'error');
+        } finally {
+            setQuery('');
+            setSuggestions([]);
+            setIsLoading(false);
+        }
+    }, [onProductAdd, showNotification]);
+
+    // Effect to handle automatic adding for EAN codes (for scanners without "Enter")
     useEffect(() => {
-        if (query.length < 2) {
+        const ean = query.trim();
+        // More flexible regex for EAN-8, UPC-A (12), and EAN-13
+        if (/^(\d{8}|\d{12,13})$/.test(ean)) {
+            const handler = setTimeout(() => processEan(ean), 100); // Delay to prevent partial scans
+            return () => clearTimeout(handler);
+        }
+    }, [query, processEan]);
+
+    // Effect to re-focus the input after an item is added
+    useEffect(() => {
+        if (!isLoading) {
+            inputRef.current?.focus();
+        }
+    }, [isLoading]);
+
+    // Effect for showing suggestions for manual TEXT search
+    useEffect(() => {
+        const isNumeric = /^\d+$/.test(query.trim());
+        if (query.length < 2 || isNumeric) {
             setSuggestions([]);
             return;
         }
@@ -787,73 +820,44 @@ const PinnedInputBar = ({ onProductAdd, onSave, isDirty }) => {
         return () => clearTimeout(handler);
     }, [query, showNotification]);
 
-    const handleAdd = (product, isScan = false) => {
-        const qty = isScan ? 1 : Number(quantity);
-        if (isNaN(qty) || qty <= 0) {
-            showNotification('Wprowadź poprawną ilość.', 'error');
-            return;
-        }
-        onProductAdd(product, qty);
+    const handleAddFromSuggestion = (product) => {
+        const qty = Number(quantity);
+        onProductAdd(product, qty > 0 ? qty : 1);
         setSuggestions([]);
         setQuery('');
         setQuantity(1);
-        setIsQueryScan(false);
-        inputRef.current?.focus();
     };
     
-	 const handleQueryChange = (e) => {
-        const value = e.target.value;
-        if (value.length > 13) {
-            alert("Kod EAN nie może przekraczać 13 znaków.");
-            setQuery('');
-            setIsQueryScan(false);
-        } else {
-            setQuery(value);
-            setIsQueryScan(/^\d{8,13}$/.test(value.trim()));
-        }
+    const handleQueryChange = (e) => {
+        setQuery(e.target.value);
     };
 	
     const handleKeyDown = async (e) => {
         if (e.key === 'Enter' && query.trim() !== '') {
             e.preventDefault();
-            const trimmedQuery = query.trim();
-
-            // Special handling for barcode scans
-            if (isQueryScan) {
-                setIsLoading(true);
-                try {
-                    const results = await api.searchProducts(trimmedQuery);
-                    if (results.length >= 1) {
-                        // If one or more results, add the first one automatically.
-                        handleAdd(results[0], true);
-                    } else {
-                        // For 0 results, show notification.
-                        showNotification(`Nie znaleziono produktu dla kodu: ${trimmedQuery}`, 'error');
-                    }
-                } catch (error) {
-                    showNotification(error.message, 'error');
-                } finally {
-                    setIsLoading(false);
-                }
+            const searchTerm = query.trim();
+            
+            // Handle EAN codes entered with Enter key
+            if (/^(\d{8}|\d{12,13})$/.test(searchTerm)) {
+                processEan(searchTerm);
                 return;
             }
 
-            // Standard handling for manual search
-            // If suggestions are already visible, do nothing on enter, let the user click.
+            // Handle text search from suggestions or direct query
             if (suggestions.length > 0) {
+                handleAddFromSuggestion(suggestions[0]);
                 return;
             }
-
-            // If no suggestions, fetch them.
             setIsLoading(true);
             try {
-                const results = await api.searchProducts(trimmedQuery);
-                setSuggestions(results);
-                if (results.length === 0) {
-                    showNotification(`Nie znaleziono produktów dla: "${trimmedQuery}"`, 'error');
+                const results = await api.searchProducts(searchTerm);
+                if (results.length > 0) {
+                    handleAddFromSuggestion(results[0]);
+                } else {
+                    showNotification('Nie znaleziono produktu.', 'error');
                 }
             } catch (error) {
-                showNotification(error.message, 'error');
+                 showNotification(error.message, 'error');
             } finally {
                 setIsLoading(false);
             }
@@ -866,7 +870,7 @@ const PinnedInputBar = ({ onProductAdd, onSave, isDirty }) => {
                 {suggestions.length > 0 && (
                     <ul className="absolute bottom-full mb-2 w-full bg-white dark:bg-gray-700 border rounded-lg shadow-xl max-h-60 overflow-y-auto z-30">
                         {suggestions.map(p => (
-                            <li key={p._id} onClick={() => handleAdd(p, isQueryScan)} className="p-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 border-b last:border-b-0">
+                            <li key={p._id} onClick={() => handleAddFromSuggestion(p)} className="p-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 border-b last:border-b-0">
                                 <p className="font-semibold">{p.name}</p>
                                 <p className="text-sm text-gray-500">{p.product_code}</p>
                             </li>
@@ -880,13 +884,13 @@ const PinnedInputBar = ({ onProductAdd, onSave, isDirty }) => {
                         value={query}
                         onChange={handleQueryChange}
                         onKeyDown={handleKeyDown}
-                        placeholder="Wyszukaj lub zeskanuj produkt..."
+                        placeholder="Zeskanuj EAN lub wyszukaj produkt..."
                         className="w-full p-3 bg-gray-100 dark:bg-gray-700 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     />
                     <input
                         type="number"
                         value={quantity}
-                        onFocus={(e) => setTimeout(() => e.target.select(), 0)}
+                        onFocus={(e) => e.target.select()}
                         onChange={(e) => setQuantity(e.target.value)}
                         onKeyDown={handleKeyDown}
                         className="w-20 sm:w-24 p-3 text-center bg-gray-100 dark:bg-gray-700 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -903,7 +907,7 @@ const PinnedInputBar = ({ onProductAdd, onSave, isDirty }) => {
     );
 };
 
-const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }) => {
+const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty }) => {
     const [order, setOrder] = useState(currentOrder);
     const [noteModal, setNoteModal] = useState({ isOpen: false, itemIndex: null, text: '' });
     const listEndRef = useRef(null);
@@ -919,10 +923,19 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
         return sortConfig.direction === 'ascending' ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />;
     };
     
-    useEffect(() => { 
+    useEffect(() => {
         setOrder(currentOrder);
-        setDirty(currentOrder.isDirty || false);
-    }, [currentOrder, setDirty]);
+    }, [currentOrder]);
+
+    useEffect(() => {
+        if (!order._id) {
+            try {
+                localStorage.setItem('draftOrder', JSON.stringify(order));
+            } catch (error) {
+                console.error("Błąd zapisu roboczego zamówienia do localStorage:", error);
+            }
+        }
+    }, [order]);
     
     const scrollToBottom = () => listEndRef.current?.scrollIntoView({ behavior: "smooth" });
     useEffect(scrollToBottom, [order.items]);
@@ -936,11 +949,19 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
 
     const addProductToOrder = (product, quantity) => {
         const newItems = [...(order.items || [])];
-        const existingItemIndex = newItems.findIndex(item => item._id === product._id && !item.isCustom);
-        if (existingItemIndex > -1) { 
-            newItems[existingItemIndex].quantity += quantity;
-        } else { 
-            newItems.push({ ...product, quantity: quantity, note: '' });
+        const uniqueIdentifier = product.isCustom ? `custom-${product.barcodes[0]}` : product._id;
+
+        const existingItemIndex = newItems.findIndex(item => {
+            const itemIdentifier = item.isCustom ? `custom-${item.barcodes[0]}` : item._id;
+            return itemIdentifier === uniqueIdentifier;
+        });
+
+        const isScanOrQuickAdd = !quantity || quantity <= 1;
+
+        if (existingItemIndex > -1) {
+            newItems[existingItemIndex].quantity += isScanOrQuickAdd ? 1 : quantity;
+        } else {
+            newItems.push({ ...product, quantity: isScanOrQuickAdd ? 1 : quantity, note: '' });
         }
         updateOrder({ items: newItems });
     };
@@ -992,7 +1013,10 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
     const totalValue = useMemo(() => (order.items || []).reduce((sum, item) => sum + item.price * (item.quantity || 0), 0), [order.items]);
 
     const handleSaveOrder = async () => {
-        if (!order.customerName) { showNotification('Proszę podać nazwę klienta.', 'error'); return; }
+        if (!order.customerName) { 
+            showNotification('Proszę podać nazwę klienta.', 'error'); 
+            return; 
+        }
         try {
             const orderToSave = { ...order, author: user.username };
             const { message, order: savedOrder } = await api.saveOrder(orderToSave);
@@ -1000,8 +1024,11 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
             localStorage.removeItem('draftOrder');
             setCurrentOrder(savedOrder);
             setDirty(false);
-        } catch (error) { showNotification(error.message, 'error'); }
+        } catch (error) { 
+            showNotification(error.message, 'error'); 
+        }
     };
+
     
     const handleFileImport = async (event) => {
         const file = event.target.files[0];
@@ -1078,6 +1105,7 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
 
     doc.save(`Zamowienie-${order.customerName.replace(/\s/g, '_') || 'nowe'}.pdf`);
 };
+
 const handlePrint = () => {
     const content = printRef.current;
     if (content) {
@@ -1099,10 +1127,6 @@ const handlePrint = () => {
                 <div className="flex flex-wrap gap-2 justify-between items-center mb-4">
                     <h1 className="text-2xl md:text-3xl font-bold text-gray-800 dark:text-white">{order._id ? `Edycja Zamówienia` : 'Nowe Zamówienie'}</h1>
                     <div className="flex gap-2">
-                       {/* --- NOWY PRZYCISK --- */}
-                       <button onClick={onNewOrder} className="flex items-center justify-center p-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors">
-                            <PlusCircle className="w-5 h-5"/> <span className="hidden sm:inline ml-2">Nowe</span>
-                        </button>
                        <button onClick={handleExportCsv} className="flex items-center justify-center p-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
                             <FileText className="w-5 h-5"/> <span className="hidden sm:inline ml-2">CSV</span>
                         </button>
@@ -1159,7 +1183,7 @@ const handlePrint = () => {
                                         <td className="hidden md:table-cell p-2">{item.product_code}</td>
                                         <td className="p-2 text-right">{item.price.toFixed(2)}</td>
                                         <td className="p-2 text-center">
-                                            <input type="number" value={item.quantity || ''} onChange={(e) => updateQuantity(index, e.target.value)} onFocus={(e) => setTimeout(() => e.target.select(), 0)} className="w-16 text-center bg-transparent border rounded-md p-1 focus:ring-2 focus:ring-indigo-500 outline-none"/>
+                                            <input type="number" value={item.quantity || ''} onChange={(e) => updateQuantity(index, e.target.value)} onFocus={(e) => e.target.select()} className="w-16 text-center bg-transparent border rounded-md p-1 focus:ring-2 focus:ring-indigo-500 outline-none"/>
                                         </td>
                                         <td className="p-2 text-right font-semibold">{(item.price * (item.quantity || 0)).toFixed(2)}</td>
                                         <td className="p-2 text-center whitespace-nowrap">
@@ -1195,7 +1219,7 @@ const OrdersListView = ({ onEdit }) => {
     const [isLoading, setIsLoading] = useState(true);
     const [modalState, setModalState] = useState({ isOpen: false, orderId: null, type: '' });
     const { showNotification } = useNotification();
-    const [filters, setFilters] = useState({ customer: '', author: '', dateFrom: '', dateTo: '', showArchived: false });
+    const [filters, setFilters] = useState({ customer: '', author: '', dateFrom: '', dateTo: '' });
     const [showFilters, setShowFilters] = useState(false);
     const importMultipleRef = useRef(null);
 
@@ -1215,20 +1239,20 @@ const OrdersListView = ({ onEdit }) => {
         fetchOrders();
     }, [fetchOrders]);
 
-    const handleArchiveToggle = async (orderId, isArchived) => {
-        try {
-            if (isArchived) {
-                await api.unarchiveOrder(orderId);
-                showNotification('Zamówienie przywrócone!', 'success');
-            } else {
-                await api.archiveOrder(orderId);
-                showNotification('Zamówienie zarchiwizowane!', 'success');
+    const groupedOrders = useMemo(() => {
+        const groups = {
+            'Braki': [],
+            'Zapisane': [],
+            'Skompletowane': [],
+            'Zakończono': [],
+        };
+        orders.forEach(order => {
+            if (groups[order.status]) {
+                groups[order.status].push(order);
             }
-            fetchOrders();
-        } catch (error) {
-            showNotification(error.message, 'error');
-        }
-    };
+        });
+        return groups;
+    }, [orders]);
     
     const handleDelete = async () => {
         try {
@@ -1240,12 +1264,12 @@ const OrdersListView = ({ onEdit }) => {
     };
     
     const handleFilterChange = (e) => {
-        const { name, value, type, checked } = e.target;
-        setFilters(prev => ({...prev, [name]: type === 'checkbox' ? checked : value}));
+        const { name, value } = e.target;
+        setFilters(prev => ({...prev, [name]: value}));
     };
     
     const resetFilters = () => {
-        setFilters({ customer: '', author: '', dateFrom: '', dateTo: '', showArchived: false });
+        setFilters({ customer: '', author: '', dateFrom: '', dateTo: '' });
     };
 
     const handleMultipleFileImport = async (event) => {
@@ -1261,111 +1285,73 @@ const OrdersListView = ({ onEdit }) => {
         event.target.value = null;
     };
     
-    const groupedOrders = useMemo(() => {
-        const groups = {
-            'Braki': [],
-            'Zapisane': [],
-            'Skompletowane': [],
-            'Zakończono': [],
-            'Archiwum': []
-        };
-        orders.forEach(order => {
-            if (order.isArchived) {
-                groups['Archiwum'].push(order);
-            } else if (groups[order.status]) {
-                groups[order.status].push(order);
-            }
-        });
-        return groups;
-    }, [orders]);
-
-    const renderOrderTable = (orderList, isArchivedView = false) => (
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-x-auto">
-            <table className="w-full text-left text-sm">
-                <thead className="bg-gray-50 dark:bg-gray-700">
-                    <tr>
-                        <th className="p-3">Klient</th>
-                        <th className="p-3 hidden md:table-cell">Autor</th>
-                        <th className="p-3 hidden sm:table-cell">Data</th>
-                        <th className="p-3 text-right">Wartość</th>
-                        <th className="p-3 text-center">Akcje</th>
-                    </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                    {orderList.map(order => (
-                        <tr key={order._id}>
-                            <td className="p-3 font-medium">{order.customerName}</td>
-                            <td className="p-3 hidden md:table-cell">{order.author}</td>
-                            <td className="p-3 hidden sm:table-cell">{new Date(order.date).toLocaleDateString()}</td>
-                            <td className="p-3 text-right font-semibold">{(order.total || 0).toFixed(2)}</td>
-                            <td className="p-3 text-center whitespace-nowrap">
-                                {!isArchivedView && (
-                                    <Tooltip text="Edytuj/Pokaż"><button onClick={() => onEdit(order._id)} className="p-2 text-blue-500 hover:text-blue-700"><Edit className="w-5 h-5"/></button></Tooltip>
-                                )}
-                                <Tooltip text={isArchivedView ? "Przywróć" : "Archiwizuj"}>
-                                    <button onClick={() => handleArchiveToggle(order._id, order.isArchived)} className={`p-2 ${isArchivedView ? 'text-green-500 hover:text-green-700' : 'text-gray-500 hover:text-gray-700'}`}>
-                                        {isArchivedView ? <RotateCcw className="w-5 h-5"/> : <Archive className="w-5 h-5"/>}
-                                    </button>
-                                </Tooltip>
-                                <Tooltip text="Usuń"><button onClick={() => setModalState({ isOpen: true, orderId: order._id, type: 'delete' })} className="p-2 text-red-500 hover:text-red-700"><Trash2 className="w-5 h-5"/></button></Tooltip>
-                            </td>
-                        </tr>
-                    ))}
-                </tbody>
-            </table>
-        </div>
-    );
-
     return (
-        <div className="p-4 md:p-8">
-            <div className="flex flex-wrap gap-2 justify-between items-center mb-4">
-                <h1 className="text-2xl md:text-3xl font-bold text-gray-800 dark:text-white">Zamówienia</h1>
-                <div className="flex items-center gap-2 flex-wrap">
-                    <input type="file" ref={importMultipleRef} onChange={handleMultipleFileImport} className="hidden" accept=".csv" multiple />
-                    <button onClick={() => importMultipleRef.current.click()} className="flex items-center p-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600"><FileUp className="w-5 h-5"/><span className="hidden sm:inline ml-2">Importuj</span></button>
-                    <button onClick={() => setShowFilters(!showFilters)} className="flex items-center p-2 bg-gray-200 dark:bg-gray-700 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600"><Filter className="w-5 h-5"/><span className="hidden sm:inline ml-2">Filtry</span></button>
-                </div>
-            </div>
-            {showFilters && (
-                <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg mb-6 shadow-sm animate-fade-in">
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-center">
-                        <input type="text" name="customer" value={filters.customer} onChange={handleFilterChange} placeholder="Klient" className="p-2 border rounded-md bg-white dark:bg-gray-700"/>
-                        <input type="text" name="author" value={filters.author} onChange={handleFilterChange} placeholder="Autor" className="p-2 border rounded-md bg-white dark:bg-gray-700"/>
-                        <input type="date" name="dateFrom" value={filters.dateFrom} onChange={handleFilterChange} className="p-2 border rounded-md bg-white dark:bg-gray-700"/>
-                        <input type="date" name="dateTo" value={filters.dateTo} onChange={handleFilterChange} className="p-2 border rounded-md bg-white dark:bg-gray-700"/>
-                        <label className="flex items-center gap-2"><input type="checkbox" name="showArchived" checked={filters.showArchived} onChange={handleFilterChange} /> Pokaż zarchiwizowane</label>
-                        <button onClick={resetFilters} className="px-4 py-2 bg-gray-300 dark:bg-gray-600 rounded-lg text-sm">Wyczyść</button>
+        <>
+            <div className="p-4 md:p-8">
+                <div className="flex flex-wrap gap-2 justify-between items-center mb-4">
+                    <h1 className="text-2xl md:text-3xl font-bold text-gray-800 dark:text-white">Wszystkie Zamówienia</h1>
+                    <div className="flex items-center gap-2 flex-wrap">
+                        <input type="file" ref={importMultipleRef} onChange={handleMultipleFileImport} className="hidden" accept=".csv" multiple />
+                        <button onClick={() => importMultipleRef.current.click()} className="flex items-center p-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600"><FileUp className="w-5 h-5"/><span className="hidden sm:inline ml-2">Importuj</span></button>
+                        <button onClick={() => setShowFilters(!showFilters)} className="flex items-center p-2 bg-gray-200 dark:bg-gray-700 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600"><Filter className="w-5 h-5"/><span className="hidden sm:inline ml-2">Filtry</span></button>
                     </div>
                 </div>
-            )}
-            <div className="space-y-6">
-                {filters.showArchived ? (
-                    groupedOrders['Archiwum'].length > 0 && (
-                        <div>
-                            <h2 className="text-xl font-bold mb-3 text-gray-700 dark:text-gray-300">Archiwum ({groupedOrders['Archiwum'].length})</h2>
-                            {renderOrderTable(groupedOrders['Archiwum'], true)}
+                {showFilters && (
+                    <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg mb-6 shadow-sm animate-fade-in">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                            <input type="text" name="customer" value={filters.customer} onChange={handleFilterChange} placeholder="Klient" className="p-2 border rounded-md bg-white dark:bg-gray-700"/>
+                            <input type="text" name="author" value={filters.author} onChange={handleFilterChange} placeholder="Autor" className="p-2 border rounded-md bg-white dark:bg-gray-700"/>
+                            <input type="date" name="dateFrom" value={filters.dateFrom} onChange={handleFilterChange} className="p-2 border rounded-md bg-white dark:bg-gray-700"/>
+                            <input type="date" name="dateTo" value={filters.dateTo} onChange={handleFilterChange} className="p-2 border rounded-md bg-white dark:bg-gray-700"/>
                         </div>
-                    )
-                ) : (
-                    Object.entries(groupedOrders).map(([status, orderList]) => (
-                        status !== 'Archiwum' && orderList.length > 0 && (
+                        <div className="flex justify-end gap-2 mt-4"><button onClick={resetFilters} className="px-4 py-2 bg-gray-300 dark:bg-gray-600 rounded-lg text-sm">Wyczyść filtry</button></div>
+                    </div>
+                )}
+                <div className="space-y-6">
+                    {Object.entries(groupedOrders).map(([status, orderList]) => (
+                        orderList.length > 0 && (
                             <div key={status}>
                                 <h2 className="text-xl font-bold mb-3 text-gray-700 dark:text-gray-300">{status} ({orderList.length})</h2>
-                                {renderOrderTable(orderList)}
+                                <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-x-auto">
+                                    <table className="w-full text-left text-sm">
+                                        <thead className="bg-gray-50 dark:bg-gray-700">
+                                            <tr>
+                                                <th className="p-3">Klient</th>
+                                                <th className="p-3 hidden md:table-cell">Autor</th>
+                                                <th className="p-3 hidden sm:table-cell">Data</th>
+                                                <th className="p-3 text-right">Wartość</th>
+                                                <th className="p-3 text-center">Akcje</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                                            {orderList.map(order => (
+                                                <tr key={order._id}>
+                                                    <td className="p-3 font-medium">{order.customerName}</td>
+                                                    <td className="p-3 hidden md:table-cell">{order.author}</td>
+                                                    <td className="p-3 hidden sm:table-cell">{new Date(order.date).toLocaleDateString()}</td>
+                                                    <td className="p-3 text-right font-semibold">{(order.total || 0).toFixed(2)}</td>
+                                                    <td className="p-3 text-center whitespace-nowrap">
+                                                        <Tooltip text="Edytuj/Pokaż"><button onClick={() => onEdit(order._id)} className="p-2 text-blue-500 hover:text-blue-700"><Edit className="w-5 h-5"/></button></Tooltip>
+                                                        <Tooltip text="Usuń"><button onClick={() => setModalState({ isOpen: true, orderId: order._id, type: 'delete' })} className="p-2 text-red-500 hover:text-red-700"><Trash2 className="w-5 h-5"/></button></Tooltip>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
                             </div>
                         )
-                    ))
-                )}
+                    ))}
+                </div>
+                 {orders.length === 0 && !isLoading && <p className="text-center text-gray-500 mt-8">Brak zamówień do wyświetlenia.</p>}
             </div>
-            {orders.length === 0 && !isLoading && <p className="text-center text-gray-500 mt-8">Brak zamówień do wyświetlenia dla wybranych filtrów.</p>}
             <Modal isOpen={modalState.isOpen} onClose={() => setModalState({ isOpen: false })} title="Potwierdź usunięcie">
                 <p>Czy na pewno chcesz usunąć to zamówienie? Tej operacji nie można cofnąć.</p>
                 <div className="flex justify-end gap-4 mt-6"><button onClick={() => setModalState({ isOpen: false })} className="px-4 py-2 bg-gray-200 dark:bg-gray-600 rounded-lg">Anuluj</button><button onClick={handleDelete} className="px-4 py-2 bg-red-600 text-white rounded-lg">Usuń</button></div>
             </Modal>
-        </div>
+        </>
     );
 };
-
 
 const PickingView = () => {
     const [orders, setOrders] = useState([]);
@@ -4049,44 +4035,61 @@ const DelegationDetails = ({ delegation, onUpdate, onNavigate, setCurrentOrder, 
 };
 
 
-// --- Komponent Nawigacji (Sidebar) ---
-const Sidebar = ({ user, onLogout, onOpenPasswordModal, onNewOrder, isNavOpen, setIsNavOpen }) => {
-    const [isDarkMode, setIsDarkMode] = useState(document.documentElement.classList.contains('dark'));
-    const [expandedCategories, setExpandedCategories] = useState(['Główne']);
-    const location = useLocation();
-
-    const toggleTheme = () => {
-        const newIsDarkMode = !isDarkMode;
-        setIsDarkMode(newIsDarkMode);
-        if (newIsDarkMode) {
-            document.documentElement.classList.add('dark');
-            localStorage.setItem('theme', 'dark');
-        } else {
-            document.documentElement.classList.remove('dark');
-            localStorage.setItem('theme', 'light');
-        }
-    };
-    
-    const toggleCategory = (category) => {
-        setExpandedCategories(prev =>
-            prev.includes(category) ? prev.filter(c => c !== category) : [...prev, category]
-        );
-    };
-
+// --- Główny Komponent Aplikacji ---
     const navConfig = useMemo(() => [
-        { category: 'Główne', items: [ { id: 'dashboard', label: 'Panel Główny', icon: Home, roles: ['user', 'administrator'], alwaysVisible: true }, { id: 'search', label: 'Wyszukiwarka', icon: Search, roles: ['user', 'administrator'] }, ] },
-        { category: 'Sprzedaż', items: [ { id: 'order', label: 'Nowe Zamówienie', icon: PlusCircle, roles: ['user', 'administrator'], action: onNewOrder }, { id: 'orders', label: 'Zamówienia', icon: Archive, roles: ['user', 'administrator'] }, ] },
-        { category: 'Magazyn', items: [ { id: 'picking', label: 'Kompletacja', icon: List, roles: ['user', 'administrator'] }, { id: 'inventory', label: 'Inwentaryzacja', icon: Wrench, roles: ['user', 'administrator'] }, ] },
-        { category: 'Organizacyjne', items: [ { id: 'kanban', label: 'Tablica Zadań', icon: ClipboardList, roles: ['user', 'administrator'] }, { id: 'delegations', label: 'Delegacje', icon: Plane, roles: ['user', 'administrator'] }, { id: 'crm', label: 'Kontakty', icon: Users, roles: ['user', 'administrator'] }, ] },
-		{ category: 'Raporty', items: [ { id: 'shortage-report', label: 'Raport Braków', icon: ClipboardCheck, roles: ['user', 'administrator'] }, ] },
-        { category: 'Administracja', items: [ { id: 'admin', label: 'Panel Admina', icon: Settings, roles: ['administrator'] }, ] }
-    ], [onNewOrder]);
+        {
+            category: 'Główne',
+            items: [
+                { id: 'dashboard', label: 'Panel Główny', icon: Home, roles: ['user', 'administrator'], alwaysVisible: true },
+                { id: 'search', label: 'Wyszukiwarka', icon: Search, roles: ['user', 'administrator'] },
+            ]
+        },
+        {
+            category: 'Sprzedaż',
+            items: [
+                { id: 'order', label: 'Nowe Zamówienie', icon: PlusCircle, roles: ['user', 'administrator'] },
+                { id: 'orders', label: 'Zamówienia', icon: Archive, roles: ['user', 'administrator'] },
+            ]
+        },
+        {
+            category: 'Magazyn',
+            items: [
+                { id: 'picking', label: 'Kompletacja', icon: List, roles: ['user', 'administrator'] },
+                { id: 'inventory', label: 'Inwentaryzacja', icon: Wrench, roles: ['user', 'administrator'] },
+            ]
+        },
+        {
+            category: 'Organizacyjne',
+            items: [
+                { id: 'kanban', label: 'Tablica Zadań', icon: ClipboardList, roles: ['user', 'administrator'] },
+                { id: 'delegations', label: 'Delegacje', icon: Plane, roles: ['user', 'administrator'] },
+				{ id: 'crm', label: 'Kontakty', icon: Users, roles: ['user', 'administrator'] },
+            ]
+        },
+		{
+            category: 'Raporty',
+            items: [
+                 { id: 'shortage-report', label: 'Raport Braków', icon: ClipboardCheck, roles: ['user', 'administrator'] },
+            ]
+        },
+        {
+            category: 'Administracja',
+            items: [
+                 { id: 'admin', label: 'Panel Admina', icon: Settings, roles: ['administrator'] },
+            ]
+        }
+    ], []);
 
-    const availableNav = useMemo(() => {
-        if (!user) return [];
-        return navConfig.map(category => ({ ...category, items: category.items.filter(item => user.role === 'administrator' || item.roles.includes(user.role) && (item.alwaysVisible || user.visibleModules?.includes(item.id)))})).filter(category => category.items.length > 0);
-    }, [user, navConfig]);
-
+const availableNav = useMemo(() => {
+    if (!user) return [];
+    return navConfig
+        .map(category => ({
+            ...category,
+            items: category.items.filter(item => user.role === 'administrator' || item.roles.includes(user.role) && (item.alwaysVisible || user.visibleModules?.includes(item.id)))
+        }))
+        .filter(category => category.items.length > 0);
+}, [user, navConfig]);
+	
     return (
         <nav className={`w-64 bg-white dark:bg-gray-800 shadow-lg flex flex-col flex-shrink-0 transition-transform duration-300 ease-in-out z-40 fixed lg:static h-full ${isNavOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}>
              <div className="flex items-center justify-center h-20 border-b border-gray-200 dark:border-gray-700">
@@ -4101,7 +4104,7 @@ const Sidebar = ({ user, onLogout, onOpenPasswordModal, onNewOrder, isNavOpen, s
                         </h3>
                         {expandedCategories.includes(category.category) && category.items.map(item => (
                             <li key={item.id}>
-                                <Link to={`/${item.id}`} onClick={() => { if(item.action) item.action(); setIsNavOpen(false); }} className={`w-full flex items-center justify-start h-12 px-6 text-base transition-colors duration-200 text-left ${location.pathname.startsWith(`/${item.id}`) ? 'bg-indigo-50 dark:bg-gray-700 text-indigo-600 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'}`}>
+                                <Link to={`/${item.id}`} onClick={() => setIsNavOpen(false)} className={`w-full flex items-center justify-start h-12 px-6 text-base transition-colors duration-200 text-left ${location.pathname.startsWith(`/${item.id}`) ? 'bg-indigo-50 dark:bg-gray-700 text-indigo-600 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'}`}>
                                     <item.icon className="h-5 w-5" />
                                     <span className="ml-4">{item.label}</span>
                                 </Link>
@@ -4123,38 +4126,18 @@ const Sidebar = ({ user, onLogout, onOpenPasswordModal, onNewOrder, isNavOpen, s
         </nav>
     );
 };
+}
+
 
 // --- Główny Komponent Aplikacji ---
-const getInitialOrder = () => {
-    try {
-        const savedOrder = localStorage.getItem('draftOrder');
-        if (savedOrder) {
-            const parsed = JSON.parse(savedOrder);
-            if (!parsed._id) { 
-                return { ...parsed, isDirty: true };
-            }
-        }
-    } catch (error) {
-        console.error("Błąd odczytu roboczego zamówienia z localStorage:", error);
-        localStorage.removeItem('draftOrder');
-    }
-    return { customerName: '', items: [], isDirty: false };
-};
-
 function App() {
     const [user, setUser] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
-    const [currentOrder, setCurrentOrder] = useState(getInitialOrder);
+    const [currentOrder, setCurrentOrder] = useState(() => getInitialOrder());
     const [isDirty, setIsDirty] = useState(false);
     const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
-    const [isNavOpen, setIsNavOpen] = useState(false); // Stan dla mobilnego menu
     const navigate = useNavigate();
     const location = useLocation();
-
-    const updateUserData = (newUserData) => {
-        setUser(newUserData);
-        localStorage.setItem('userData', JSON.stringify(newUserData));
-    };
 
     const handleLogin = useCallback((data) => {
         localStorage.setItem('userToken', data.token);
@@ -4163,7 +4146,7 @@ function App() {
         navigate('/dashboard');
     }, [navigate]);
 
-    const handleLogout = useCallback(async () => {
+    const handleLogout = useCallback(() => {
         localStorage.removeItem('userToken');
         localStorage.removeItem('userData');
         localStorage.removeItem('draftOrder');
@@ -4171,8 +4154,16 @@ function App() {
         navigate('/login');
     }, [navigate]);
 
+    useEffect(() => {
+        const handleAuthError = () => {
+            handleLogout();
+        };
+        window.addEventListener('auth-error', handleAuthError);
+        return () => window.removeEventListener('auth-error', handleAuthError);
+    }, [handleLogout]);
+
     const handleNewOrder = () => {
-        if (isDirty) {
+        if (isDirty && location.pathname.startsWith('/order')) {
             if (!window.confirm("Masz niezapisane zmiany. Czy na pewno chcesz utworzyć nowe zamówienie? Zmiany zostaną utracone.")) {
                 return;
             }
@@ -4184,26 +4175,13 @@ function App() {
         navigate('/order');
     };
 
-    useEffect(() => {
-        const handleAuthError = () => {
-            console.log("Wykryto błąd autoryzacji, wylogowywanie...");
-            handleLogout();
-        };
-
-        window.addEventListener('auth-error', handleAuthError);
-
-        return () => {
-            window.removeEventListener('auth-error', handleAuthError);
-        };
-    }, [handleLogout]);
-
     const loadOrderForEditing = async (orderId) => {
         try {
             const order = await api.getOrderById(orderId);
             setCurrentOrder(order);
             navigate('/order');
         } catch (error) {
-            console.error("Błąd ładowania zamówienia", error);
+            showNotification(error.message, 'error');
         }
     };
     
@@ -4222,51 +4200,105 @@ function App() {
     return (
         <>
             <div className="flex h-screen bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-sans">
-                {user && <Sidebar user={user} onLogout={handleLogout} onOpenPasswordModal={() => setIsPasswordModalOpen(true)} onNewOrder={handleNewOrder} isNavOpen={isNavOpen} setIsNavOpen={setIsNavOpen} />}
+                {user && <Sidebar user={user} onLogout={handleLogout} onOpenPasswordModal={() => setIsPasswordModalOpen(true)} onNewOrder={handleNewOrder} />}
                 <main className="flex-1 flex flex-col overflow-y-auto">
-                    {user && (
-                        <div className="lg:hidden p-2 bg-white dark:bg-gray-800 border-b dark:border-gray-700 flex justify-between items-center sticky top-0 z-30">
-                            <button onClick={() => setIsNavOpen(!isNavOpen)} className="p-2 rounded-md"><Menu className="w-6 h-6" /></button>
-                            <span className="font-semibold">{/* Można dodać tytuł widoku */}</span>
-                        </div>
-                    )}
-                    <div className="flex-1 overflow-y-auto">
-                        <Routes>
-                            {!user ? (
-                                <>
-                                    <Route path="/login" element={<AuthPage onLogin={handleLogin} />} />
-                                    <Route path="*" element={<Navigate to="/login" replace />} />
-                                </>
-                            ) : (
-                                <>
-                                    <Route path="/dashboard" element={<DashboardView user={user} onNavigate={navigate} onUpdateUser={updateUserData} />} />
-                                    <Route path="/search" element={<MainSearchView />} />
-                                    <Route path="/order" element={<OrderView currentOrder={currentOrder} setCurrentOrder={setCurrentOrder} user={user} setDirty={setIsDirty} onNewOrder={handleNewOrder} />} />
-                                    <Route path="/orders" element={<OrdersListView onEdit={loadOrderForEditing} />} />
-                                    <Route path="/picking" element={<PickingView />} />
-                                    <Route path="/inventory" element={<InventoryView user={user} onNavigate={navigate} isDirty={isDirty} setIsDirty={setIsDirty} />} />
-                                    <Route path="/inventory-sheet" element={<NewInventorySheet user={user} onSave={() => navigate('/inventory')} setDirty={setIsDirty} />} />
-                                    <Route path="/inventory-sheet/:inventoryId" element={<NewInventorySheet user={user} onSave={() => navigate('/inventory')} setDirty={setIsDirty} />} />
-                                    <Route path="/kanban" element={<KanbanView user={user} />} />
-                                    <Route path="/delegations" element={<DelegationsView user={user} onNavigate={navigate} setCurrentOrder={setCurrentOrder} />} />
-									<Route path="/crm" element={<CrmView user={user} />} />
-                                    <Route path="/admin" element={<AdminView user={user} onNavigate={navigate} />} />
-                                    <Route path="/admin-users" element={<AdminUsersView user={user} />} />
-                                    <Route path="/admin-products" element={<AdminProductsView />} />
-                                    <Route path="/shortage-report" element={<ShortageReportView />} />
-                                    <Route path="/admin-email" element={<AdminEmailConfigView />} />
-                                    <Route path="/" element={<Navigate to="/dashboard" replace />} />
-                                    <Route path="*" element={<Navigate to="/dashboard" replace />} />
-                                </>
-                            )}
-                        </Routes>
-                    </div>
+                    <Routes>
+                        {!user ? (
+                            <>
+                                <Route path="/login" element={<AuthPage onLogin={handleLogin} />} />
+                                <Route path="*" element={<Navigate to="/login" replace />} />
+                            </>
+                        ) : (
+                            <>
+                                <Route path="/dashboard" element={<DashboardView user={user} onNavigate={navigate} />} />
+                                <Route path="/search" element={<MainSearchView />} />
+                                <Route path="/order" element={<OrderView currentOrder={currentOrder} setCurrentOrder={setCurrentOrder} user={user} setDirty={setIsDirty} />} />
+                                <Route path="/orders" element={<OrdersListView onEdit={loadOrderForEditing} />} />
+                                <Route path="/picking" element={<PickingView />} />
+                                {/* Add other routes here */}
+                                <Route path="*" element={<Navigate to="/dashboard" replace />} />
+                            </>
+                        )}
+                    </Routes>
                 </main>
             </div>
             <UserChangePasswordModal isOpen={isPasswordModalOpen} onClose={() => setIsPasswordModalOpen(false)} />
         </>
     );
 }
+
+const getInitialOrder = () => {
+    try {
+        const savedOrder = localStorage.getItem('draftOrder');
+        if (savedOrder) {
+            const parsed = JSON.parse(savedOrder);
+            if (!parsed._id) { 
+                return { ...parsed, isDirty: true };
+            }
+        }
+    } catch (error) {
+        console.error("Błąd odczytu roboczego zamówienia z localStorage:", error);
+        localStorage.removeItem('draftOrder');
+    }
+    return { customerName: '', items: [], isDirty: false };
+};
+
+const Sidebar = ({ user, onLogout, onOpenPasswordModal, onNewOrder }) => {
+    const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('theme') === 'dark');
+    const [isNavOpen, setIsNavOpen] = useState(false);
+    const location = useLocation();
+
+    useEffect(() => {
+        if (isDarkMode) {
+            document.documentElement.classList.add('dark');
+        } else {
+            document.documentElement.classList.remove('dark');
+        }
+    }, [isDarkMode]);
+
+    const toggleTheme = () => {
+        localStorage.setItem('theme', !isDarkMode ? 'dark' : 'light');
+        setIsDarkMode(!isDarkMode);
+    };
+
+    const navItems = useMemo(() => [
+        { id: 'dashboard', label: 'Panel Główny', icon: Home, roles: ['user', 'administrator'] },
+        { id: 'search', label: 'Wyszukiwarka', icon: Search, roles: ['user', 'administrator'] },
+        { id: 'order', label: 'Nowe Zamówienie', icon: PlusCircle, roles: ['user', 'administrator'], action: onNewOrder },
+        { id: 'orders', label: 'Zamówienia', icon: Archive, roles: ['user', 'administrator'] },
+        { id: 'picking', label: 'Kompletacja', icon: List, roles: ['user', 'administrator'] },
+        { id: 'inventory', label: 'Inwentaryzacja', icon: Wrench, roles: ['user', 'administrator'] },
+        { id: 'admin', label: 'Panel Admina', icon: Settings, roles: ['administrator'] },
+    ].filter(item => item.roles.includes(user.role)), [user.role, onNewOrder]);
+	
+    return (
+        <nav className={`w-64 bg-white dark:bg-gray-800 shadow-lg flex flex-col flex-shrink-0 transition-transform duration-300 ease-in-out z-40 fixed lg:static h-full ${isNavOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}>
+             <div className="flex items-center justify-center h-20 border-b border-gray-200 dark:border-gray-700">
+                <img src={isDarkMode ? "/logo-dark.png" : "/logo.png"} onError={(e) => { e.currentTarget.style.display = 'none'; }} alt="Logo" className="h-10" />
+            </div>
+            <ul className="flex-grow overflow-y-auto">
+                {navItems.map(item => (
+                    <li key={item.id}>
+                        <Link to={`/${item.id}`} onClick={(e) => { if(item.action) { e.preventDefault(); item.action(); } setIsNavOpen(false); }} className={`w-full flex items-center justify-start h-12 px-6 text-base transition-colors duration-200 text-left ${location.pathname.startsWith(`/${item.id}`) ? 'bg-indigo-50 dark:bg-gray-700 text-indigo-600 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'}`}>
+                            <item.icon className="h-5 w-5" />
+                            <span className="ml-4">{item.label}</span>
+                        </Link>
+                    </li>
+                ))}
+            </ul>
+            <div className="p-4 border-t border-gray-200 dark:border-gray-700">
+                <div className="flex items-center justify-between mb-4">
+                    <div><p className="font-semibold">{user.username}</p><p className="text-sm text-gray-500">{user.role}</p></div>
+                    <div className="flex items-center">
+                        <Tooltip text="Zmień hasło"><button onClick={() => { onOpenPasswordModal(); setIsNavOpen(false); }} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600"><KeyRound className="h-6 w-6 text-gray-500" /></button></Tooltip>
+                        <Tooltip text="Wyloguj"><button onClick={onLogout} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600"><LogOut className="h-6 w-6 text-gray-500" /></button></Tooltip>
+                    </div>
+                </div>
+                <Tooltip text="Zmień motyw"><button onClick={toggleTheme} className="w-full flex justify-center p-2 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600">{isDarkMode ? <Sun className="h-6 w-6 text-yellow-400" /> : <Moon className="h-6 w-6 text-indigo-500" />}</button></Tooltip>
+            </div>
+        </nav>
+    );
+};
 
 export default function AppWrapper() {
     return (
@@ -4279,3 +4311,5 @@ export default function AppWrapper() {
         </ErrorBoundary>
     );
 }
+
+
