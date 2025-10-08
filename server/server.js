@@ -190,17 +190,10 @@ async function sendNotificationEmail(subject, htmlContent) {
             return { success: false, error: 'Brak konfiguracji email.' };
         }
 
-        // --- POCZĄTEK POPRAWKI ---
-        // Automatycznie ustawiamy 'secure' na podstawie portu.
-        // Tylko port 465 używa bezpiecznego połączenia od samego początku.
-        const isSecurePort = parseInt(config.port, 10) === 465;
-        // --- KONIEC POPRAWKI ---
-
         let transporter = nodemailer.createTransport({
             host: config.host,
             port: config.port,
-            // Używamy naszej nowej zmiennej zamiast wartości z bazy danych
-            secure: isSecurePort,
+            secure: config.secure, // Używamy wartości 'secure' bezpośrednio z konfiguracji
             auth: {
                 user: config.user,
                 pass: config.pass,
