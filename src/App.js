@@ -759,6 +759,49 @@ const MainSearchView = () => {
     );
 };
 
+const CustomProductForm = ({ ean, onSubmit, onSkip }) => {
+    const [name, setName] = useState('');
+    const [price, setPrice] = useState('0');
+
+    const handleSubmit = (e) => {
+        e.preventDefault();
+        const finalName = name.trim() === '' ? 'produkt spoza listy' : name;
+        const finalPrice = parseFloat(price) || 0;
+        onSubmit({ name: finalName, price: finalPrice });
+    };
+
+    return (
+        <form onSubmit={handleSubmit} className="space-y-4">
+            <p>Nie znaleziono produktu o kodzie EAN: <strong>{ean}</strong>. Możesz dodać go ręcznie.</p>
+            <div>
+                <label className="block mb-2 text-sm font-medium">Nazwa produktu (opcjonalnie)</label>
+                <input
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="w-full p-3 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg"
+                    placeholder="produkt spoza listy"
+                />
+            </div>
+            <div>
+                <label className="block mb-2 text-sm font-medium">Cena (opcjonalnie)</label>
+                <input
+                    type="number"
+                    value={price}
+                    onChange={(e) => setPrice(e.target.value)}
+                    className="w-full p-3 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg"
+                    placeholder="0.00"
+                    step="0.01"
+                />
+            </div>
+            <div className="flex justify-end gap-4 pt-4">
+                <button type="button" onClick={onSkip} className="px-4 py-2 bg-gray-200 dark:bg-gray-600 rounded-lg">Pomiń</button>
+                <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg">Zapisz</button>
+            </div>
+        </form>
+    );
+};
+
 const PinnedInputBar = ({ onProductAdd, onSave, isDirty }) => {
     const [query, setQuery] = useState('');
     const [quantity, setQuantity] = useState(1);
@@ -766,6 +809,7 @@ const PinnedInputBar = ({ onProductAdd, onSave, isDirty }) => {
     const [isLoading, setIsLoading] = useState(false);
     const { showNotification } = useNotification();
     const inputRef = useRef(null);
+    const [customProductModal, setCustomProductModal] = useState({ isOpen: false, ean: '' });
 
     useEffect(() => {
         if (query.length < 2) {
@@ -801,91 +845,121 @@ const PinnedInputBar = ({ onProductAdd, onSave, isDirty }) => {
     
 	 const handleQueryChange = (e) => {
         const value = e.target.value;
-        if (value.length > 13) {
-            alert("Kod EAN nie może przekraczać 13 znaków.");
-            setQuery('');
-        } else {
-            setQuery(value);
-        }
+        setQuery(value);
     };
 	
     const handleKeyDown = async (e) => {
         if (e.key === 'Enter' && query.trim() !== '') {
             e.preventDefault();
-            
-            const exactMatch = suggestions.find(s => s.barcodes.includes(query.trim()) || s.product_code === query.trim());
-            if (exactMatch) {
-                handleAdd(exactMatch);
-                return;
-            }
-
-            if (suggestions.length === 0) {
-                try {
-                    const results = await api.searchProducts(query.trim());
-                    if (results.length === 1) {
-                        handleAdd(results[0]);
-                        return;
-                    } else if (results.length > 1) {
-                        setSuggestions(results);
-                        return;
-                    }
-                } catch (error) {
-                    // Ignoruj błąd
+            setIsLoading(true);
+            setSuggestions([]); // Hide suggestions while processing
+            try {
+                const results = await api.searchProducts(query.trim());
+                if (results.length > 0) {
+                    onProductAdd(results[0], 1); // Add first match with quantity 1
+                    setQuery(''); // Clear input for next scan
+                    setQuantity(1); // Reset quantity field
+                    inputRef.current?.focus();
+                } else {
+                    // No product found, open modal to add custom product
+                    setCustomProductModal({ isOpen: true, ean: query.trim() });
                 }
+            } catch (error) {
+                showNotification(error.message, 'error');
+                setQuery(''); // Clear input on error
+            } finally {
+                setIsLoading(false);
             }
-
-            const customItem = {
-                _id: `custom-${Date.now()}`,
-                name: `EAN: ${query}`,
-                product_code: 'SPOZA LISTY',
-                barcodes: [query],
-                price: 0,
-                isCustom: true,
-            };
-            handleAdd(customItem);
         }
     };
 
+    const handleCustomSubmit = ({ name, price }) => {
+        const customItem = {
+            _id: `custom-${Date.now()}`,
+            name: name,
+            product_code: 'SPOZA LISTY',
+            barcodes: [customProductModal.ean],
+            price: price,
+            isCustom: true,
+        };
+        onProductAdd(customItem, 1);
+        setCustomProductModal({ isOpen: false, ean: '' });
+        setQuery('');
+        inputRef.current?.focus();
+    };
+
+    const handleCustomSkip = () => {
+        const customItem = {
+            _id: `custom-${Date.now()}`,
+            name: 'produkt spoza listy',
+            product_code: 'SPOZA LISTY',
+            barcodes: [customProductModal.ean],
+            price: 0,
+            isCustom: true,
+        };
+        onProductAdd(customItem, 1);
+        setCustomProductModal({ isOpen: false, ean: '' });
+        setQuery('');
+        inputRef.current?.focus();
+    };
+
     return (
-        <div className="fixed bottom-0 left-0 lg:left-64 right-0 bg-white dark:bg-gray-800 border-t dark:border-gray-700 shadow-top z-20 p-4">
-            <div className="max-w-4xl mx-auto relative">
-                {suggestions.length > 0 && (
-                    <ul className="absolute bottom-full mb-2 w-full bg-white dark:bg-gray-700 border rounded-lg shadow-xl max-h-60 overflow-y-auto z-30">
-                        {suggestions.map(p => (
-                            <li key={p._id} onClick={() => handleAdd(p)} className="p-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 border-b last:border-b-0">
-                                <p className="font-semibold">{p.name}</p>
-                                <p className="text-sm text-gray-500">{p.product_code}</p>
-                            </li>
-                        ))}
-                    </ul>
-                )}
-                <div className="flex items-center gap-2 sm:gap-4">
-                    <input
-                        ref={inputRef}
-                        type="text"
-                        value={query}
-                        onChange={handleQueryChange}
-                        onKeyDown={handleKeyDown}
-                        placeholder="Wyszukaj lub zeskanuj produkt..."
-                        className="w-full p-3 bg-gray-100 dark:bg-gray-700 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    />
-                    <input
-                        type="number"
-                        value={quantity}
-                        onFocus={(e) => e.target.select()}
-                        onChange={(e) => setQuantity(e.target.value)}
-                        onKeyDown={handleKeyDown}
-                        className="w-20 sm:w-24 p-3 text-center bg-gray-100 dark:bg-gray-700 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    />
-                    {onSave && (
-                        <button onClick={onSave} className="flex items-center justify-center px-3 sm:px-5 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-blue-400" disabled={!isDirty}>
-                            <Save className="w-5 h-5"/>
-                            <span className="hidden sm:inline ml-2">{isDirty ? 'Zapisz' : 'Zapisano'}</span>
-                        </button>
+        <>
+            <div className="fixed bottom-0 left-0 lg:left-64 right-0 bg-white dark:bg-gray-800 border-t dark:border-gray-700 shadow-top z-20 p-4">
+                <div className="max-w-4xl mx-auto relative">
+                    {suggestions.length > 0 && (
+                        <ul className="absolute bottom-full mb-2 w-full bg-white dark:bg-gray-700 border rounded-lg shadow-xl max-h-60 overflow-y-auto z-30">
+                            {suggestions.map(p => (
+                                <li key={p._id} onClick={() => handleAdd(p)} className="p-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 border-b last:border-b-0">
+                                    <p className="font-semibold">{p.name}</p>
+                                    <p className="text-sm text-gray-500">{p.product_code}</p>
+                                </li>
+                            ))}
+                        </ul>
                     )}
+                    <div className="flex items-center gap-2 sm:gap-4">
+                        <input
+                            ref={inputRef}
+                            type="text"
+                            value={query}
+                            onChange={handleQueryChange}
+                            onKeyDown={handleKeyDown}
+                            placeholder="Wyszukaj lub zeskanuj produkt..."
+                            className="w-full p-3 bg-gray-100 dark:bg-gray-700 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        />
+                        <input
+                            type="number"
+                            value={quantity}
+                            onFocus={(e) => e.target.select()}
+                            onChange={(e) => setQuantity(e.target.value)}
+                            onKeyDown={handleKeyDown}
+                            className="w-20 sm:w-24 p-3 text-center bg-gray-100 dark:bg-gray-700 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        />
+                        {onSave && (
+                            <button onClick={onSave} className="flex items-center justify-center px-3 sm:px-5 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-blue-400" disabled={!isDirty}>
+                                <Save className="w-5 h-5"/>
+                                <span className="hidden sm:inline ml-2">{isDirty ? 'Zapisz' : 'Zapisano'}</span>
+                            </button>
+                        )}
+                    </div>
                 </div>
             </div>
-        </div>
+            <Modal
+                isOpen={customProductModal.isOpen}
+                onClose={() => {
+                    setCustomProductModal({ isOpen: false, ean: '' });
+                    setQuery('');
+                    inputRef.current?.focus();
+                }}
+                title="Dodaj produkt spoza listy"
+            >
+                <CustomProductForm
+                    ean={customProductModal.ean}
+                    onSubmit={handleCustomSubmit}
+                    onSkip={handleCustomSkip}
+                />
+            </Modal>
+        </>
     );
 };
 
