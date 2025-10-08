@@ -288,6 +288,14 @@ unarchiveOrder: async (orderId) => {
         if (!response.ok) throw new Error('Błąd usuwania użytkownika');
         return await response.json();
     },
+    updateUserPushNotification: async (userId, enabled) => {
+        const response = await fetchWithAuth(`/api/admin/users/${userId}/push-notifications`, {
+            method: 'PUT',
+            body: JSON.stringify({ enabled }),
+        });
+        if (!response.ok) throw new Error('Błąd aktualizacji ustawień powiadomień');
+        return await response.json();
+    },
     changePassword: async (userId, password) => {
         const response = await fetchWithAuth(`/api/admin/users/${userId}/password`, { method: 'POST', body: JSON.stringify({ password }) });
         if (!response.ok) throw new Error('Błąd zmiany hasła');
@@ -302,6 +310,12 @@ unarchiveOrder: async (orderId) => {
         const params = new URLSearchParams({ page, limit, search });
         const response = await fetchWithAuth(`/api/admin/all-products?${params.toString()}`);
         if (!response.ok) throw new Error('Błąd pobierania produktów');
+        return await response.json();
+    },
+    // Nowa funkcja do pobierania wszystkich produktów dla PWA
+    getPwaAllProducts: async () => {
+        const response = await fetchWithAuth('/api/pwa/all-products');
+        if (!response.ok) throw new Error('Błąd pobierania produktów dla trybu offline');
         return await response.json();
     },
     setUserGoal: async (goal) => {
@@ -455,7 +469,44 @@ unarchiveOrder: async (orderId) => {
     }
     return await response.json();
 	},
+    getVapidPublicKey: async () => {
+        const response = await fetchWithAuth('/api/push/vapid-public-key');
+        if (!response.ok) throw new Error('Błąd pobierania klucza VAPID');
+        return response.text();
+    },
+    subscribeToPush: async (subscription) => {
+        const response = await fetchWithAuth('/api/push/subscribe', {
+            method: 'POST',
+            body: JSON.stringify({ subscription }),
+        });
+        if (!response.ok) throw new Error('Błąd subskrypcji powiadomień');
+        return await response.json();
+    },
+    unsubscribeFromPush: async (subscription) => {
+        const response = await fetchWithAuth('/api/push/unsubscribe', {
+            method: 'POST',
+            body: JSON.stringify({ endpoint: subscription.endpoint }),
+        });
+        if (!response.ok) throw new Error('Błąd anulowania subskrypcji');
+        return await response.json();
+    },
 };
+
+// --- Funkcja pomocnicza dla klucza VAPID ---
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding)
+    .replace(/-/g, '+')
+    .replace(/_/g, '/');
+
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+}
 
 // --- Hook do sortowania ---
 const useSortableData = (items, config = null) => {
@@ -486,6 +537,22 @@ const useSortableData = (items, config = null) => {
     };
 
     return { items: sortedItems, requestSort, sortConfig };
+};
+
+// --- Hook do sprawdzania statusu online ---
+const useOnlineStatus = () => {
+    const [isOnline, setIsOnline] = useState(navigator.onLine);
+    useEffect(() => {
+        const handleOnline = () => setIsOnline(true);
+        const handleOffline = () => setIsOnline(false);
+        window.addEventListener('online', handleOnline);
+        window.addEventListener('offline', handleOffline);
+        return () => {
+            window.removeEventListener('online', handleOnline);
+            window.removeEventListener('offline', handleOffline);
+        };
+    }, []);
+    return isOnline;
 };
 
 
@@ -807,11 +874,10 @@ const CustomProductForm = ({ ean, onSubmit, onSkip }) => {
     );
 };
 
-const PinnedInputBar = ({ onProductAdd, onSave, isDirty }) => {
+const PinnedInputBar = ({ onProductAdd, onSave, isDirty, allProducts }) => {
     const [query, setQuery] = useState('');
     const [quantity, setQuantity] = useState(1);
     const [suggestions, setSuggestions] = useState([]);
-    const [isLoading, setIsLoading] = useState(false);
     const { showNotification } = useNotification();
     const inputRef = useRef(null);
     const [customProductModal, setCustomProductModal] = useState({ isOpen: false, ean: '' });
@@ -821,19 +887,16 @@ const PinnedInputBar = ({ onProductAdd, onSave, isDirty }) => {
             setSuggestions([]);
             return;
         }
-        const handler = setTimeout(async () => {
-            setIsLoading(true);
-            try {
-                const results = await api.searchProducts(query);
-                setSuggestions(results);
-            } catch (error) {
-                showNotification(error.message, 'error');
-            } finally {
-                setIsLoading(false);
-            }
-        }, 300);
-        return () => clearTimeout(handler);
-    }, [query, showNotification]);
+
+        const lowerCaseQuery = query.toLowerCase();
+        const filteredProducts = (allProducts || []).filter(p =>
+            p.name.toLowerCase().includes(lowerCaseQuery) ||
+            (p.product_code && p.product_code.toLowerCase().includes(lowerCaseQuery)) ||
+            (p.barcodes && p.barcodes.some(b => b.includes(query)))
+        ).slice(0, 10);
+
+        setSuggestions(filteredProducts);
+    }, [query, allProducts]);
 
     const handleAdd = (product) => {
         const qty = Number(quantity);
@@ -856,24 +919,27 @@ const PinnedInputBar = ({ onProductAdd, onSave, isDirty }) => {
     const handleKeyDown = async (e) => {
         if (e.key === 'Enter' && query.trim() !== '') {
             e.preventDefault();
-            setIsLoading(true);
-            setSuggestions([]); // Hide suggestions while processing
-            try {
-                const results = await api.searchProducts(query.trim());
-                if (results.length > 0) {
-                    onProductAdd(results[0], 1); // Add first match with quantity 1
-                    setQuery(''); // Clear input for next scan
-                    setQuantity(1); // Reset quantity field
-                    inputRef.current?.focus();
-                } else {
-                    // No product found, open modal to add custom product
-                    setCustomProductModal({ isOpen: true, ean: query.trim() });
-                }
-            } catch (error) {
-                showNotification(error.message, 'error');
-                setQuery(''); // Clear input on error
-            } finally {
-                setIsLoading(false);
+
+            const searchTerm = query.trim();
+            const lowerCaseSearchTerm = searchTerm.toLowerCase();
+
+            let results = (allProducts || []).filter(p => p.barcodes && p.barcodes.includes(searchTerm));
+
+            if (results.length === 0) {
+                results = (allProducts || []).filter(p =>
+                    p.name.toLowerCase().includes(lowerCaseSearchTerm) ||
+                    (p.product_code && p.product_code.toLowerCase().includes(lowerCaseSearchTerm))
+                );
+            }
+
+            if (results.length > 0) {
+                onProductAdd(results[0], 1);
+                setQuery('');
+                setQuantity(1);
+                setSuggestions([]);
+                inputRef.current?.focus();
+            } else {
+                setCustomProductModal({ isOpen: true, ean: searchTerm });
             }
         }
     };
@@ -1042,9 +1108,28 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
     const { showNotification } = useNotification();
     const { items: sortedItems, requestSort, sortConfig } = useSortableData(order.items || []);
 
+    const [allProducts, setAllProducts] = useState([]);
+    const [allContacts, setAllContacts] = useState([]);
+
     const [contactSearchQuery, setContactSearchQuery] = useState(currentOrder.customerName || '');
     const [contactSuggestions, setContactSuggestions] = useState([]);
     const [isContactLoading, setIsContactLoading] = useState(false);
+
+    useEffect(() => {
+        const fetchOfflineData = async () => {
+            try {
+                const [productsData, contactsData] = await Promise.all([
+                    api.getPwaAllProducts(),
+                    api.getContacts()
+                ]);
+                setAllProducts(productsData);
+                setAllContacts(contactsData);
+            } catch (error) {
+                showNotification('Błąd pobierania danych do trybu offline. Aplikacja może nie działać poprawnie bez połączenia z internetem.', 'error');
+            }
+        };
+        fetchOfflineData();
+    }, [showNotification]);
 
     const getSortIcon = (name) => {
         if (!sortConfig || sortConfig.key !== name) {
@@ -1068,19 +1153,16 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
             setContactSuggestions([]);
             return;
         }
-        const handler = setTimeout(async () => {
-            setIsContactLoading(true);
-            try {
-                const results = await api.searchContacts(contactSearchQuery);
-                setContactSuggestions(results);
-            } catch (error) {
-                showNotification(error.message, 'error');
-            } finally {
-                setIsContactLoading(false);
-            }
-        }, 300);
-        return () => clearTimeout(handler);
-    }, [contactSearchQuery, order.customerId, order.customerName, showNotification]);
+
+        const lowerCaseQuery = contactSearchQuery.toLowerCase();
+        const filteredContacts = allContacts.filter(contact =>
+            contact.name.toLowerCase().includes(lowerCaseQuery) ||
+            (contact.company && contact.company.toLowerCase().includes(lowerCaseQuery))
+        ).slice(0, 10);
+
+        setContactSuggestions(filteredContacts);
+
+    }, [contactSearchQuery, order.customerId, order.customerName, allContacts]);
     
     const scrollToBottom = () => listEndRef.current?.scrollIntoView({ behavior: "smooth" });
     useEffect(scrollToBottom, [order.items]);
@@ -1167,7 +1249,17 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
             localStorage.removeItem('draftOrder');
             setCurrentOrder(savedOrder);
             setDirty(false);
-        } catch (error) { showNotification(error.message, 'error'); }
+        } catch (error) {
+            if (!navigator.onLine) {
+                showNotification('Jesteś offline. Zamówienie zapisano w kolejce do wysłania.', 'success');
+                const newBlankOrder = { customerName: '', items: [], isDirty: false };
+                localStorage.setItem('draftOrder', JSON.stringify(newBlankOrder));
+                setCurrentOrder(newBlankOrder);
+                setDirty(false);
+            } else {
+                showNotification(error.message, 'error');
+            }
+        }
     };
     
     const handleFileImport = async (event) => {
@@ -1396,7 +1488,7 @@ const handlePrint = () => {
                 </div>
             </div>
             
-            <PinnedInputBar onProductAdd={addProductToOrder} onSave={handleSaveOrder} isDirty={order.isDirty} />
+            <PinnedInputBar onProductAdd={addProductToOrder} onSave={handleSaveOrder} isDirty={order.isDirty} allProducts={allProducts} />
 
             <Modal isOpen={noteModal.isOpen} onClose={() => setNoteModal({ isOpen: false, itemIndex: null, text: '' })} title="Dodaj notatkę do pozycji">
                 <textarea value={noteModal.text} onChange={(e) => setNoteModal({...noteModal, text: e.target.value})} className="w-full p-2 border rounded-md min-h-[100px] bg-white dark:bg-gray-700"></textarea>
@@ -2219,8 +2311,15 @@ const AdminView = ({ user, onNavigate }) => {
 						</div>
 					</div>
 				</div>
-                    
-                
+                <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md cursor-pointer hover:shadow-xl transition-shadow" onClick={() => onNavigate('admin/notifications')}>
+                    <div className="flex items-center">
+                        <Zap className="w-10 h-10 text-purple-500 mr-4"/>
+                        <div>
+                            <h2 className="text-2xl font-semibold">Zgody na Powiadomienia</h2>
+                            <p className="text-gray-500">Zarządzaj zgodami na powiadomienia push dla użytkowników.</p>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     );
@@ -2472,6 +2571,74 @@ const AdminProductsView = () => {
         </div>
     );
 };
+
+const AdminNotificationsView = () => {
+    const [users, setUsers] = useState([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const { showNotification } = useNotification();
+
+    const fetchUsers = useCallback(async () => {
+        setIsLoading(true);
+        try {
+            const data = await api.getUsers();
+            setUsers(data);
+        } catch (error) {
+            showNotification(error.message, 'error');
+        } finally {
+            setIsLoading(false);
+        }
+    }, [showNotification]);
+
+    useEffect(() => {
+        fetchUsers();
+    }, [fetchUsers]);
+
+    const handleToggle = async (userId, enabled) => {
+        try {
+            await api.updateUserPushNotification(userId, enabled);
+            setUsers(currentUsers =>
+                currentUsers.map(u =>
+                    u._id === userId ? { ...u, pushNotificationsEnabled: enabled } : u
+                )
+            );
+            showNotification('Ustawienia powiadomień zaktualizowane.', 'success');
+        } catch (error) {
+            showNotification(error.message, 'error');
+        }
+    };
+
+    if (isLoading) {
+        return <div className="p-8 text-center">Ładowanie użytkowników...</div>;
+    }
+
+    return (
+        <div className="p-4 md:p-8">
+            <h2 className="text-2xl font-semibold mb-4">Zarządzanie Zgodami na Powiadomienia Push</h2>
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow">
+                <div className="space-y-0">
+                    {users.map(user => (
+                        <div key={user._id} className="flex justify-between items-center p-4 border-b dark:border-gray-700 last:border-b-0">
+                            <span className="font-medium">{user.username}</span>
+                            <label className="flex items-center cursor-pointer">
+                                <div className="relative">
+                                    <input
+                                        type="checkbox"
+                                        checked={user.pushNotificationsEnabled}
+                                        onChange={(e) => handleToggle(user._id, e.target.checked)}
+                                        className="sr-only"
+                                    />
+                                    <div className="block bg-gray-200 dark:bg-gray-600 w-14 h-8 rounded-full"></div>
+                                    <div className={`absolute left-1 top-1 bg-white dark:bg-gray-400 w-6 h-6 rounded-full transition-transform duration-300 ease-in-out ${user.pushNotificationsEnabled ? 'transform translate-x-full bg-green-500' : ''}`}></div>
+                                </div>
+                            </label>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+};
+
 
 // --- Moduł panelu głównego ---
 
@@ -4411,6 +4578,7 @@ function App() {
     const [isNavOpen, setIsNavOpen] = useState(false); // Stan dla mobilnego menu
     const navigate = useNavigate();
     const location = useLocation();
+    const isOnline = useOnlineStatus();
 
     const updateUserData = (newUserData) => {
         setUser(newUserData);
@@ -4471,7 +4639,39 @@ function App() {
     useEffect(() => {
         const userData = localStorage.getItem('userData');
         if (userData) {
-            try { setUser(JSON.parse(userData)); } catch (e) { handleLogout(); }
+            try {
+                const parsedUser = JSON.parse(userData);
+                setUser(parsedUser);
+
+                // --- Logika subskrypcji Push po zalogowaniu ---
+                if ('serviceWorker' in navigator && 'PushManager' in window) {
+                    navigator.serviceWorker.ready.then(async (swRegistration) => {
+                        try {
+                            const existingSubscription = await swRegistration.pushManager.getSubscription();
+                            if (existingSubscription) {
+                                console.log('Użytkownik jest już zasubskrybowany.');
+                                // Opcjonalnie: zsynchronizuj subskrypcję z serwerem
+                                await api.subscribeToPush(existingSubscription);
+                            } else {
+                                console.log('Brak subskrypcji, próba zasubskrybowania...');
+                                const vapidPublicKey = await api.getVapidPublicKey();
+                                const convertedVapidKey = urlBase64ToUint8Array(vapidPublicKey);
+                                const newSubscription = await swRegistration.pushManager.subscribe({
+                                    userVisibleOnly: true,
+                                    applicationServerKey: convertedVapidKey
+                                });
+                                await api.subscribeToPush(newSubscription);
+                                console.log('Nowa subskrypcja zapisana na serwerze.');
+                            }
+                        } catch (error) {
+                            console.error('Błąd podczas subskrypcji powiadomień:', error);
+                        }
+                    });
+                }
+
+            } catch (e) {
+                handleLogout();
+            }
         }
         setIsLoading(false);
     }, [handleLogout]);
@@ -4486,6 +4686,11 @@ function App() {
                 {user && <Sidebar user={user} onLogout={handleLogout} onOpenPasswordModal={() => setIsPasswordModalOpen(true)} onNewOrder={handleNewOrder} isNavOpen={isNavOpen} setIsNavOpen={setIsNavOpen} />}
                 {user && isNavOpen && <div onClick={() => setIsNavOpen(false)} className="lg:hidden fixed inset-0 bg-black bg-opacity-50 z-30"></div>}
                 <main className="flex-1 flex flex-col">
+                    {!isOnline && (
+                        <div className="bg-yellow-500 text-center p-2 text-sm text-white font-semibold shadow-lg z-50">
+                            Jesteś w trybie offline. Zmiany zostaną zsynchronizowane po powrocie do sieci.
+                        </div>
+                    )}
                     {user && (
                         <div className="lg:hidden p-2 bg-white dark:bg-gray-800 border-b dark:border-gray-700 flex justify-between items-center sticky top-0 z-30">
                             <button onClick={() => setIsNavOpen(!isNavOpen)} className="p-2 rounded-md"><Menu className="w-6 h-6" /></button>
@@ -4515,6 +4720,7 @@ function App() {
                                     <Route path="/admin" element={<AdminView user={user} onNavigate={navigate} />} />
                                     <Route path="/admin-users" element={<AdminUsersView user={user} />} />
                                     <Route path="/admin-products" element={<AdminProductsView />} />
+                                    <Route path="/admin/notifications" element={<AdminNotificationsView />} />
                                     <Route path="/shortage-report" element={<ShortageReportView />} />
                                     <Route path="/admin-email" element={<AdminEmailConfigView />} />
                                     <Route path="/" element={<Navigate to="/dashboard" replace />} />

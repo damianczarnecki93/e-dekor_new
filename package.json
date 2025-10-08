@@ -12,9 +12,9 @@
     "@react-google-maps/api": "^2.19.3",
     "axios": "^1.7.2",
     "bcryptjs": "^2.4.3",
+    "cookie-parser": "^1.4.6",
     "cors": "^2.8.5",
     "csv-parser": "^3.0.0",
-    "cookie-parser": "^1.4.6",
     "date-fns": "^2.30.0",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
@@ -30,7 +30,8 @@
     "react-beautiful-dnd": "^13.1.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.25.1",
-    "react-scripts": "5.0.1"
+    "react-scripts": "5.0.1",
+    "web-push": "^3.6.7"
   },
   "browserslist": {
     "production": [

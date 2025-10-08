@@ -12,6 +12,7 @@ const fs = require('fs');
 const path = require('path');
 const nodemailer = require('nodemailer');
 const axios = require('axios');
+const webPush = require('web-push');
 
 const app = express();
 const corsOptions = {
@@ -24,6 +25,18 @@ app.use(cors(corsOptions));
 app.options('*', cors(corsOptions)); // Umożliwia obsługę zapytań preflight (OPTIONS)
 
 app.use(express.json());
+
+// --- Konfiguracja Web Push ---
+if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
+    webPush.setVapidDetails(
+        `mailto:${process.env.VAPID_EMAIL || 'test@example.com'}`,
+        process.env.VAPID_PUBLIC_KEY,
+        process.env.VAPID_PRIVATE_KEY
+    );
+    console.log("Konfiguracja Web Push załadowana.");
+} else {
+    console.warn("Brak kluczy VAPID w .env. Powiadomienia push nie będą działać.");
+}
 
 // --- Konfiguracja i połączenie z bazą danych ---
 const dbUrl = process.env.DATABASE_URL;
@@ -48,7 +61,8 @@ const userSchema = new mongoose.Schema({
     salesGoal: { type: Number, default: 0 },
     manualSales: { type: Number, default: 0 },
     visibleModules: { type: [String], default: [] },
-	dashboardLayout: { type: [String], default: ['stats_products', 'stats_pending_orders', 'stats_completed_orders', 'quick_actions', 'my_tasks'] }
+	dashboardLayout: { type: [String], default: ['stats_products', 'stats_pending_orders', 'stats_completed_orders', 'quick_actions', 'my_tasks'] },
+    pushNotificationsEnabled: { type: Boolean, default: true }
 });
 
 const User = mongoose.models.User || mongoose.model('User', userSchema);
@@ -73,7 +87,6 @@ const orderSchema = new mongoose.Schema({
     status: { 
         type: String, 
         default: 'Zapisane', 
-        // Dodajemy nowe statusy
         enum: ['Zapisane', 'Skompletowane', 'Zakończono', 'Braki'] 
     },
     date: { type: Date, default: Date.now },
@@ -153,10 +166,23 @@ const emailConfigSchema = new mongoose.Schema({
     secure: { type: Boolean, default: true },
     user: { type: String, required: true },
     pass: { type: String, required: true },
-    // Dodajemy to pole
     recipientEmail: { type: String, required: true }, 
 });
 const EmailConfig = mongoose.models.EmailConfig || mongoose.model('EmailConfig', emailConfigSchema);
+
+const pushSubscriptionSchema = new mongoose.Schema({
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    subscription: {
+        endpoint: { type: String, required: true, unique: true },
+        expirationTime: { type: Date, default: null },
+        keys: {
+            p256dh: { type: String, required: true },
+            auth: { type: String, required: true },
+        },
+    },
+});
+const PushSubscription = mongoose.models.PushSubscription || mongoose.model('PushSubscription', pushSubscriptionSchema);
+
 
 // --- Middleware ---
 const authMiddleware = (req, res, next) => {
@@ -193,7 +219,7 @@ async function sendNotificationEmail(subject, htmlContent) {
         let transporter = nodemailer.createTransport({
             host: config.host,
             port: config.port,
-            secure: config.secure, // Używamy wartości 'secure' bezpośrednio z konfiguracji
+            secure: config.secure,
             auth: {
                 user: config.user,
                 pass: config.pass,
@@ -233,7 +259,7 @@ const parseCsv = (buffer) => {
         readableStream
             .pipe(csv({ headers: false, separator: separator }))
             .on('data', (row) => {
-                const identifier = row[0]?.trim(); // Może być EAN lub kod produktu
+                const identifier = row[0]?.trim();
                 const quantityStr = row[1]?.trim();
                 if (identifier && quantityStr) {
                     const quantity = parseInt(quantityStr, 10);
@@ -279,22 +305,20 @@ app.post('/api/orders/:id/process-completion', authMiddleware, async (req, res) 
         const pickedItemIds = new Set(pickedItems.map(p => p._id));
         const unpickedItems = allItems.filter(item => !pickedItemIds.has(item._id));
 
-        // 1. Jeśli są niezebrane produkty, utwórz nowe zamówienie na braki
         if (unpickedItems.length > 0) {
             const shortageOrderTotal = unpickedItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
             const shortageOrder = new Order({
                 id: `BRAKI-${originalOrder.id}`,
                 customerName: `[BRAKI] ${originalOrder.customerName}`,
-                author: originalOrder.author, // lub req.user.username, zależy od logiki
+                author: originalOrder.author,
                 items: unpickedItems,
                 total: shortageOrderTotal,
-				status: 'Braki', // ZMIANA Z 'Zapisane' NA 'Braki'
+				status: 'Braki',
 				isDirty: false
             });
             await shortageOrder.save();
         }
 
-        // 2. Zaktualizuj oryginalne zamówienie, aby zawierało tylko zebrane produkty
         originalOrder.items = pickedItems;
         originalOrder.total = pickedItems.reduce((sum, item) => sum + (item.price * (item.pickedQuantity || item.quantity)), 0);
         originalOrder.status = 'Skompletowane';
@@ -318,7 +342,7 @@ const contactSchema = new mongoose.Schema({
     status: { type: String, default: 'Lead', enum: ['Lead', 'Klient', 'Utracony', 'Partner'] },
     notes: String,
     ownerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-    accountManager: { type: String }, // DODANE POLE
+    accountManager: { type: String },
     createdAt: { type: Date, default: Date.now }
 });
 const Contact = mongoose.models.Contact || mongoose.model('Contact', contactSchema);
@@ -329,38 +353,15 @@ const upload = multer({ storage: storage });
 
 
 // --- CRM: API Endpoints ---
-
-// Pobieranie kontaktów dla zalogowanego użytkownika
 app.get('/api/crm/contacts', authMiddleware, async (req, res) => {
     try {
-        const { search, status, accountManager } = req.query;
-        const query = { ownerId: req.user.userId };
-
-        if (search) {
-            const searchRegex = new RegExp(search, 'i');
-            query.$or = [
-                { name: searchRegex },
-                { company: searchRegex },
-                { email: searchRegex }
-            ];
-        }
-
-        if (status) {
-            query.status = status;
-        }
-
-        if (accountManager) {
-            query.accountManager = accountManager;
-        }
-
-        const contacts = await Contact.find(query).sort({ createdAt: -1 });
+        const contacts = await Contact.find({ ownerId: req.user.userId }).sort({ createdAt: -1 });
         res.json(contacts);
     } catch (error) {
         res.status(500).json({ message: 'Błąd podczas pobierania kontaktów.' });
     }
 });
 
-// Wyszukiwanie kontaktów na potrzeby sugestii
 app.get('/api/crm/search', authMiddleware, async (req, res) => {
     try {
         const { term } = req.query;
@@ -374,14 +375,13 @@ app.get('/api/crm/search', authMiddleware, async (req, res) => {
                 { name: searchRegex },
                 { company: searchRegex }
             ]
-        }).limit(10); // Ograniczamy do 10 sugestii
+        }).limit(10);
         res.json(contacts);
     } catch (error) {
         res.status(500).json({ message: 'Błąd podczas wyszukiwania kontaktów.' });
     }
 });
 
-// Dodawanie nowego kontaktu
 app.post('/api/crm/contacts', authMiddleware, async (req, res) => {
     try {
         const newContact = new Contact({
@@ -395,7 +395,6 @@ app.post('/api/crm/contacts', authMiddleware, async (req, res) => {
     }
 });
 
-// Aktualizacja kontaktu
 app.put('/api/crm/contacts/:id', authMiddleware, async (req, res) => {
     try {
         const updatedContact = await Contact.findOneAndUpdate(
@@ -412,7 +411,6 @@ app.put('/api/crm/contacts/:id', authMiddleware, async (req, res) => {
     }
 });
 
-// Usuwanie kontaktu
 app.delete('/api/crm/contacts/:id', authMiddleware, async (req, res) => {
     try {
         const deletedContact = await Contact.findOneAndDelete({ _id: req.params.id, ownerId: req.user.userId });
@@ -425,7 +423,6 @@ app.delete('/api/crm/contacts/:id', authMiddleware, async (req, res) => {
     }
 });
 
-// Import kontaktów z pliku CSV
 app.post('/api/crm/import-contacts', authMiddleware, upload.single('contactsFile'), async (req, res) => {
     if (!req.file) {
         return res.status(400).json({ message: 'Nie przesłano pliku.' });
@@ -443,7 +440,6 @@ app.post('/api/crm/import-contacts', authMiddleware, upload.single('contactsFile
                         ...row,
                         ownerId: req.user.userId
                     };
-                    // POPRAWKA: Ustaw domyślny status, jeśli w pliku jest pusty
                     if (!contactData.status || !['Lead', 'Klient', 'Utracony', 'Partner'].includes(contactData.status)) {
                         contactData.status = 'Lead';
                     }
@@ -463,6 +459,49 @@ app.post('/api/crm/import-contacts', authMiddleware, upload.single('contactsFile
         res.status(500).json({ message: 'Wystąpił błąd serwera podczas importu.', error: error.message });
     }
 });
+
+// --- API Endpoints - Powiadomienia Push ---
+app.get('/api/push/vapid-public-key', authMiddleware, (req, res) => {
+    if (!process.env.VAPID_PUBLIC_KEY) {
+        return res.status(500).json({ message: "Klucz VAPID nie jest skonfigurowany na serwerze." });
+    }
+    res.send(process.env.VAPID_PUBLIC_KEY);
+});
+
+app.post('/api/push/subscribe', authMiddleware, async (req, res) => {
+    const { subscription } = req.body;
+    const userId = req.user.userId;
+
+    if (!subscription || !subscription.endpoint) {
+        return res.status(400).json({ message: "Nieprawidłowy obiekt subskrypcji." });
+    }
+
+    try {
+        await PushSubscription.findOneAndUpdate(
+            { 'subscription.endpoint': subscription.endpoint },
+            { userId: userId, subscription: subscription },
+            { upsert: true, new: true }
+        );
+        res.status(201).json({ message: 'Subskrypcja zapisana.' });
+    } catch (error) {
+        console.error("Błąd zapisu subskrypcji:", error);
+        res.status(500).json({ message: 'Błąd zapisu subskrypcji.', error: error.message });
+    }
+});
+
+app.post('/api/push/unsubscribe', authMiddleware, async (req, res) => {
+    const { endpoint } = req.body;
+     if (!endpoint) {
+        return res.status(400).json({ message: "Brakujący endpoint subskrypcji." });
+    }
+    try {
+        await PushSubscription.findOneAndDelete({ 'subscription.endpoint': endpoint, userId: req.user.userId });
+        res.status(200).json({ message: 'Subskrypcja usunięta.' });
+    } catch (error) {
+        res.status(500).json({ message: 'Błąd usuwania subskrypcji.', error: error.message });
+    }
+});
+
 
 // --- API Endpoints - Uwierzytelnianie ---
 app.post('/api/register', async (req, res) => {
@@ -494,7 +533,6 @@ app.post('/api/login', async (req, res) => {
         const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) return res.status(401).json({ message: 'Nieprawidłowe dane logowania.' });
         const token = jwt.sign({ userId: user._id, role: user.role, username: user.username }, jwtSecret, { expiresIn: '1d' });
-        // UPEWNIJ SIĘ, ŻE ZWRACASZ TUTAJ `visibleModules`
         res.json({ token, user: { id: user._id, username: user.username, role: user.role, salesGoal: user.salesGoal, manualSales: user.manualSales, visibleModules: user.visibleModules, dashboardLayout: user.dashboardLayout } });
     } catch (error) {
         res.status(500).json({ message: 'Błąd serwera podczas logowania.', error: error.message });
@@ -539,7 +577,6 @@ app.post('/api/user/manual-sales', authMiddleware, async (req, res) => {
 app.put('/api/orders/:id/status', authMiddleware, async (req, res) => {
     try {
         const { status } = req.body;
-        // Walidacja, czy status jest jednym z dozwolonych
         if (!['Zapisane', 'Skompletowane', 'Zakończono', 'Braki'].includes(status)) {
             return res.status(400).json({ message: 'Nieprawidłowy status.' });
         }
@@ -555,6 +592,36 @@ app.put('/api/orders/:id/status', authMiddleware, async (req, res) => {
 				<p>Szczegóły zamówienia dostępne w Panelu Sprzedaży</p>
             `;
             sendNotificationEmail(emailSubject, emailHtml).catch(console.error);
+
+            // --- Logika powiadomień Push ---
+            try {
+                const usersToNotify = await User.find({ pushNotificationsEnabled: true }).select('_id');
+                if (usersToNotify.length > 0) {
+                    const userIds = usersToNotify.map(u => u._id);
+                    const subscriptions = await PushSubscription.find({ userId: { $in: userIds } });
+
+                    const notificationPayload = JSON.stringify({
+                        title: 'Zamówienie zakończone',
+                        body: `Zakończono zamówienie od użytkownika: ${req.user.username}.`,
+                        data: { url: '/orders' }
+                    });
+
+                    const sendPromises = subscriptions.map(sub =>
+                        webPush.sendNotification(sub.subscription, notificationPayload)
+                            .catch(err => {
+                                if (err.statusCode === 410) {
+                                    console.log("Usuwanie wygasłej subskrypcji:", sub._id);
+                                    return PushSubscription.findByIdAndDelete(sub._id);
+                                }
+                                console.error('Błąd wysyłania powiadomienia:', err.statusCode);
+                            })
+                    );
+
+                    await Promise.all(sendPromises);
+                }
+            } catch (pushError) {
+                console.error("Błąd podczas wysyłania powiadomień push:", pushError);
+            }
         }
         res.json({ message: 'Status zamówienia zaktualizowany!', order: updatedOrder });
     } catch (error) {
@@ -571,7 +638,6 @@ app.put('/api/user/dashboard-layout', authMiddleware, async (req, res) => {
             return res.status(404).json({ message: 'Nie znaleziono użytkownika.' });
         }
         
-        // Zwracamy zaktualizowany obiekt użytkownika, aby frontend mógł zsynchronizować stan
         const userData = {
              id: user._id,
              username: user.username,
@@ -591,7 +657,6 @@ app.put('/api/user/dashboard-layout', authMiddleware, async (req, res) => {
 // --- API Endpoints - Admin ---
 app.get('/api/admin/email-config', authMiddleware, adminMiddleware, async (req, res) => {
     try {
-        // Zawsze szukamy jednego dokumentu konfiguracyjnego
         const config = await EmailConfig.findOne();
         res.json(config || {});
     } catch (error) {
@@ -614,8 +679,6 @@ app.post('/api/admin/test-email', authMiddleware, adminMiddleware, async (req, r
 
 app.post('/api/admin/email-config', authMiddleware, adminMiddleware, async (req, res) => {
     try {
-        // Używamy findOneAndUpdate z opcją 'upsert' aby stworzyć nowy dokument, jeśli nie istnieje,
-        // lub zaktualizować istniejący. To zapewnia, że zawsze jest tylko jedna konfiguracja.
         const config = await EmailConfig.findOneAndUpdate({}, req.body, { new: true, upsert: true });
         res.json({ message: 'Konfiguracja email zapisana!', config });
     } catch (error) {
@@ -700,6 +763,17 @@ app.delete('/api/admin/users/:id', authMiddleware, adminMiddleware, async (req, 
         res.json({ message: 'Użytkownik usunięty.' });
     } catch (error) {
         res.status(500).json({ message: 'Błąd podczas usuwania użytkownika.' });
+    }
+});
+
+app.put('/api/admin/users/:id/push-notifications', authMiddleware, adminMiddleware, async (req, res) => {
+    try {
+        const { enabled } = req.body;
+        const user = await User.findByIdAndUpdate(req.params.id, { pushNotificationsEnabled: enabled }, { new: true });
+        if (!user) return res.status(404).json({ message: 'Nie znaleziono użytkownika.' });
+        res.json({ message: 'Ustawienia powiadomień zaktualizowane.', user });
+    } catch (error) {
+        res.status(500).json({ message: 'Błąd aktualizacji ustawień powiadomień.' });
     }
 });
 
@@ -838,21 +912,18 @@ app.get('/api/admin/all-products', authMiddleware, adminMiddleware, async (req, 
 
 app.get('/api/reports/shortages', authMiddleware, async (req, res) => {
     try {
-        // 1. Znajdź wszystkie zamówienia ze statusem 'Zapisane'
         const activeOrders = await Order.find({ 
-        status: { $in: ['Zakończono', 'Braki'] } // <-- ZMIANA
+        status: { $in: ['Zakończono', 'Braki'] }
     }).lean();
 
         if (activeOrders.length === 0) {
             return res.json([]);
         }
 
-        // 2. Zbierz unikalne kody wszystkich produktów z tych zamówień
         const allProductCodes = [...new Set(
             activeOrders.flatMap(order => order.items.map(item => item.product_code))
         )];
 
-        // 3. Pobierz aktualne stany magazynowe dla tych produktów w jednym zapytaniu
         const productsInDb = await Product.find({ product_code: { $in: allProductCodes } });
         const productAvailabilityMap = new Map(
             productsInDb.map(p => [p.product_code, p.quantity || 0])
@@ -860,7 +931,6 @@ app.get('/api/reports/shortages', authMiddleware, async (req, res) => {
         
         const reportByOrder = [];
 
-        // 4. Przetwórz każde zamówienie osobno
         for (const order of activeOrders) {
             const shortagesForThisOrder = [];
             for (const item of order.items) {
@@ -869,7 +939,7 @@ app.get('/api/reports/shortages', authMiddleware, async (req, res) => {
 
                 if (required > available) {
                     shortagesForThisOrder.push({
-                        _id: item._id, // Używamy ID z pozycji zamówienia dla unikalności
+                        _id: item._id,
                         name: item.name,
                         product_code: item.product_code,
                         required: required,
@@ -879,7 +949,6 @@ app.get('/api/reports/shortages', authMiddleware, async (req, res) => {
                 }
             }
 
-            // 5. Jeśli w zamówieniu są braki, dodaj je do raportu
             if (shortagesForThisOrder.length > 0) {
                 reportByOrder.push({
                     _id: order._id,
@@ -934,7 +1003,6 @@ app.get('/api/dashboard-stats', authMiddleware, async (req, res) => {
         const endOfMonth = new Date(startOfMonth);
         endOfMonth.setMonth(endOfMonth.getMonth() + 1);
 
-        // Individual sales
         const individualSalesResult = await Order.aggregate([
             { $match: { date: { $gte: startOfMonth, $lt: endOfMonth }, author: req.user.username } },
             { $group: { _id: null, total: { $sum: "$total" } } }
@@ -942,7 +1010,6 @@ app.get('/api/dashboard-stats', authMiddleware, async (req, res) => {
         const individualOrderSales = individualSalesResult.length > 0 ? individualSalesResult[0].total : 0;
         const totalIndividualSales = individualOrderSales + (currentUser.manualSales || 0);
 
-        // Global sales
         const allUsers = await User.find({});
         const totalManualSales = allUsers.reduce((sum, user) => sum + (user.manualSales || 0), 0);
         const totalSalesGoal = allUsers.reduce((sum, user) => sum + (user.salesGoal || 0), 0);
@@ -987,6 +1054,16 @@ app.get('/api/products', authMiddleware, async (req, res) => {
         res.status(200).json(products);
     } catch (error) {
         res.status(500).json({ message: 'Błąd pobierania produktów', error: error.message });
+    }
+});
+
+// --- PWA Endpoint: Pobieranie wszystkich produktów na potrzeby offline ---
+app.get('/api/pwa/all-products', authMiddleware, async (req, res) => {
+    try {
+        const products = await Product.find({});
+        res.status(200).json(products);
+    } catch (error) {
+        res.status(500).json({ message: 'Błąd pobierania wszystkich produktów dla PWA', error: error.message });
     }
 });
 
@@ -1099,7 +1176,6 @@ app.get('/api/orders', authMiddleware, async (req, res) => {
         const { status, customer, author, dateFrom, dateTo, showArchived } = req.query;
         let query = {};
 
-        // Domyślnie pokazuj tylko niezarchiwizowane
         query.isArchived = showArchived === 'true' ? true : { $ne: true };
 
         if (status && status.length > 0) {
@@ -1271,7 +1347,6 @@ app.post('/api/inventories/import-sheet', authMiddleware, upload.single('sheetFi
             if (product) {
                 inventoryItems.push({ ...product, quantity: 0, expectedQuantity: csvItem.quantity });
             } else {
-                // Jeżeli nie znaleziono, stwórz pozycję bez nazwy
                 inventoryItems.push({
                     _id: `custom-${Date.now()}-${csvItem.identifier}`,
                     name: '',
@@ -1396,8 +1471,6 @@ app.delete('/api/notes/:id', authMiddleware, async (req, res) => {
         res.status(500).json({ message: 'Błąd usuwania notatki' });
     }
 });
-
-// --- NOWE I ZAKTUALIZOWANE ENDPOINTY KANBAN ---
 
 // --- NOWE I ZAKTUALIZOWANE ENDPOINTY KANBAN ---
 
