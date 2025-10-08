@@ -877,7 +877,7 @@ const PinnedInputBar = ({ onProductAdd, onSave, isDirty }) => {
         const customItem = {
             _id: `custom-${Date.now()}`,
             name: name,
-            product_code: 'SPOZA LISTY',
+            product_code: customProductModal.ean,
             barcodes: [customProductModal.ean],
             price: price,
             isCustom: true,
@@ -892,7 +892,7 @@ const PinnedInputBar = ({ onProductAdd, onSave, isDirty }) => {
         const customItem = {
             _id: `custom-${Date.now()}`,
             name: 'produkt spoza listy',
-            product_code: 'SPOZA LISTY',
+            product_code: customProductModal.ean,
             barcodes: [customProductModal.ean],
             price: 0,
             isCustom: true,
