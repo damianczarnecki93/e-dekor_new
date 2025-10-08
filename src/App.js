@@ -112,6 +112,11 @@ const api = {
         if (!response.ok) throw new Error(data.message || 'Błąd importu pliku');
         return data;
     },
+    searchContacts: async (term) => {
+        const response = await fetchWithAuth(`/api/crm/search?term=${encodeURIComponent(term)}`);
+        if (!response.ok) throw new Error('Błąd wyszukiwania kontaktów');
+        return await response.json();
+    },
     archiveOrder: async (orderId) => {
     const response = await fetchWithAuth(`/api/orders/${orderId}/archive`, { method: 'POST' });
     if (!response.ok) throw new Error('Błąd archiwizacji zamówienia');
@@ -1037,6 +1042,10 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
     const { showNotification } = useNotification();
     const { items: sortedItems, requestSort, sortConfig } = useSortableData(order.items || []);
 
+    const [contactSearchQuery, setContactSearchQuery] = useState(currentOrder.customerName || '');
+    const [contactSuggestions, setContactSuggestions] = useState([]);
+    const [isContactLoading, setIsContactLoading] = useState(false);
+
     const getSortIcon = (name) => {
         if (!sortConfig || sortConfig.key !== name) {
             return <ChevronsUpDown className="w-4 h-4 ml-1 opacity-40" />;
@@ -1047,7 +1056,31 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
     useEffect(() => { 
         setOrder(currentOrder);
         setDirty(currentOrder.isDirty || false);
+        setContactSearchQuery(currentOrder.customerName || '');
     }, [currentOrder, setDirty]);
+
+    useEffect(() => {
+        if (order.customerId && order.customerName === contactSearchQuery) {
+            setContactSuggestions([]);
+            return;
+        }
+        if (contactSearchQuery.trim().length < 2) {
+            setContactSuggestions([]);
+            return;
+        }
+        const handler = setTimeout(async () => {
+            setIsContactLoading(true);
+            try {
+                const results = await api.searchContacts(contactSearchQuery);
+                setContactSuggestions(results);
+            } catch (error) {
+                showNotification(error.message, 'error');
+            } finally {
+                setIsContactLoading(false);
+            }
+        }, 300);
+        return () => clearTimeout(handler);
+    }, [contactSearchQuery, order.customerId, order.customerName, showNotification]);
     
     const scrollToBottom = () => listEndRef.current?.scrollIntoView({ behavior: "smooth" });
     useEffect(scrollToBottom, [order.items]);
@@ -1057,6 +1090,15 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
         setOrder(newOrder);
         setCurrentOrder(newOrder);
         setDirty(isDirtyFlag);
+    };
+
+    const handleSelectContact = (contact) => {
+        updateOrder({
+            customerName: contact.name,
+            customerId: contact._id,
+        });
+        setContactSearchQuery(contact.name);
+        setContactSuggestions([]);
     };
 
     const addProductToOrder = (product, quantity) => {
@@ -1241,16 +1283,38 @@ const handlePrint = () => {
                     </div>
                 </div>
 					<div className="flex flex-wrap items-center gap-4 mb-6">
-                    <input 
-                        type="text" 
-                        value={order.customerName || ''} 
-                        onChange={(e) => updateOrder({ customerName: e.target.value })} 
-                        placeholder="Wprowadź nazwę klienta" 
-                        className="w-full max-w-lg p-3 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    />
+                    <div className="relative w-full max-w-lg">
+                        <input
+                            type="text"
+                            value={contactSearchQuery}
+                            onChange={(e) => {
+                                setContactSearchQuery(e.target.value);
+                                updateOrder({ customerName: e.target.value, customerId: null });
+                            }}
+                            placeholder="Wprowadź nazwę klienta"
+                            className="w-full p-3 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            autoComplete="off"
+                        />
+                        {isContactLoading && <div className="absolute right-3 top-3"><div className="w-5 h-5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div></div>}
+                        {contactSuggestions.length > 0 && (
+                            <ul className="absolute z-20 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-xl max-h-60 overflow-y-auto">
+                                {contactSuggestions.map(contact => (
+                                    <li
+                                        key={contact._id}
+                                        onClick={() => handleSelectContact(contact)}
+                                        className="p-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700"
+                                    >
+                                        <p className="font-semibold">{contact.name}</p>
+                                        {contact.company && <p className="text-sm text-gray-500">{contact.company}</p>}
+                                        {contact.address && <p className="text-xs text-gray-400">{contact.address}</p>}
+                                    </li>
+                                ))}
+                            </ul>
+                        )}
+                    </div>
                     {order._id && (
                         <label className="flex items-center gap-2 cursor-pointer p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
-                            <input 
+                            <input
                                 type="checkbox"
                                 className="h-5 w-5 rounded text-indigo-600 focus:ring-indigo-500"
                                 checked={order.status === 'Zakończono'}
