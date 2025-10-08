@@ -938,7 +938,7 @@ const PinnedInputBar = ({ onProductAdd, onSave, isDirty }) => {
                             onFocus={(e) => e.target.select()}
                             onChange={(e) => setQuantity(e.target.value)}
                             onKeyDown={handleKeyDown}
-                            className="w-20 sm:w-24 p-3 text-center bg-gray-100 dark:bg-gray-700 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            className="w-16 sm:w-24 p-3 text-center bg-gray-100 dark:bg-gray-700 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
                         />
                         {onSave && (
                             <button onClick={onSave} className="flex items-center justify-center px-3 sm:px-5 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-blue-400" disabled={!isDirty}>
@@ -1329,37 +1329,63 @@ const handlePrint = () => {
                 </div>
                 <div ref={printRef} className="flex-grow bg-gray-50 dark:bg-gray-900 p-2 sm:p-4 rounded-lg shadow-inner mt-6">
                     <div className="print-header hidden p-4"><h2 className="text-2xl font-bold">Zamówienie dla: {order.customerName}</h2><p>Data: {new Date().toLocaleDateString()}</p></div>
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left text-sm">
-                            <thead>
-                                <tr className="border-b border-gray-200 dark:border-gray-700">
-                                    <th className="p-2 cursor-pointer" onClick={() => requestSort('name')}><div className="flex items-center">Nazwa {getSortIcon('name')}</div></th>
-                                    <th className="hidden md:table-cell p-2 cursor-pointer" onClick={() => requestSort('product_code')}><div className="flex items-center">Kod produktu {getSortIcon('product_code')}</div></th>
-                                    <th className="p-2 text-right cursor-pointer" onClick={() => requestSort('price')}><div className="flex items-center justify-end">Cena {getSortIcon('price')}</div></th>
-                                    <th className="p-2 text-center cursor-pointer" onClick={() => requestSort('quantity')}><div className="flex items-center justify-center">Ilość {getSortIcon('quantity')}</div></th>
-                                    <th className="p-2 text-right">Wartość</th>
-                                    <th className="p-2 text-center">Akcje</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {sortedItems.map((item, index) => (
-                                    <tr key={item._id || index} className={`border-b border-gray-200 dark:border-gray-700 last:border-0 ${item.isCustom ? 'text-yellow-500' : ''}`}>
-                                        <td className="p-2 font-medium"><span className="truncate block max-w-[15ch] sm:max-w-none">{item.name}</span>{item.note && <p className="text-xs text-gray-400 mt-1">Notatka: {item.note}</p>}</td>
-                                        <td className="hidden md:table-cell p-2">{item.product_code}</td>
-                                        <td className="p-2 text-right">{item.price.toFixed(2)}</td>
-                                        <td className="p-2 text-center">
-                                            <input type="number" value={item.quantity || ''} onChange={(e) => updateQuantity(index, e.target.value)} onFocus={(e) => e.target.select()} className="w-16 text-center bg-transparent border rounded-md p-1 focus:ring-2 focus:ring-indigo-500 outline-none"/>
-                                        </td>
-                                        <td className="p-2 text-right font-semibold">{(item.price * (item.quantity || 0)).toFixed(2)}</td>
-                                        <td className="p-2 text-center whitespace-nowrap">
-                                            <button onClick={() => setEditModal({ isOpen: true, itemData: { ...item, originalIndex: index } })} className="p-2 text-gray-500 hover:text-yellow-500"><Edit className="w-5 h-5"/></button>
-                                            <button onClick={() => setNoteModal({ isOpen: true, itemIndex: index, text: item.note || '' })} className="p-2 text-gray-500 hover:text-blue-500"><MessageSquare className="w-5 h-5"/></button>
-                                            <button onClick={() => removeItemFromOrder(index)} className="p-2 text-gray-500 hover:text-red-500"><Trash2 className="w-5 h-5"/></button>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                    <div>
+                        {/* --- DESKTOP HEADERS --- */}
+                        <div className="hidden lg:grid lg:grid-cols-12 gap-4 items-center font-bold p-2 border-b border-gray-200 dark:border-gray-700">
+                            <div className="col-span-5 cursor-pointer" onClick={() => requestSort('name')}><div className="flex items-center">Nazwa {getSortIcon('name')}</div></div>
+                            <div className="col-span-2 cursor-pointer" onClick={() => requestSort('product_code')}><div className="flex items-center">Kod produktu {getSortIcon('product_code')}</div></div>
+                            <div className="col-span-1 text-right cursor-pointer" onClick={() => requestSort('price')}><div className="flex items-center justify-end">Cena {getSortIcon('price')}</div></div>
+                            <div className="col-span-1 text-center cursor-pointer" onClick={() => requestSort('quantity')}><div className="flex items-center justify-center">Ilość {getSortIcon('quantity')}</div></div>
+                            <div className="col-span-1 text-right">Wartość</div>
+                            <div className="col-span-2 text-center">Akcje</div>
+                        </div>
+                        <div className="lg:divide-y lg:divide-gray-200 lg:dark:divide-gray-700">
+                            {sortedItems.map((item, index) => (
+                                <div key={item._id || index} className={`block lg:grid lg:grid-cols-12 gap-4 items-center p-4 lg:p-2 ${item.isCustom ? 'bg-yellow-50 dark:bg-yellow-900/20' : 'bg-white dark:bg-gray-800'} lg:bg-transparent lg:dark:bg-transparent mb-4 lg:mb-0 rounded-lg shadow-md lg:shadow-none`}>
+
+                                    {/* Desktop view */}
+                                    <div className="hidden lg:block lg:col-span-5 font-medium">
+                                        <span className="truncate block">{item.name}</span>
+                                        {item.note && <p className="text-xs text-gray-400 mt-1">Notatka: {item.note}</p>}
+                                    </div>
+                                    <div className="hidden lg:block lg:col-span-2">{item.product_code}</div>
+                                    <div className="hidden lg:block lg:col-span-1 text-right">{item.price.toFixed(2)}</div>
+                                    <div className="hidden lg:block lg:col-span-1 text-center">
+                                        <input type="number" value={item.quantity || ''} onChange={(e) => updateQuantity(index, e.target.value)} onFocus={(e) => e.target.select()} className="w-16 text-center bg-transparent border rounded-md p-1 focus:ring-2 focus:ring-indigo-500 outline-none"/>
+                                    </div>
+                                    <div className="hidden lg:block lg:col-span-1 text-right font-semibold">{(item.price * (item.quantity || 0)).toFixed(2)}</div>
+
+                                    {/* Mobile card view */}
+                                    <div className="w-full lg:hidden">
+                                        <div className="flex justify-between items-start mb-2">
+                                            <div>
+                                                <p className="font-bold text-lg">{item.name}</p>
+                                                <p className="text-sm text-gray-500">{item.product_code}</p>
+                                                {item.note && <p className="text-xs text-gray-400 mt-1">Notatka: {item.note}</p>}
+                                            </div>
+                                            <p className="font-bold text-lg whitespace-nowrap pl-2">{(item.price * (item.quantity || 0)).toFixed(2)} PLN</p>
+                                        </div>
+                                        <div className="flex justify-between items-center mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-sm text-gray-500">Ilość:</span>
+                                                <input type="number" value={item.quantity || ''} onChange={(e) => updateQuantity(index, e.target.value)} onFocus={(e) => e.target.select()} className="w-20 text-center bg-gray-100 dark:bg-gray-700 border rounded-md p-1 focus:ring-2 focus:ring-indigo-500 outline-none"/>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                 <span className="text-sm text-gray-500">Cena:</span>
+                                                 <span className="font-semibold">{item.price.toFixed(2)}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Actions */}
+                                    <div className="lg:col-span-2 flex justify-end lg:justify-center items-center mt-2 lg:mt-0">
+                                        <button onClick={() => setEditModal({ isOpen: true, itemData: { ...item, originalIndex: index } })} className="p-2 text-gray-500 hover:text-yellow-500"><Edit className="w-5 h-5"/></button>
+                                        <button onClick={() => setNoteModal({ isOpen: true, itemIndex: index, text: item.note || '' })} className="p-2 text-gray-500 hover:text-blue-500"><MessageSquare className="w-5 h-5"/></button>
+                                        <button onClick={() => removeItemFromOrder(index)} className="p-2 text-gray-500 hover:text-red-500"><Trash2 className="w-5 h-5"/></button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
                     </div>
                     {(!order.items || order.items.length === 0) && <p className="text-center text-gray-500 py-8">Brak pozycji na zamówieniu.</p>}
                     <div ref={listEndRef} />
@@ -1487,39 +1513,52 @@ const OrdersListView = ({ onEdit }) => {
     }, [orders]);
 
     const renderOrderTable = (orderList, isArchivedView = false) => (
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-x-auto">
-            <table className="w-full text-left text-sm">
-                <thead className="bg-gray-50 dark:bg-gray-700">
-                    <tr>
-                        <th className="p-3">Klient</th>
-                        <th className="p-3 hidden md:table-cell">Autor</th>
-                        <th className="p-3 hidden sm:table-cell">Data</th>
-                        <th className="p-3 text-right">Wartość</th>
-                        <th className="p-3 text-center">Akcje</th>
-                    </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                    {orderList.map(order => (
-                        <tr key={order._id}>
-                            <td className="p-3 font-medium">{order.customerName}</td>
-                            <td className="p-3 hidden md:table-cell">{order.author}</td>
-                            <td className="p-3 hidden sm:table-cell">{new Date(order.date).toLocaleDateString()}</td>
-                            <td className="p-3 text-right font-semibold">{(order.total || 0).toFixed(2)}</td>
-                            <td className="p-3 text-center whitespace-nowrap">
-                                {!isArchivedView && (
-                                    <Tooltip text="Edytuj/Pokaż"><button onClick={() => onEdit(order._id)} className="p-2 text-blue-500 hover:text-blue-700"><Edit className="w-5 h-5"/></button></Tooltip>
-                                )}
-                                <Tooltip text={isArchivedView ? "Przywróć" : "Archiwizuj"}>
-                                    <button onClick={() => handleArchiveToggle(order._id, order.isArchived)} className={`p-2 ${isArchivedView ? 'text-green-500 hover:text-green-700' : 'text-gray-500 hover:text-gray-700'}`}>
-                                        {isArchivedView ? <RotateCcw className="w-5 h-5"/> : <Archive className="w-5 h-5"/>}
-                                    </button>
-                                </Tooltip>
-                                <Tooltip text="Usuń"><button onClick={() => setModalState({ isOpen: true, orderId: order._id, type: 'delete' })} className="p-2 text-red-500 hover:text-red-700"><Trash2 className="w-5 h-5"/></button></Tooltip>
-                            </td>
-                        </tr>
-                    ))}
-                </tbody>
-            </table>
+        <div className="space-y-4 lg:space-y-0 lg:bg-white lg:dark:bg-gray-800 lg:rounded-lg lg:shadow">
+            {/* Desktop Table Headers */}
+            <div className="hidden lg:grid grid-cols-12 gap-4 font-bold p-3 bg-gray-50 dark:bg-gray-700 rounded-t-lg">
+                <div className="col-span-4">Klient</div>
+                <div className="col-span-2">Autor</div>
+                <div className="col-span-2">Data</div>
+                <div className="col-span-2 text-right">Wartość</div>
+                <div className="col-span-2 text-center">Akcje</div>
+            </div>
+            {/* Orders List / Cards */}
+            <div className="lg:divide-y lg:divide-gray-200 lg:dark:divide-gray-700">
+                {orderList.map(order => (
+                    <div key={order._id} className="bg-white dark:bg-gray-800 rounded-lg shadow lg:shadow-none lg:grid lg:grid-cols-12 lg:gap-4 lg:items-center p-4 lg:p-3">
+                        {/* Mobile Card Content */}
+                        <div className="lg:hidden">
+                             <div className="flex justify-between items-start">
+                                <h3 className="font-bold text-lg text-indigo-600 dark:text-indigo-400">{order.customerName}</h3>
+                                <p className="font-bold text-lg">{(order.total || 0).toFixed(2)} PLN</p>
+                            </div>
+                            <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                                <p>Autor: {order.author}</p>
+                                <p>Data: {new Date(order.date).toLocaleDateString()}</p>
+                            </div>
+                        </div>
+
+                        {/* Desktop Table Content */}
+                        <div className="hidden lg:block col-span-4 font-medium">{order.customerName}</div>
+                        <div className="hidden lg:block col-span-2">{order.author}</div>
+                        <div className="hidden lg:block col-span-2">{new Date(order.date).toLocaleDateString()}</div>
+                        <div className="hidden lg:block col-span-2 text-right font-semibold">{(order.total || 0).toFixed(2)}</div>
+
+                        {/* Actions (visible on both) */}
+                        <div className="flex justify-end lg:justify-center items-center mt-3 lg:mt-0 lg:col-span-2 border-t lg:border-t-0 pt-3 lg:pt-0">
+                             {!isArchivedView && (
+                                <Tooltip text="Edytuj/Pokaż"><button onClick={() => onEdit(order._id)} className="p-2 text-blue-500 hover:text-blue-700"><Edit className="w-5 h-5"/></button></Tooltip>
+                            )}
+                            <Tooltip text={isArchivedView ? "Przywróć" : "Archiwizuj"}>
+                                <button onClick={() => handleArchiveToggle(order._id, order.isArchived)} className={`p-2 ${isArchivedView ? 'text-green-500 hover:text-green-700' : 'text-gray-500 hover:text-gray-700'}`}>
+                                    {isArchivedView ? <RotateCcw className="w-5 h-5"/> : <Archive className="w-5 h-5"/>}
+                                </button>
+                            </Tooltip>
+                            <Tooltip text="Usuń"><button onClick={() => setModalState({ isOpen: true, orderId: order._id, type: 'delete' })} className="p-2 text-red-500 hover:text-red-700"><Trash2 className="w-5 h-5"/></button></Tooltip>
+                        </div>
+                    </div>
+                ))}
+            </div>
         </div>
     );
 
@@ -2261,41 +2300,43 @@ const AdminUsersView = ({ user }) => {
     return (
         <div className="p-4 md:p-8">
             <h2 className="text-2xl font-semibold mb-4">Zarządzanie Użytkownikami</h2>
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-x-auto">
-                <table className="w-full text-left">
-                    <thead className="bg-gray-50 dark:bg-gray-700"><tr><th className="p-4 font-semibold">Użytkownik</th><th className="p-4 font-semibold">Rola</th><th className="p-4 font-semibold">Dostępne moduły</th><th className="p-4 font-semibold text-right">Akcje</th></tr></thead>
-                    <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                        {users.map(u => (
-                            <tr key={u._id}>
-                                <td className="p-4 font-medium">{u.username}<br/><span className={`text-xs font-semibold rounded-full capitalize ${u.status === 'oczekujący' ? 'text-yellow-500' : 'text-green-500'}`}>{u.status}</span></td>
-                                <td className="p-4">
-                                    <select value={u.role} onChange={(e) => handleRoleChange(u._id, e.target.value)} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-600 dark:border-gray-500 dark:placeholder-gray-400 dark:text-white" disabled={user.id === u._id}><option value="user">Użytkownik</option><option value="administrator">Administrator</option></select>
-                                </td>
-                                <td className="p-4">
-                                    <div className="flex flex-wrap gap-2">
-                                        {allModules.map(module => (
-                                            <label key={module.id} className="flex items-center text-sm">
-                                                <input
-                                                    type="checkbox"
-                                                    className="form-checkbox h-4 w-4 text-indigo-600 rounded"
-                                                    checked={u.visibleModules?.includes(module.id) || false}
-                                                    onChange={(e) => handleModuleChange(u._id, module.id, e.target.checked)}
-                                                    disabled={u.role === 'administrator'}
-                                                />
-                                                <span className="ml-2">{module.label}</span>
-                                            </label>
-                                        ))}
-                                    </div>
-                                </td>
-                                <td className="p-4 text-right whitespace-nowrap">
-                                    {u.status === 'oczekujący' && (<button onClick={() => handleApproveUser(u._id)} className="px-3 py-1 bg-green-500 text-white text-sm font-semibold rounded-lg hover:bg-green-600 mr-2">Akceptuj</button>)}
-                                    <Tooltip text="Zmień hasło"><button onClick={() => setModalState({ isOpen: true, user: u, type: 'password' })} className="p-2 text-gray-500 hover:text-blue-500"><KeyRound className="w-5 h-5" /></button></Tooltip>
-                                    {user.id !== u._id && (<Tooltip text="Usuń użytkownika"><button onClick={() => setModalState({ isOpen: true, user: u, type: 'delete' })} className="p-2 text-gray-500 hover:text-red-500"><Trash2 className="w-5 h-5" /></button></Tooltip>)}
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
+            <div className="space-y-4 lg:space-y-0 lg:bg-white lg:dark:bg-gray-800 lg:rounded-lg lg:shadow">
+                 <div className="hidden lg:grid grid-cols-10 gap-4 font-bold p-3 bg-gray-50 dark:bg-gray-700 rounded-t-lg">
+                    <div className="col-span-2">Użytkownik</div>
+                    <div className="col-span-2">Rola</div>
+                    <div className="col-span-4">Dostępne moduły</div>
+                    <div className="col-span-2 text-center">Akcje</div>
+                </div>
+                <div className="lg:divide-y lg:divide-gray-200 lg:dark:divide-gray-700">
+                    {users.map(u => (
+                        <div key={u._id} className="bg-white dark:bg-gray-800 rounded-lg shadow lg:shadow-none lg:grid lg:grid-cols-10 lg:gap-4 lg:items-center p-4 lg:p-3">
+                            <div className="lg:col-span-2 font-medium">
+                                <p>{u.username}</p>
+                                <span className={`text-xs font-semibold rounded-full capitalize ${u.status === 'oczekujący' ? 'text-yellow-500' : 'text-green-500'}`}>{u.status}</span>
+                            </div>
+                            <div className="mt-2 lg:mt-0 lg:col-span-2">
+                                <label className="lg:hidden font-bold text-sm">Rola</label>
+                                <select value={u.role} onChange={(e) => handleRoleChange(u._id, e.target.value)} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-600 dark:border-gray-500 dark:placeholder-gray-400 dark:text-white" disabled={user.id === u._id}><option value="user">Użytkownik</option><option value="administrator">Administrator</option></select>
+                            </div>
+                            <div className="mt-4 lg:mt-0 lg:col-span-4">
+                                 <label className="lg:hidden font-bold text-sm mb-2 block">Dostępne moduły</label>
+                                <div className="flex flex-wrap gap-x-4 gap-y-2">
+                                    {allModules.map(module => (
+                                        <label key={module.id} className="flex items-center text-sm">
+                                            <input type="checkbox" className="form-checkbox h-4 w-4 text-indigo-600 rounded" checked={u.visibleModules?.includes(module.id) || false} onChange={(e) => handleModuleChange(u._id, module.id, e.target.checked)} disabled={u.role === 'administrator'}/>
+                                            <span className="ml-2">{module.label}</span>
+                                        </label>
+                                    ))}
+                                </div>
+                            </div>
+                            <div className="mt-4 lg:mt-0 lg:col-span-2 text-right lg:text-center whitespace-nowrap border-t lg:border-0 pt-3 lg:pt-0">
+                                {u.status === 'oczekujący' && (<button onClick={() => handleApproveUser(u._id)} className="px-3 py-1 bg-green-500 text-white text-sm font-semibold rounded-lg hover:bg-green-600 mr-2">Akceptuj</button>)}
+                                <Tooltip text="Zmień hasło"><button onClick={() => setModalState({ isOpen: true, user: u, type: 'password' })} className="p-2 text-gray-500 hover:text-blue-500"><KeyRound className="w-5 h-5" /></button></Tooltip>
+                                {user.id !== u._id && (<Tooltip text="Usuń użytkownika"><button onClick={() => setModalState({ isOpen: true, user: u, type: 'delete' })} className="p-2 text-gray-500 hover:text-red-500"><Trash2 className="w-5 h-5" /></button></Tooltip>)}
+                            </div>
+                        </div>
+                    ))}
+                </div>
             </div>
             <Modal isOpen={modalState.isOpen && modalState.type === 'delete'} onClose={() => setModalState({isOpen: false, user: null, type: ''})} title="Potwierdź usunięcie"><p>Czy na pewno chcesz usunąć użytkownika <strong>{modalState.user?.username}</strong>? Tej operacji nie można cofnąć.</p><div className="flex justify-end gap-4 mt-6"><button onClick={() => setModalState({isOpen: false, user: null, type: ''})} className="px-4 py-2 bg-gray-200 dark:bg-gray-600 rounded-lg">Anuluj</button><button onClick={() => handleDeleteUser(modalState.user._id)} className="px-4 py-2 bg-red-600 text-white rounded-lg">Usuń</button></div></Modal>
             <Modal isOpen={modalState.isOpen && modalState.type === 'password'} onClose={() => setModalState({isOpen: false, user: null, type: ''})} title={`Zmień hasło dla ${modalState.user?.username}`}><div><label className="block mb-2 text-sm font-medium">Nowe hasło</label><input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="w-full p-3 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg"/></div><div className="flex justify-end gap-4 mt-6"><button onClick={() => setModalState({isOpen: false, user: null, type: ''})} className="px-4 py-2 bg-gray-200 dark:bg-gray-600 rounded-lg">Anuluj</button><button onClick={handleChangePassword} className="px-4 py-2 bg-blue-600 text-white rounded-lg">Zmień hasło</button></div></Modal>
@@ -2393,22 +2434,35 @@ const AdminProductsView = () => {
 
             <h3 className="text-xl font-semibold mb-4">Wszystkie produkty w bazie ({totalProducts})</h3>
             <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Filtruj produkty..." className="w-full max-w-lg p-3 mb-6 bg-white dark:bg-gray-700 border rounded-lg"/>
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-x-auto">
-                <table className="w-full text-left min-w-[800px]">
-                    <thead className="bg-gray-50 dark:bg-gray-700"><tr><th className="p-4">Nazwa</th><th className="p-4">Kod produktu</th><th className="p-4">Kody EAN</th><th className="p-4">Ilość</th><th className="p-4">Cena</th></tr></thead>
-                    <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                        {isLoading ? <tr><td colSpan="5" className="text-center p-8">Ładowanie...</td></tr> :
-                        products.map(p => (
-                            <tr key={p._id} className="border-b dark:border-gray-700">
-                                <td className="p-4">{p.name}</td>
-                                <td className="p-4">{p.product_code}</td>
-                                <td className="p-4 text-sm text-gray-500 max-w-xs truncate">{p.barcodes.join(', ')}</td>
-                                <td className="p-4">{p.quantity}</td>
-                                <td className="p-4">{p.price?.toFixed(2)} PLN</td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
+            <div className="space-y-4 lg:space-y-0 lg:bg-white lg:dark:bg-gray-800 lg:rounded-lg lg:shadow">
+                <div className="hidden lg:grid grid-cols-12 gap-4 font-bold p-3 bg-gray-50 dark:bg-gray-700 rounded-t-lg">
+                    <div className="col-span-4">Nazwa</div>
+                    <div className="col-span-3">Kod produktu</div>
+                    <div className="col-span-3">Kody EAN</div>
+                    <div className="col-span-1 text-center">Ilość</div>
+                    <div className="col-span-1 text-right">Cena</div>
+                </div>
+                <div className="lg:divide-y lg:divide-gray-200 lg:dark:divide-gray-700">
+                    {isLoading ? <div className="text-center p-8">Ładowanie...</div> :
+                    products.map(p => (
+                        <div key={p._id} className="bg-white dark:bg-gray-800 rounded-lg shadow lg:shadow-none lg:grid lg:grid-cols-12 lg:gap-4 lg:items-center p-4 lg:p-3">
+                            <div className="lg:hidden">
+                                <h3 className="font-bold text-lg">{p.name}</h3>
+                                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{p.product_code}</p>
+                                <div className="flex justify-between items-center mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
+                                    <div><span className="font-bold text-lg">{p.price?.toFixed(2)} PLN</span></div>
+                                    <div><span className="text-sm">Ilość: </span><span className="font-bold">{p.quantity}</span></div>
+                                </div>
+                                <p className="text-xs text-gray-500 mt-2 truncate">EAN: {p.barcodes.join(', ')}</p>
+                            </div>
+                            <div className="hidden lg:block col-span-4">{p.name}</div>
+                            <div className="hidden lg:block col-span-3">{p.product_code}</div>
+                            <div className="hidden lg:block col-span-3 text-sm text-gray-500 truncate">{p.barcodes.join(', ')}</div>
+                            <div className="hidden lg:block col-span-1 text-center">{p.quantity}</div>
+                            <div className="hidden lg:block col-span-1 text-right">{p.price?.toFixed(2)} PLN</div>
+                        </div>
+                    ))}
+                </div>
             </div>
             <div className="flex justify-between items-center mt-4">
                 <button onClick={() => setPage(p => p - 1)} disabled={page <= 1} className="px-4 py-2 bg-gray-300 dark:bg-gray-600 rounded-lg disabled:opacity-50">Poprzednia</button>
@@ -4430,14 +4484,15 @@ function App() {
         <>
             <div className="flex h-screen bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-sans">
                 {user && <Sidebar user={user} onLogout={handleLogout} onOpenPasswordModal={() => setIsPasswordModalOpen(true)} onNewOrder={handleNewOrder} isNavOpen={isNavOpen} setIsNavOpen={setIsNavOpen} />}
-                <main className="flex-1 flex flex-col overflow-y-auto">
+                {user && isNavOpen && <div onClick={() => setIsNavOpen(false)} className="lg:hidden fixed inset-0 bg-black bg-opacity-50 z-30"></div>}
+                <main className="flex-1 flex flex-col">
                     {user && (
                         <div className="lg:hidden p-2 bg-white dark:bg-gray-800 border-b dark:border-gray-700 flex justify-between items-center sticky top-0 z-30">
                             <button onClick={() => setIsNavOpen(!isNavOpen)} className="p-2 rounded-md"><Menu className="w-6 h-6" /></button>
                             <span className="font-semibold">{/* Można dodać tytuł widoku */}</span>
                         </div>
                     )}
-                    <div className="flex-1 overflow-y-auto">
+                    <div className={`flex-1 ${isNavOpen ? 'overflow-hidden' : 'overflow-y-auto'}`}>
                         <Routes>
                             {!user ? (
                                 <>
