@@ -4722,10 +4722,9 @@ function App() {
 
     const loadOrderForEditing = async (order) => {
         try {
-            // Jeśli to obiekt, to jest to zamówienie offline
-            if (typeof order === 'object' && order !== null && order.id.startsWith('offline_')) {
+            if (typeof order === 'object' && order !== null && String(order.id).startsWith('offline_')) {
                  setCurrentOrder({ ...order, isOffline: true });
-            } else { // W przeciwnym razie to ID zamówienia online
+            } else {
                 const onlineOrder = await api.getOrderById(order);
                 setCurrentOrder(onlineOrder);
             }
@@ -4736,6 +4735,32 @@ function App() {
         }
     };
     
+     useEffect(() => {
+        const syncOfflineOrders = async () => {
+            try {
+                const offlineOrders = await db.getAllFromOutbox();
+                if (offlineOrders.length > 0) {
+                    showNotification(`Synchronizowanie ${offlineOrders.length} zamówień...`, 'success');
+                    for (const order of offlineOrders) {
+                        // Usuwamy tymczasowe ID, serwer nada właściwe
+                        const { id, ...orderData } = order;
+                        await api.saveOrder(orderData);
+                        await db.deleteFromOutbox(id);
+                    }
+                    showNotification('Synchronizacja zakończona!', 'success');
+                }
+            } catch (error) {
+                showNotification('Błąd podczas synchronizacji zamówień.', 'error');
+                console.error("Błąd synchronizacji:", error);
+            }
+        };
+
+        if (isOnline) {
+            syncOfflineOrders();
+        }
+    }, [isOnline, showNotification]);
+
+
     useEffect(() => {
         const userData = localStorage.getItem('userData');
         if (userData) {
@@ -4750,21 +4775,10 @@ function App() {
                             const existingSubscription = await swRegistration.pushManager.getSubscription();
                             if (existingSubscription) {
                                 console.log('Użytkownik jest już zasubskrybowany.');
-                                // Opcjonalnie: zsynchronizuj subskrypcję z serwerem
                                 await api.subscribeToPush(existingSubscription);
-                            } else {
-                                console.log('Brak subskrypcji, próba zasubskrybowania...');
-                                const vapidPublicKey = await api.getVapidPublicKey();
-                                const convertedVapidKey = urlBase64ToUint8Array(vapidPublicKey);
-                                const newSubscription = await swRegistration.pushManager.subscribe({
-                                    userVisibleOnly: true,
-                                    applicationServerKey: convertedVapidKey
-                                });
-                                await api.subscribeToPush(newSubscription);
-                                console.log('Nowa subskrypcja zapisana na serwerze.');
                             }
                         } catch (error) {
-                            console.error('Błąd podczas subskrypcji powiadomień:', error);
+                            console.error('Błąd podczas sprawdzania subskrypcji:', error);
                         }
                     });
                 }
