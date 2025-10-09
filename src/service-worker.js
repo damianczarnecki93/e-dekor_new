@@ -1,6 +1,13 @@
 // Service Worker "Kamikadze"
 // Jego jedynym celem jest wyrejestrowanie samego siebie i odświeżenie strony.
 
+import { precacheAndRoute } from 'workbox-precaching';
+
+// Ta linijka jest wymagana przez workbox-cli w trybie injectManifest.
+// Zostanie ona wypełniona listą plików do buforowania, ale nie wpłynie
+// na naszą główną logikę samounicestwienia w sekcji 'activate'.
+precacheAndRoute(self.__WB_MANIFEST || []);
+
 self.addEventListener('install', (event) => {
   // Wymusza natychmiastową aktywację nowego service workera.
   self.skipWaiting();
