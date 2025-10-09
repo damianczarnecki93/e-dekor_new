@@ -4650,6 +4650,7 @@ function App() {
     const location = useLocation();
     const isOnline = useOnlineStatus();
     const { setSyncStatus } = useSyncStatus();
+    const { showNotification } = useNotification();
 
     const updateUserData = (newUserData) => {
         setUser(newUserData);
@@ -4735,30 +4736,29 @@ function App() {
         }
     };
     
-     useEffect(() => {
-        const syncOfflineOrders = async () => {
-            try {
-                const offlineOrders = await db.getAllFromOutbox();
-                if (offlineOrders.length > 0) {
-                    showNotification(`Synchronizowanie ${offlineOrders.length} zamówień...`, 'success');
-                    for (const order of offlineOrders) {
-                        // Usuwamy tymczasowe ID, serwer nada właściwe
-                        const { id, ...orderData } = order;
-                        await api.saveOrder(orderData);
-                        await db.deleteFromOutbox(id);
-                    }
-                    showNotification('Synchronizacja zakończona!', 'success');
+    const syncOfflineOrders = useCallback(async () => {
+        try {
+            const offlineOrders = await db.getAllFromOutbox();
+            if (offlineOrders.length > 0) {
+                showNotification(`Synchronizowanie ${offlineOrders.length} zamówień...`, 'success');
+                for (const order of offlineOrders) {
+                    const { id, isOffline, ...orderData } = order;
+                    await api.saveOrder(orderData);
+                    await db.deleteFromOutbox(id);
                 }
-            } catch (error) {
-                showNotification('Błąd podczas synchronizacji zamówień.', 'error');
-                console.error("Błąd synchronizacji:", error);
+                showNotification('Synchronizacja zakończona!', 'success');
             }
-        };
+        } catch (error) {
+            showNotification('Błąd podczas synchronizacji zamówień.', 'error');
+            console.error("Błąd synchronizacji:", error);
+        }
+    }, [showNotification]);
 
+    useEffect(() => {
         if (isOnline) {
             syncOfflineOrders();
         }
-    }, [isOnline, showNotification]);
+    }, [isOnline, syncOfflineOrders]);
 
 
     useEffect(() => {
