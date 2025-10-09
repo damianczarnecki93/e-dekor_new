@@ -7,6 +7,7 @@ import { pl } from 'date-fns/locale';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { GoogleMap, useLoadScript, Marker, DirectionsRenderer } from '@react-google-maps/api';
+import * as db from './db';
 
 // --- Komponent Granicy Błędu (Error Boundary) ---
 class ErrorBoundary extends React.Component {
@@ -61,6 +62,36 @@ const NotificationProvider = ({ children }) => {
     );
 };
 const useNotification = () => useContext(NotificationContext);
+
+// --- Kontekst Statusu Synchronizacji ---
+const SyncStatusContext = createContext();
+const SyncStatusProvider = ({ children }) => {
+    const [syncStatus, setSyncStatus] = useState({
+        isLoading: false,
+        message: '',
+        progress: 0,
+    });
+
+    return (
+        <SyncStatusContext.Provider value={{ syncStatus, setSyncStatus }}>
+            {children}
+            {syncStatus.isLoading && (
+                <div className="fixed inset-0 bg-black bg-opacity-80 z-[200] flex flex-col justify-center items-center text-white backdrop-blur-sm">
+                    <h2 className="text-2xl font-bold mb-4">{syncStatus.message}</h2>
+                    <div className="w-full max-w-md bg-gray-600 rounded-full h-4">
+                        <div
+                            className="bg-blue-500 h-4 rounded-full transition-all duration-300"
+                            style={{ width: `${syncStatus.progress}%` }}
+                        ></div>
+                    </div>
+                    <p className="mt-2 text-lg">{Math.round(syncStatus.progress)}%</p>
+                </div>
+            )}
+        </SyncStatusContext.Provider>
+    );
+};
+const useSyncStatus = () => useContext(SyncStatusContext);
+
 
 // --- API Client ---
 const API_BASE_URL = '';
@@ -1100,6 +1131,7 @@ const EditProductModal = ({ isOpen, onClose, itemData, onSave }) => {
 
 const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }) => {
     const [order, setOrder] = useState(currentOrder);
+    const isOnline = useOnlineStatus();
     const [noteModal, setNoteModal] = useState({ isOpen: false, itemIndex: null, text: '' });
     const [editModal, setEditModal] = useState({ isOpen: false, itemData: null });
     const listEndRef = useRef(null);
@@ -1242,23 +1274,28 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
 
     const handleSaveOrder = async () => {
         if (!order.customerName) { showNotification('Proszę podać nazwę klienta.', 'error'); return; }
+
+        const orderToSave = { ...order, author: user.username, total: totalValue };
+
+        if (!isOnline) {
+            try {
+                await db.putInOutbox(orderToSave);
+                showNotification('Jesteś offline. Zamówienie zapisano lokalnie.', 'success');
+                onNewOrder(true); // Przekaż flagę, by nie pokazywać potwierdzenia
+            } catch (dbError) {
+                showNotification(`Błąd zapisu lokalnego: ${dbError.message}`, 'error');
+            }
+            return;
+        }
+
         try {
-            const orderToSave = { ...order, author: user.username };
             const { message, order: savedOrder } = await api.saveOrder(orderToSave);
             showNotification(message, 'success');
             localStorage.removeItem('draftOrder');
             setCurrentOrder(savedOrder);
             setDirty(false);
         } catch (error) {
-            if (!navigator.onLine) {
-                showNotification('Jesteś offline. Zamówienie zapisano w kolejce do wysłania.', 'success');
-                const newBlankOrder = { customerName: '', items: [], isDirty: false };
-                localStorage.setItem('draftOrder', JSON.stringify(newBlankOrder));
-                setCurrentOrder(newBlankOrder);
-                setDirty(false);
-            } else {
-                showNotification(error.message, 'error');
-            }
+            showNotification(error.message, 'error');
         }
     };
     
@@ -1523,18 +1560,25 @@ const OrdersListView = ({ onEdit }) => {
     const [filters, setFilters] = useState({ customer: '', author: '', dateFrom: '', dateTo: '', showArchived: false });
     const [showFilters, setShowFilters] = useState(false);
     const importMultipleRef = useRef(null);
+    const isOnline = useOnlineStatus();
 
     const fetchOrders = useCallback(async () => {
         setIsLoading(true);
         try {
-            const fetchedOrders = await api.getOrders(filters);
-            setOrders(fetchedOrders);
+            if (isOnline) {
+                const fetchedOrders = await api.getOrders(filters);
+                setOrders(fetchedOrders);
+            } else {
+                const offlineOrders = await db.getAllFromOutbox();
+                setOrders(offlineOrders);
+                showNotification('Wyświetlono zamówienia zapisane lokalnie.', 'success');
+            }
         } catch (error) {
             showNotification(error.message, 'error');
         } finally {
             setIsLoading(false);
         }
-    }, [filters, showNotification]);
+    }, [filters, showNotification, isOnline]);
 
     useEffect(() => {
         fetchOrders();
@@ -4482,6 +4526,8 @@ const Sidebar = ({ user, onLogout, onOpenPasswordModal, onNewOrder, isNavOpen, s
     const [isDarkMode, setIsDarkMode] = useState(document.documentElement.classList.contains('dark'));
     const [expandedCategories, setExpandedCategories] = useState(['Główne']);
     const location = useLocation();
+    const isOnline = useOnlineStatus();
+    const { showNotification } = useNotification();
 
     const toggleTheme = () => {
         const newIsDarkMode = !isDarkMode;
@@ -4502,8 +4548,8 @@ const Sidebar = ({ user, onLogout, onOpenPasswordModal, onNewOrder, isNavOpen, s
     };
 
     const navConfig = useMemo(() => [
-        { category: 'Główne', items: [ { id: 'dashboard', label: 'Panel Główny', icon: Home, roles: ['user', 'administrator'], alwaysVisible: true }, { id: 'search', label: 'Wyszukiwarka', icon: Search, roles: ['user', 'administrator'] }, ] },
-        { category: 'Sprzedaż', items: [ { id: 'order', label: 'Nowe Zamówienie', icon: PlusCircle, roles: ['user', 'administrator'], action: onNewOrder }, { id: 'orders', label: 'Zamówienia', icon: Archive, roles: ['user', 'administrator'] }, ] },
+        { category: 'Główne', items: [ { id: 'dashboard', label: 'Panel Główny', icon: Home, roles: ['user', 'administrator'], alwaysVisible: true }, { id: 'search', label: 'Wyszukiwarka', icon: Search, roles: ['user', 'administrator'], offline: true }, ] },
+        { category: 'Sprzedaż', items: [ { id: 'order', label: 'Nowe Zamówienie', icon: PlusCircle, roles: ['user', 'administrator'], action: onNewOrder, offline: true }, { id: 'orders', label: 'Zamówienia', icon: Archive, roles: ['user', 'administrator'], offline: true }, ] },
         { category: 'Magazyn', items: [ { id: 'picking', label: 'Kompletacja', icon: List, roles: ['user', 'administrator'] }, { id: 'inventory', label: 'Inwentaryzacja', icon: Wrench, roles: ['user', 'administrator'] }, ] },
         { category: 'Organizacyjne', items: [ { id: 'kanban', label: 'Tablica Zadań', icon: ClipboardList, roles: ['user', 'administrator'] }, { id: 'delegations', label: 'Delegacje', icon: Plane, roles: ['user', 'administrator'] }, { id: 'crm', label: 'Kontakty', icon: Users, roles: ['user', 'administrator'] }, ] },
 		{ category: 'Raporty', items: [ { id: 'shortage-report', label: 'Raport Braków', icon: ClipboardCheck, roles: ['user', 'administrator'] }, ] },
@@ -4514,6 +4560,16 @@ const Sidebar = ({ user, onLogout, onOpenPasswordModal, onNewOrder, isNavOpen, s
         if (!user) return [];
         return navConfig.map(category => ({ ...category, items: category.items.filter(item => user.role === 'administrator' || item.roles.includes(user.role) && (item.alwaysVisible || user.visibleModules?.includes(item.id)))})).filter(category => category.items.length > 0);
     }, [user, navConfig]);
+
+    const handleLinkClick = (e, item) => {
+        if (!isOnline && !item.offline) {
+            e.preventDefault();
+            showNotification("Ta funkcja jest niedostępna w trybie offline.", "error");
+            return;
+        }
+        if (item.action) item.action();
+        setIsNavOpen(false);
+    };
 
     return (
         <nav className={`w-64 bg-white dark:bg-gray-800 shadow-lg flex flex-col flex-shrink-0 transition-transform duration-300 ease-in-out z-40 fixed lg:static h-full ${isNavOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}>
@@ -4527,14 +4583,28 @@ const Sidebar = ({ user, onLogout, onOpenPasswordModal, onNewOrder, isNavOpen, s
                             {category.category}
                             {expandedCategories.includes(category.category) ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                         </h3>
-                        {expandedCategories.includes(category.category) && category.items.map(item => (
-                            <li key={item.id}>
-                                <Link to={`/${item.id}`} onClick={() => { if(item.action) item.action(); setIsNavOpen(false); }} className={`w-full flex items-center justify-start h-12 px-6 text-base transition-colors duration-200 text-left ${location.pathname.startsWith(`/${item.id}`) ? 'bg-indigo-50 dark:bg-gray-700 text-indigo-600 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'}`}>
-                                    <item.icon className="h-5 w-5" />
-                                    <span className="ml-4">{item.label}</span>
-                                </Link>
-                            </li>
-                        ))}
+                        {expandedCategories.includes(category.category) && category.items.map(item => {
+                            const isOfflineAndDisabled = !isOnline && !item.offline;
+                            const isActive = location.pathname.startsWith(`/${item.id}`);
+                            return (
+                                <li key={item.id}>
+                                    <Link
+                                        to={isOfflineAndDisabled ? '#' : `/${item.id}`}
+                                        onClick={(e) => handleLinkClick(e, item)}
+                                        className={`w-full flex items-center justify-start h-12 px-6 text-base transition-colors duration-200 text-left ${
+                                            isActive && !isOfflineAndDisabled
+                                                ? 'bg-indigo-50 dark:bg-gray-700 text-indigo-600 dark:text-white'
+                                                : isOfflineAndDisabled
+                                                    ? 'text-gray-400 dark:text-gray-500 cursor-not-allowed'
+                                                    : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
+                                        }`}
+                                    >
+                                        <item.icon className="h-5 w-5" />
+                                        <span className="ml-4">{item.label}</span>
+                                    </Link>
+                                </li>
+                            );
+                        })}
                     </div>
                 ))}
             </ul>
@@ -4579,23 +4649,47 @@ function App() {
     const navigate = useNavigate();
     const location = useLocation();
     const isOnline = useOnlineStatus();
+    const { setSyncStatus } = useSyncStatus();
 
     const updateUserData = (newUserData) => {
         setUser(newUserData);
         localStorage.setItem('userData', JSON.stringify(newUserData));
     };
 
-    const handleLogin = useCallback((data) => {
+    const handleLogin = useCallback(async (data) => {
         localStorage.setItem('userToken', data.token);
         localStorage.setItem('userData', JSON.stringify(data.user));
         setUser(data.user);
+
+        const isDataCached = localStorage.getItem('offlineDataCached') === 'true';
+
+        if (!isDataCached && navigator.onLine) {
+            setSyncStatus({ isLoading: true, message: 'Przygotowywanie do pracy offline...', progress: 0 });
+            try {
+                setSyncStatus(prev => ({ ...prev, message: 'Pobieranie produktów...', progress: 10 }));
+                await api.getPwaAllProducts(); // This will be cached by the service worker
+                setSyncStatus(prev => ({ ...prev, message: 'Pobieranie kontaktów...', progress: 50 }));
+                await api.getContacts(); // This will also be cached
+                setSyncStatus(prev => ({ ...prev, message: 'Finalizowanie...', progress: 90 }));
+
+                localStorage.setItem('offlineDataCached', 'true');
+                setSyncStatus({ isLoading: false, message: '', progress: 100 });
+            } catch (error) {
+                console.error("Błąd podczas buforowania danych offline:", error);
+                setSyncStatus({ isLoading: false, message: '', progress: 0 });
+                alert("Nie udało się pobrać wszystkich danych do trybu offline. Niektóre funkcje mogą nie działać bez połączenia z internetem.");
+            }
+        }
+
         navigate('/dashboard');
-    }, [navigate]);
+    }, [navigate, setSyncStatus]);
 
     const handleLogout = useCallback(async () => {
         localStorage.removeItem('userToken');
         localStorage.removeItem('userData');
         localStorage.removeItem('draftOrder');
+        // Opcjonalnie: wyczyść flagę, by przy następnym logowaniu dane pobrały się ponownie
+        // localStorage.removeItem('offlineDataCached');
         setUser(null);
         navigate('/login');
     }, [navigate]);
@@ -4626,13 +4720,19 @@ function App() {
         };
     }, [handleLogout]);
 
-    const loadOrderForEditing = async (orderId) => {
+    const loadOrderForEditing = async (order) => {
         try {
-            const order = await api.getOrderById(orderId);
-            setCurrentOrder(order);
+            // Jeśli to obiekt, to jest to zamówienie offline
+            if (typeof order === 'object' && order !== null && order.id.startsWith('offline_')) {
+                 setCurrentOrder({ ...order, isOffline: true });
+            } else { // W przeciwnym razie to ID zamówienia online
+                const onlineOrder = await api.getOrderById(order);
+                setCurrentOrder(onlineOrder);
+            }
             navigate('/order');
         } catch (error) {
-            console.error("Błąd ładowania zamówienia", error);
+            showNotification(error.message, 'error');
+            console.error("Błąd ładowania zamówienia do edycji", error);
         }
     };
     
@@ -4740,9 +4840,11 @@ export default function AppWrapper() {
     return (
         <ErrorBoundary>
             <NotificationProvider>
-                <Router>
-                    <App />
-                </Router>
+                <SyncStatusProvider>
+                    <Router>
+                        <App />
+                    </Router>
+                </SyncStatusProvider>
             </NotificationProvider>
         </ErrorBoundary>
     );
