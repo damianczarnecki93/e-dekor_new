@@ -1,20 +1,25 @@
 {
-  "short_name": "PWA App",
-  "name": "Aplikacja PWA",
+  "short_name": "E-Dekor",
+  "name": "E-Dekor - System Sprzedaży",
   "icons": [
     {
-      "src": "icons/icon-192x192.png",
+      "src": "favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    },
+    {
+      "src": "logo192.png",
       "type": "image/png",
       "sizes": "192x192"
     },
     {
-      "src": "icons/icon-512x512.png",
+      "src": "logo512.png",
       "type": "image/png",
       "sizes": "512x512"
     }
   ],
   "start_url": ".",
   "display": "standalone",
-  "theme_color": "#2A3443",
+  "theme_color": "#ffffff",
   "background_color": "#ffffff"
 }
