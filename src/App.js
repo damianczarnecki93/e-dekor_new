@@ -92,6 +92,30 @@ const SyncStatusProvider = ({ children }) => {
 };
 const useSyncStatus = () => useContext(SyncStatusContext);
 
+// --- Kontekst Danych Offline ---
+const OfflineDataContext = createContext();
+const OfflineDataProvider = ({ children }) => {
+    const [offlineData, setOfflineData] = useState({ products: [], contacts: [] });
+    return (
+        <OfflineDataContext.Provider value={{ offlineData, setOfflineData }}>
+            {children}
+        </OfflineDataContext.Provider>
+    );
+};
+const useOfflineData = () => useContext(OfflineDataContext);
+
+// --- Kontekst Danych Offline ---
+const OfflineDataContext = createContext();
+const OfflineDataProvider = ({ children }) => {
+    const [offlineData, setOfflineData] = useState({ products: [], contacts: [] });
+    return (
+        <OfflineDataContext.Provider value={{ offlineData, setOfflineData }}>
+            {children}
+        </OfflineDataContext.Provider>
+    );
+};
+const useOfflineData = () => useContext(OfflineDataContext);
+
 
 // --- API Client ---
 const API_BASE_URL = '';
@@ -905,7 +929,7 @@ const CustomProductForm = ({ ean, onSubmit, onSkip }) => {
     );
 };
 
-const PinnedInputBar = ({ onProductAdd, onSave, isDirty, allProducts }) => {
+const PinnedInputBar = ({ onProductAdd, onSave, isDirty }) => {
     const [query, setQuery] = useState('');
     const [quantity, setQuantity] = useState(1);
     const [suggestions, setSuggestions] = useState([]);
@@ -4855,9 +4879,11 @@ export default function AppWrapper() {
         <ErrorBoundary>
             <NotificationProvider>
                 <SyncStatusProvider>
-                    <Router>
-                        <App />
-                    </Router>
+                    <OfflineDataProvider>
+                        <Router>
+                            <App />
+                        </Router>
+                    </OfflineDataProvider>
                 </SyncStatusProvider>
             </NotificationProvider>
         </ErrorBoundary>
