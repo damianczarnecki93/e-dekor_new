@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "start": "react-scripts start",
-    "build": "GENERATE_SOURCEMAP=false react-scripts build",
+    "build": "GENERATE_SOURCEMAP=false react-scripts build && npx workbox-cli injectManifest workbox-config.js",
     "test": "react-scripts test"
   },
   "proxy": "http://localhost:3001",
@@ -12,9 +12,9 @@
     "@react-google-maps/api": "^2.19.3",
     "axios": "^1.7.2",
     "bcryptjs": "^2.4.3",
+    "cookie-parser": "^1.4.6",
     "cors": "^2.8.5",
     "csv-parser": "^3.0.0",
-    "cookie-parser": "^1.4.6",
     "date-fns": "^2.30.0",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
@@ -30,7 +30,14 @@
     "react-beautiful-dnd": "^13.1.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.25.1",
-    "react-scripts": "5.0.1"
+    "react-scripts": "5.0.1",
+    "serve": "^14.2.5",
+    "workbox-cacheable-response": "^7.3.0",
+    "workbox-core": "^7.3.0",
+    "workbox-expiration": "^7.3.0",
+    "workbox-precaching": "^7.3.0",
+    "workbox-routing": "^7.3.0",
+    "workbox-strategies": "^7.3.0"
   },
   "browserslist": {
     "production": [
@@ -43,5 +50,8 @@
       "last 1 firefox version",
       "last 1 safari version"
     ]
+  },
+  "devDependencies": {
+    "workbox-cli": "^7.3.0"
   }
 }
