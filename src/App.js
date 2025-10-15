@@ -4,7 +4,6 @@ import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'r
 import { NotificationProvider } from './contexts/NotificationContext';
 import ErrorBoundary from './components/ErrorBoundary';
 import AuthPage from './components/auth/AuthPage';
-import Sidebar from './components/layout/Sidebar';
 import Topbar from './components/layout/Topbar';
 import DashboardView from './components/dashboard/DashboardView';
 import MainSearchView from './components/product/MainSearchView';
@@ -46,7 +45,6 @@ function App() {
     const [currentOrder, setCurrentOrder] = useState(getInitialOrder);
     const [isDirty, setIsDirty] = useState(false);
     const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
-    const [isNavOpen, setIsNavOpen] = useState(false);
     const [isDarkMode, setIsDarkMode] = useState(document.documentElement.classList.contains('dark'));
     const navigate = useNavigate();
 
@@ -60,11 +58,6 @@ function App() {
             document.documentElement.classList.remove('dark');
             localStorage.setItem('theme', 'light');
         }
-    };
-
-    const updateUserData = (newUserData) => {
-        setUser(newUserData);
-        localStorage.setItem('userData', JSON.stringify(newUserData));
     };
 
     const handleLogin = useCallback((data) => {
@@ -132,51 +125,46 @@ function App() {
     
     return (
         <>
-            <div className="flex h-screen bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-sans">
-                {user && <Sidebar user={user} onNewOrder={handleNewOrder} isNavOpen={isNavOpen} setIsNavOpen={setIsNavOpen} />}
-                {user && isNavOpen && <div onClick={() => setIsNavOpen(false)} className="lg:hidden fixed inset-0 bg-black bg-opacity-50 z-30"></div>}
-                <main className="flex-1 flex flex-col">
-                    {user && (
-                        <Topbar
-                            user={user}
-                            onLogout={handleLogout}
-                            onOpenPasswordModal={() => setIsPasswordModalOpen(true)}
-                            isDarkMode={isDarkMode}
-                            toggleTheme={toggleTheme}
-                            setIsNavOpen={setIsNavOpen}
-                        />
-                    )}
-                    <div className="flex-1 overflow-y-auto">
-                        <Routes>
-                            {!user ? (
-                                <>
-                                    <Route path="/login" element={<AuthPage onLogin={handleLogin} />} />
-                                    <Route path="*" element={<Navigate to="/login" replace />} />
-                                </>
-                            ) : (
-                                <>
-                                    <Route path="/dashboard" element={<DashboardView user={user} onNewOrder={handleNewOrder} />} />
-                                    <Route path="/search" element={<MainSearchView />} />
-                                    <Route path="/order" element={<OrderView currentOrder={currentOrder} setCurrentOrder={setCurrentOrder} user={user} setDirty={setIsDirty} onNewOrder={handleNewOrder} />} />
-                                    <Route path="/orders" element={<OrdersListView onEdit={loadOrderForEditing} />} />
-                                    <Route path="/picking" element={<PickingView />} />
-                                    <Route path="/inventory" element={<InventoryView user={user} onNavigate={navigate} isDirty={isDirty} setIsDirty={setIsDirty} />} />
-                                    <Route path="/inventory-sheet" element={<NewInventorySheet user={user} onSave={() => navigate('/inventory')} setDirty={setIsDirty} />} />
-                                    <Route path="/inventory-sheet/:inventoryId" element={<NewInventorySheet user={user} onSave={() => navigate('/inventory')} setDirty={setIsDirty} />} />
-                                    <Route path="/kanban" element={<KanbanView user={user} />} />
-                                    <Route path="/delegations" element={<DelegationsView user={user} onNavigate={navigate} setCurrentOrder={setCurrentOrder} />} />
-									<Route path="/crm" element={<CrmView user={user} />} />
-                                    <Route path="/admin" element={<AdminView user={user} onNavigate={navigate} />} />
-                                    <Route path="/admin-users" element={<AdminUsersView user={user} />} />
-                                    <Route path="/admin-products" element={<AdminProductsView />} />
-                                    <Route path="/shortage-report" element={<ShortageReportView />} />
-                                    <Route path="/admin-email" element={<AdminEmailConfigView />} />
-                                    <Route path="/" element={<Navigate to="/dashboard" replace />} />
-                                    <Route path="*" element={<Navigate to="/dashboard" replace />} />
-                                </>
-                            )}
-                        </Routes>
-                    </div>
+            <div className="flex flex-col h-screen bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-sans">
+                {user && (
+                    <Topbar
+                        user={user}
+                        onLogout={handleLogout}
+                        onOpenPasswordModal={() => setIsPasswordModalOpen(true)}
+                        isDarkMode={isDarkMode}
+                        toggleTheme={toggleTheme}
+                    />
+                )}
+                <main className="flex-1 overflow-y-auto">
+                    <Routes>
+                        {!user ? (
+                            <>
+                                <Route path="/login" element={<AuthPage onLogin={handleLogin} />} />
+                                <Route path="*" element={<Navigate to="/login" replace />} />
+                            </>
+                        ) : (
+                            <>
+                                <Route path="/dashboard" element={<DashboardView user={user} onNewOrder={handleNewOrder} />} />
+                                <Route path="/search" element={<MainSearchView />} />
+                                <Route path="/order" element={<OrderView currentOrder={currentOrder} setCurrentOrder={setCurrentOrder} user={user} setDirty={setIsDirty} onNewOrder={handleNewOrder} />} />
+                                <Route path="/orders" element={<OrdersListView onEdit={loadOrderForEditing} />} />
+                                <Route path="/picking" element={<PickingView />} />
+                                <Route path="/inventory" element={<InventoryView user={user} onNavigate={navigate} isDirty={isDirty} setIsDirty={setIsDirty} />} />
+                                <Route path="/inventory-sheet" element={<NewInventorySheet user={user} onSave={() => navigate('/inventory')} setDirty={setIsDirty} />} />
+                                <Route path="/inventory-sheet/:inventoryId" element={<NewInventorySheet user={user} onSave={() => navigate('/inventory')} setDirty={setIsDirty} />} />
+                                <Route path="/kanban" element={<KanbanView user={user} />} />
+                                <Route path="/delegations" element={<DelegationsView user={user} onNavigate={navigate} setCurrentOrder={setCurrentOrder} />} />
+                                <Route path="/crm" element={<CrmView user={user} />} />
+                                <Route path="/admin" element={<AdminView user={user} onNavigate={navigate} />} />
+                                <Route path="/admin-users" element={<AdminUsersView user={user} />} />
+                                <Route path="/admin-products" element={<AdminProductsView />} />
+                                <Route path="/shortage-report" element={<ShortageReportView />} />
+                                <Route path="/admin-email" element={<AdminEmailConfigView />} />
+                                <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                                <Route path="*" element={<Navigate to="/dashboard" replace />} />
+                            </>
+                        )}
+                    </Routes>
                 </main>
             </div>
             <UserChangePasswordModal isOpen={isPasswordModalOpen} onClose={() => setIsPasswordModalOpen(false)} />
