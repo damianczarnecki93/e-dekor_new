@@ -30,6 +30,7 @@ const PinnedInputBar = ({ onProductAdd, onSave, isDirty }) => {
                     setQuery('');
                     setQuantity(1);
                     setSuggestions([]);
+                    inputRef.current?.focus();
                 } else {
                     setSuggestions(results);
                 }
