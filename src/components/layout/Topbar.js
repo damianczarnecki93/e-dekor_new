@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Home, ArrowLeft, KeyRound, LogOut, Sun, Moon, ChevronDown } from 'lucide-react';
-import Tooltip from '../common/Tooltip';
 
 const Topbar = ({ user, onLogout, onOpenPasswordModal, isDarkMode, toggleTheme }) => {
     const navigate = useNavigate();
@@ -21,23 +20,17 @@ const Topbar = ({ user, onLogout, onOpenPasswordModal, isDarkMode, toggleTheme }
     return (
         <div className="bg-white dark:bg-gray-800 shadow-md p-2 flex justify-between items-center sticky top-0 z-30">
             <div className="flex items-center gap-2">
-                <Tooltip text="Panel Główny">
-                    <button onClick={() => navigate('/dashboard')} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700">
-                        <Home className="w-6 h-6" />
-                    </button>
-                </Tooltip>
-                <Tooltip text="Cofnij">
-                    <button onClick={() => navigate(-1)} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700">
-                        <ArrowLeft className="w-6 h-6" />
-                    </button>
-                </Tooltip>
+                <button onClick={() => navigate('/dashboard')} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700">
+                    <Home className="w-6 h-6" />
+                </button>
+                <button onClick={() => navigate(-1)} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700">
+                    <ArrowLeft className="w-6 h-6" />
+                </button>
             </div>
             <div className="flex items-center gap-4">
-                <Tooltip text="Zmień motyw">
-                    <button onClick={toggleTheme} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700">
-                        {isDarkMode ? <Sun className="h-6 w-6 text-yellow-400" /> : <Moon className="h-6 w-6 text-indigo-500" />}
-                    </button>
-                </Tooltip>
+                <button onClick={toggleTheme} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700">
+                    {isDarkMode ? <Sun className="h-6 w-6 text-yellow-400" /> : <Moon className="h-6 w-6 text-indigo-500" />}
+                </button>
                 <div className="relative" ref={menuRef}>
                     <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="flex items-center gap-2 cursor-pointer p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
                         <div className="text-right">
