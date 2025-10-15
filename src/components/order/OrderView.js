@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { PlusCircle, FileText, FileDown, FileUp } from 'lucide-react';
+import { PlusCircle, FileText, FileDown, FileUp, CheckCircle2 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { api } from '../../api';
@@ -14,6 +14,7 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
     const [order, setOrder] = useState(currentOrder);
     const [noteModal, setNoteModal] = useState({ isOpen: false, itemIndex: null, text: '' });
     const [editModal, setEditModal] = useState({ isOpen: false, itemData: null });
+    const [isSaving, setIsSaving] = useState(false);
     const listEndRef = useRef(null);
     const printRef = useRef(null);
     const importFileRef = useRef(null);
@@ -71,40 +72,68 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
     };
 
     const handleSelectContact = (contact) => {
-        updateOrder({
+        const updatedOrder = {
+            ...order,
             customerName: contact.name,
             customerId: contact._id,
-        });
+            items: order.items.map(item => ({...item, isSaved: false}))
+        };
+        updateOrder(updatedOrder, true);
+        handleAutoSave(updatedOrder);
         setContactSearchQuery(contact.name);
         setContactSuggestions([]);
     };
 
-    const addProductToOrder = (product, quantity) => {
-        const newItems = [...(order.items || [])];
-        const productBarcode = product.barcodes && product.barcodes.length > 0 ? product.barcodes[0] : null;
+    const handleAutoSave = async (updatedOrder) => {
+        if (isSaving || !updatedOrder.customerName) return;
+        setIsSaving(true);
+        try {
+            const orderToSave = { ...updatedOrder, author: user.username };
+            const { order: savedOrder } = await api.saveOrder(orderToSave);
 
+            const finalOrder = {
+                ...savedOrder,
+                items: savedOrder.items.map(item => ({ ...item, isSaved: true })),
+                isDirty: false
+            };
+
+            setCurrentOrder(finalOrder);
+            localStorage.setItem('draftOrder', JSON.stringify(finalOrder));
+            setDirty(false);
+        } catch (error) {
+            showNotification(error.message, 'error');
+            setDirty(true);
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const addProductToOrder = (product, quantity) => {
+        const newItems = [...(order.items || [])].map(item => ({ ...item, isSaved: false }));
+        const productBarcode = product.barcodes && product.barcodes.length > 0 ? product.barcodes[0] : null;
         let existingItemIndex = -1;
 
         if (productBarcode) {
             existingItemIndex = newItems.findIndex(item => item.barcodes && item.barcodes.includes(productBarcode));
         } else {
-            // Fallback for products without barcodes
             existingItemIndex = newItems.findIndex(item => item._id === product._id);
         }
 
         if (existingItemIndex > -1) {
             newItems[existingItemIndex].quantity += quantity;
         } else {
-            newItems.push({ ...product, quantity: quantity, note: '' });
+            newItems.push({ ...product, quantity: quantity, note: '', isSaved: false });
         }
-        updateOrder({ items: newItems });
+
+        const updatedOrder = { ...order, items: newItems, isDirty: true };
+        updateOrder(updatedOrder, true);
+        handleAutoSave(updatedOrder);
     };
 
     const updateQuantity = (itemIndex, newQuantityStr) => {
-        const newItems = [...order.items];
+        const newItems = [...order.items].map(item => ({...item, isSaved: false}));
         const newQuantity = parseInt(newQuantityStr, 10);
         const originalItem = sortedItems[itemIndex];
-
         const targetIndex = newItems.findIndex(item => item._id === originalItem._id);
 
         if (targetIndex !== -1) {
@@ -113,7 +142,9 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
             } else if (newQuantityStr === '') {
                 newItems[targetIndex].quantity = 0;
             }
-            updateOrder({ items: newItems });
+            const updatedOrder = { ...order, items: newItems, isDirty: true };
+            updateOrder(updatedOrder, true);
+            handleAutoSave(updatedOrder);
         }
     };
 
@@ -128,34 +159,34 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
         };
 
     const removeItemFromOrder = (itemIndex) => {
-        const newItems = [...order.items];
+        const newItems = [...order.items].map(item => ({...item, isSaved: false}));
         const originalItem = sortedItems[itemIndex];
         const targetIndex = newItems.findIndex(item => item._id === originalItem._id);
         if (targetIndex !== -1) {
             newItems.splice(targetIndex, 1);
-            updateOrder({ items: newItems });
+            const updatedOrder = { ...order, items: newItems, isDirty: true };
+            updateOrder(updatedOrder, true);
+            handleAutoSave(updatedOrder);
         }
     };
 
     const handleNoteSave = () => {
-        const newItems = [...order.items];
+        const newItems = [...order.items].map(item => ({...item, isSaved: false}));
         newItems[noteModal.itemIndex].note = noteModal.text;
-        updateOrder({ items: newItems });
+        const updatedOrder = { ...order, items: newItems, isDirty: true };
+        updateOrder(updatedOrder, true);
+        handleAutoSave(updatedOrder);
         setNoteModal({ isOpen: false, itemIndex: null, text: '' });
     };
 
     const totalValue = useMemo(() => (order.items || []).reduce((sum, item) => sum + item.price * (item.quantity || 0), 0), [order.items]);
 
     const handleSaveOrder = async () => {
-        if (!order.customerName) { showNotification('Proszę podać nazwę klienta.', 'error'); return; }
-        try {
-            const orderToSave = { ...order, author: user.username };
-            const { message, order: savedOrder } = await api.saveOrder(orderToSave);
-            showNotification(message, 'success');
-            localStorage.removeItem('draftOrder');
-            setCurrentOrder(savedOrder);
-            setDirty(false);
-        } catch (error) { showNotification(error.message, 'error'); }
+        if (!order.customerName) {
+            showNotification('Proszę podać nazwę klienta.', 'error');
+            return;
+        }
+        await handleAutoSave(order);
     };
 
     const handleFileImport = async (event) => {
@@ -261,8 +292,16 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
                             type="text"
                             value={contactSearchQuery}
                             onChange={(e) => {
-                                setContactSearchQuery(e.target.value);
-                                updateOrder({ customerName: e.target.value, customerId: null });
+                                const newName = e.target.value;
+                                setContactSearchQuery(newName);
+                                const updatedOrder = {
+                                    ...order,
+                                    customerName: newName,
+                                    customerId: null,
+                                    items: order.items.map(item => ({...item, isSaved: false}))
+                                };
+                                updateOrder(updatedOrder, true);
+                                handleAutoSave(updatedOrder);
                             }}
                             placeholder="Wprowadź nazwę klienta"
                             className="w-full p-3 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -314,7 +353,8 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
                         <div className="lg:divide-y lg:divide-gray-200 lg:dark:divide-gray-700">
                             {sortedItems.map((item, index) => (
                                 <div key={item._id || index} className={`block lg:grid lg:grid-cols-12 gap-4 items-center p-4 lg:p-2 ${item.isCustom ? 'bg-yellow-50 dark:bg-yellow-900/20' : 'bg-white dark:bg-gray-800'} lg:bg-transparent lg:dark:bg-transparent mb-4 lg:mb-0 rounded-lg shadow-md lg:shadow-none`}>
-                                    <div className="hidden lg:block lg:col-span-5 font-medium">
+                                    <div className="hidden lg:flex lg:col-span-5 font-medium items-center">
+                                        {item.isSaved && <CheckCircle2 className="w-5 h-5 text-green-500 mr-2" />}
                                         <span className="truncate block">{item.name}</span>
                                         {item.note && <p className="text-xs text-gray-400 mt-1">Notatka: {item.note}</p>}
                                     </div>
