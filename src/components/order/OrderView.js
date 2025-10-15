@@ -81,7 +81,17 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
 
     const addProductToOrder = (product, quantity) => {
         const newItems = [...(order.items || [])];
-        const existingItemIndex = newItems.findIndex(item => item._id === product._id && !item.isCustom);
+        const productBarcode = product.barcodes && product.barcodes.length > 0 ? product.barcodes[0] : null;
+
+        let existingItemIndex = -1;
+
+        if (productBarcode) {
+            existingItemIndex = newItems.findIndex(item => item.barcodes && item.barcodes.includes(productBarcode));
+        } else {
+            // Fallback for products without barcodes
+            existingItemIndex = newItems.findIndex(item => item._id === product._id);
+        }
+
         if (existingItemIndex > -1) {
             newItems[existingItemIndex].quantity += quantity;
         } else {
@@ -352,7 +362,7 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
                 </div>
             </div>
 
-            <PinnedInputBar onProductAdd={addProductToOrder} onSave={handleSaveOrder} isDirty={order.isDirty} />
+            <PinnedInputBar onProductAdd={addProductToOrder} onSave={handleSaveOrder} isDirty={order.isDirty} currentItems={order.items || []} />
 
             <Modal isOpen={noteModal.isOpen} onClose={() => setNoteModal({ isOpen: false, itemIndex: null, text: '' })} title="Dodaj notatkę do pozycji">
                 <textarea value={noteModal.text} onChange={(e) => setNoteModal({...noteModal, text: e.target.value})} className="w-full p-2 border rounded-md min-h-[100px] bg-white dark:bg-gray-700"></textarea>

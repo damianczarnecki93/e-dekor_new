@@ -5,7 +5,7 @@ import { useNotification } from '../../contexts/NotificationContext';
 import Modal from '../common/Modal';
 import CustomProductForm from './CustomProductForm';
 
-const PinnedInputBar = ({ onProductAdd, onSave, isDirty }) => {
+const PinnedInputBar = ({ onProductAdd, onSave, isDirty, currentItems }) => {
     const [query, setQuery] = useState('');
     const [quantity, setQuantity] = useState(1);
     const [suggestions, setSuggestions] = useState([]);
@@ -33,7 +33,15 @@ const PinnedInputBar = ({ onProductAdd, onSave, isDirty }) => {
                         setSuggestions([]);
                         inputRef.current?.focus();
                     } else {
-                        setCustomProductModal({ isOpen: true, ean: query.trim() });
+                        const existingCustomItem = currentItems.find(item => item.barcodes && item.barcodes.includes(query.trim()));
+                        if (existingCustomItem) {
+                            onProductAdd(existingCustomItem, 1);
+                            setQuery('');
+                            setQuantity(1);
+                            inputRef.current?.focus();
+                        } else {
+                            setCustomProductModal({ isOpen: true, ean: query.trim() });
+                        }
                         setSuggestions([]);
                     }
                 } else {
