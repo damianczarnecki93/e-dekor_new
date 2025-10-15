@@ -137,7 +137,7 @@ function App() {
                                 </>
                             ) : (
                                 <>
-                                    <Route path="/dashboard" element={<DashboardView user={user} onNavigate={navigate} onUpdateUser={updateUserData} />} />
+                                    <Route path="/dashboard" element={<DashboardView user={user} onNewOrder={handleNewOrder} />} />
                                     <Route path="/search" element={<MainSearchView />} />
                                     <Route path="/order" element={<OrderView currentOrder={currentOrder} setCurrentOrder={setCurrentOrder} user={user} setDirty={setIsDirty} onNewOrder={handleNewOrder} />} />
                                     <Route path="/orders" element={<OrdersListView onEdit={loadOrderForEditing} />} />

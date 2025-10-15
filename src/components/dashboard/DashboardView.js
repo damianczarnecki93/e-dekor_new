@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { navConfig } from '../../navConfig';
 
-const DashboardView = ({ user }) => {
+const DashboardView = ({ user, onNewOrder }) => {
     const navigate = useNavigate();
 
     const handleNavigate = (path, action) => {
@@ -15,7 +15,7 @@ const DashboardView = ({ user }) => {
 
     const availableNav = useMemo(() => {
         if (!user) return [];
-        const config = navConfig(() => handleNavigate('order', () => { }));
+        const config = navConfig(onNewOrder);
         return config.map(category => ({
             ...category,
             items: category.items.filter(item =>
@@ -24,7 +24,7 @@ const DashboardView = ({ user }) => {
                     (item.roles.includes(user.role) && (item.alwaysVisible || user.visibleModules?.includes(item.id))))
             )
         })).filter(category => category.items.length > 0);
-    }, [user]);
+    }, [user, onNewOrder]);
 
     return (
         <div className="p-4 md:p-8">
