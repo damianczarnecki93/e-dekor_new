@@ -25,12 +25,17 @@ const PinnedInputBar = ({ onProductAdd, onSave, isDirty }) => {
                 const results = await api.searchProducts(query);
                 const isBarcode = /^\d{8,}$/.test(query.trim());
 
-                if (isBarcode && results.length > 0) {
-                    onProductAdd(results[0], 1);
-                    setQuery('');
-                    setQuantity(1);
-                    setSuggestions([]);
-                    inputRef.current?.focus();
+                if (isBarcode) {
+                    if (results.length > 0) {
+                        onProductAdd(results[0], 1);
+                        setQuery('');
+                        setQuantity(1);
+                        setSuggestions([]);
+                        inputRef.current?.focus();
+                    } else {
+                        setCustomProductModal({ isOpen: true, ean: query.trim() });
+                        setSuggestions([]);
+                    }
                 } else {
                     setSuggestions(results);
                 }
