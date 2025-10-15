@@ -23,7 +23,16 @@ const PinnedInputBar = ({ onProductAdd, onSave, isDirty }) => {
             setIsLoading(true);
             try {
                 const results = await api.searchProducts(query);
-                setSuggestions(results);
+                const isBarcode = /^\d{8,}$/.test(query.trim());
+
+                if (isBarcode && results.length > 0) {
+                    onProductAdd(results[0], 1);
+                    setQuery('');
+                    setQuantity(1);
+                    setSuggestions([]);
+                } else {
+                    setSuggestions(results);
+                }
             } catch (error) {
                 showNotification(error.message, 'error');
             } finally {
@@ -31,7 +40,7 @@ const PinnedInputBar = ({ onProductAdd, onSave, isDirty }) => {
             }
         }, 300);
         return () => clearTimeout(handler);
-    }, [query, showNotification]);
+    }, [query, showNotification, onProductAdd]);
 
     const handleAdd = (product) => {
         const qty = Number(quantity);
