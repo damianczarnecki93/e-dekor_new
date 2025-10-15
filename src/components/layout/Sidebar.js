@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Home, Search, PlusCircle, Archive, List, Wrench, ClipboardList, Plane, Users, Settings, Sun, Moon, LogOut, KeyRound, ChevronUp, ChevronDown, ClipboardCheck } from 'lucide-react';
+import { Sun, Moon, LogOut, KeyRound, ChevronUp, ChevronDown } from 'lucide-react';
 import Tooltip from '../common/Tooltip';
+import { navConfig } from '../../navConfig';
 
 const Sidebar = ({ user, onLogout, onOpenPasswordModal, onNewOrder, isNavOpen, setIsNavOpen }) => {
     const [isDarkMode, setIsDarkMode] = useState(document.documentElement.classList.contains('dark'));
@@ -26,19 +27,18 @@ const Sidebar = ({ user, onLogout, onOpenPasswordModal, onNewOrder, isNavOpen, s
         );
     };
 
-    const navConfig = useMemo(() => [
-        { category: 'Główne', items: [ { id: 'dashboard', label: 'Panel Główny', icon: Home, roles: ['user', 'administrator'], alwaysVisible: true }, { id: 'search', label: 'Wyszukiwarka', icon: Search, roles: ['user', 'administrator'] }, ] },
-        { category: 'Sprzedaż', items: [ { id: 'order', label: 'Nowe Zamówienie', icon: PlusCircle, roles: ['user', 'administrator'], action: onNewOrder }, { id: 'orders', label: 'Zamówienia', icon: Archive, roles: ['user', 'administrator'] }, ] },
-        { category: 'Magazyn', items: [ { id: 'picking', label: 'Kompletacja', icon: List, roles: ['user', 'administrator'] }, { id: 'inventory', label: 'Inwentaryzacja', icon: Wrench, roles: ['user', 'administrator'] }, ] },
-        { category: 'Organizacyjne', items: [ { id: 'kanban', label: 'Tablica Zadań', icon: ClipboardList, roles: ['user', 'administrator'] }, { id: 'delegations', label: 'Delegacje', icon: Plane, roles: ['user', 'administrator'] }, { id: 'crm', label: 'Kontakty', icon: Users, roles: ['user', 'administrator'] }, ] },
-		{ category: 'Raporty', items: [ { id: 'shortage-report', label: 'Raport Braków', icon: ClipboardCheck, roles: ['user', 'administrator'] }, ] },
-        { category: 'Administracja', items: [ { id: 'admin', label: 'Panel Admina', icon: Settings, roles: ['administrator'] }, ] }
-    ], [onNewOrder]);
+    const memoizedNavConfig = useMemo(() => navConfig(onNewOrder), [onNewOrder]);
 
     const availableNav = useMemo(() => {
         if (!user) return [];
-        return navConfig.map(category => ({ ...category, items: category.items.filter(item => user.role === 'administrator' || item.roles.includes(user.role) && (item.alwaysVisible || user.visibleModules?.includes(item.id)))})).filter(category => category.items.length > 0);
-    }, [user, navConfig]);
+        return memoizedNavConfig.map(category => ({
+            ...category,
+            items: category.items.filter(item =>
+                user.role === 'administrator' ||
+                (item.roles.includes(user.role) && (item.alwaysVisible || user.visibleModules?.includes(item.id)))
+            )
+        })).filter(category => category.items.length > 0);
+    }, [user, memoizedNavConfig]);
 
     return (
         <nav className={`w-64 bg-white dark:bg-gray-800 shadow-lg flex flex-col flex-shrink-0 transition-transform duration-300 ease-in-out z-40 fixed lg:static h-full ${isNavOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}>
