@@ -5,6 +5,7 @@ import { NotificationProvider } from './contexts/NotificationContext';
 import ErrorBoundary from './components/ErrorBoundary';
 import AuthPage from './components/auth/AuthPage';
 import Sidebar from './components/layout/Sidebar';
+import Topbar from './components/layout/Topbar';
 import DashboardView from './components/dashboard/DashboardView';
 import MainSearchView from './components/product/MainSearchView';
 import OrderView from './components/order/OrderView';
@@ -21,7 +22,6 @@ import AdminProductsView from './components/admin/AdminProductsView';
 import AdminEmailConfigView from './components/admin/AdminEmailConfigView';
 import ShortageReportView from './components/reports/ShortageReportView';
 import UserChangePasswordModal from './components/modals/UserChangePasswordModal';
-import { Menu } from 'lucide-react';
 import { api } from './api';
 
 const getInitialOrder = () => {
@@ -29,7 +29,7 @@ const getInitialOrder = () => {
         const savedOrder = localStorage.getItem('draftOrder');
         if (savedOrder) {
             const parsed = JSON.parse(savedOrder);
-            if (!parsed._id) { 
+            if (!parsed._id) {
                 return { ...parsed, isDirty: true };
             }
         }
@@ -47,7 +47,20 @@ function App() {
     const [isDirty, setIsDirty] = useState(false);
     const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
     const [isNavOpen, setIsNavOpen] = useState(false);
+    const [isDarkMode, setIsDarkMode] = useState(document.documentElement.classList.contains('dark'));
     const navigate = useNavigate();
+
+    const toggleTheme = () => {
+        const newIsDarkMode = !isDarkMode;
+        setIsDarkMode(newIsDarkMode);
+        if (newIsDarkMode) {
+            document.documentElement.classList.add('dark');
+            localStorage.setItem('theme', 'dark');
+        } else {
+            document.documentElement.classList.remove('dark');
+            localStorage.setItem('theme', 'light');
+        }
+    };
 
     const updateUserData = (newUserData) => {
         setUser(newUserData);
@@ -120,15 +133,20 @@ function App() {
     return (
         <>
             <div className="flex h-screen bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-sans">
-                {user && <Sidebar user={user} onLogout={handleLogout} onOpenPasswordModal={() => setIsPasswordModalOpen(true)} onNewOrder={handleNewOrder} isNavOpen={isNavOpen} setIsNavOpen={setIsNavOpen} />}
+                {user && <Sidebar user={user} onNewOrder={handleNewOrder} isNavOpen={isNavOpen} setIsNavOpen={setIsNavOpen} />}
                 {user && isNavOpen && <div onClick={() => setIsNavOpen(false)} className="lg:hidden fixed inset-0 bg-black bg-opacity-50 z-30"></div>}
                 <main className="flex-1 flex flex-col">
                     {user && (
-                        <div className="lg:hidden p-2 bg-white dark:bg-gray-800 border-b dark:border-gray-700 flex justify-between items-center sticky top-0 z-30">
-                            <button onClick={() => setIsNavOpen(!isNavOpen)} className="p-2 rounded-md"><Menu className="w-6 h-6" /></button>
-                        </div>
+                        <Topbar
+                            user={user}
+                            onLogout={handleLogout}
+                            onOpenPasswordModal={() => setIsPasswordModalOpen(true)}
+                            isDarkMode={isDarkMode}
+                            toggleTheme={toggleTheme}
+                            setIsNavOpen={setIsNavOpen}
+                        />
                     )}
-                    <div className={`flex-1 ${isNavOpen ? 'overflow-hidden' : 'overflow-y-auto'}`}>
+                    <div className="flex-1 overflow-y-auto">
                         <Routes>
                             {!user ? (
                                 <>

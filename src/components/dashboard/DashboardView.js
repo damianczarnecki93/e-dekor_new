@@ -35,10 +35,12 @@ const DashboardView = ({ user, onNewOrder }) => {
                         <button
                             key={item.id}
                             onClick={() => handleNavigate(item.id, item.action)}
-                            className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-md flex flex-col items-center justify-center text-center transition-all hover:shadow-xl hover:scale-105"
+                            className="group bg-white dark:bg-gray-800 p-4 rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 ease-in-out transform hover:-translate-y-1 flex flex-col items-center justify-center text-center"
                         >
-                            <item.icon className="h-12 w-12 text-indigo-500 mb-2" />
-                            <span className="font-semibold text-sm">{item.label}</span>
+                            <div className="bg-indigo-100 dark:bg-indigo-900/40 rounded-full p-4 transition-colors duration-300 group-hover:bg-indigo-200 dark:group-hover:bg-indigo-900/60">
+                                <item.icon className="h-10 w-10 text-indigo-600 dark:text-indigo-400" />
+                            </div>
+                            <span className="font-semibold text-sm mt-3 text-gray-700 dark:text-gray-200">{item.label}</span>
                         </button>
                     ))
                 )}

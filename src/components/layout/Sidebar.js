@@ -1,25 +1,12 @@
 import React, { useState, useMemo } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Sun, Moon, LogOut, KeyRound, ChevronUp, ChevronDown } from 'lucide-react';
-import Tooltip from '../common/Tooltip';
+import { ChevronUp, ChevronDown } from 'lucide-react';
 import { navConfig } from '../../navConfig';
 
-const Sidebar = ({ user, onLogout, onOpenPasswordModal, onNewOrder, isNavOpen, setIsNavOpen }) => {
-    const [isDarkMode, setIsDarkMode] = useState(document.documentElement.classList.contains('dark'));
+const Sidebar = ({ user, onNewOrder, isNavOpen, setIsNavOpen }) => {
     const [expandedCategories, setExpandedCategories] = useState(['Główne']);
     const location = useLocation();
-
-    const toggleTheme = () => {
-        const newIsDarkMode = !isDarkMode;
-        setIsDarkMode(newIsDarkMode);
-        if (newIsDarkMode) {
-            document.documentElement.classList.add('dark');
-            localStorage.setItem('theme', 'dark');
-        } else {
-            document.documentElement.classList.remove('dark');
-            localStorage.setItem('theme', 'light');
-        }
-    };
+    const isDarkMode = document.documentElement.classList.contains('dark');
 
     const toggleCategory = (category) => {
         setExpandedCategories(prev =>
@@ -63,16 +50,6 @@ const Sidebar = ({ user, onLogout, onOpenPasswordModal, onNewOrder, isNavOpen, s
                     </div>
                 ))}
             </ul>
-            <div className="p-4 border-t border-gray-200 dark:border-gray-700">
-                <div className="flex items-center justify-between mb-4">
-                    <div><p className="font-semibold">{user.username}</p><p className="text-sm text-gray-500">{user.role}</p></div>
-                    <div className="flex items-center">
-                        <Tooltip text="Zmień hasło"><button onClick={onOpenPasswordModal} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600"><KeyRound className="h-6 w-6 text-gray-500" /></button></Tooltip>
-                        <Tooltip text="Wyloguj"><button onClick={onLogout} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600"><LogOut className="h-6 w-6 text-gray-500" /></button></Tooltip>
-                    </div>
-                </div>
-                <Tooltip text="Zmień motyw"><button onClick={toggleTheme} className="w-full flex justify-center p-2 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600">{isDarkMode ? <Sun className="h-6 w-6 text-yellow-400" /> : <Moon className="h-6 w-6 text-indigo-500" />}</button></Tooltip>
-            </div>
         </nav>
     );
 };
