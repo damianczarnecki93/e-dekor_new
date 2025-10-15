@@ -2,8 +2,12 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Możesz tutaj dodać dodatkowe globalne style */
+html, body, #root {
+  height: 100%;
+}
+
 body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  @apply bg-gray-100 dark:bg-gray-900;
 }

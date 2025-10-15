@@ -135,7 +135,7 @@ function App() {
                         toggleTheme={toggleTheme}
                     />
                 )}
-                <main className="flex-1">
+                <main className="flex-1 overflow-y-auto">
                     <Routes>
                         {!user ? (
                             <>
