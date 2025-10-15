@@ -193,14 +193,11 @@ async function sendNotificationEmail(subject, htmlContent) {
         let transporter = nodemailer.createTransport({
             host: config.host,
             port: config.port,
-            secure: config.secure, // Używamy wartości 'secure' bezpośrednio z konfiguracji
+            secure: config.secure,
             auth: {
                 user: config.user,
                 pass: config.pass,
             },
-            tls: {
-                rejectUnauthorized: false
-            }
         });
 
         await transporter.verify();
@@ -216,7 +213,10 @@ async function sendNotificationEmail(subject, htmlContent) {
         return { success: true };
 
     } catch (error) {
-        console.error('BŁĄD NODEMAILER:', error);
+        console.error('BŁĄD NODEMAILER:', error.message);
+        if (error.response) {
+            console.error('Odpowiedź serwera:', error.response.body);
+        }
         return { success: false, error: error.message || 'Nieznany błąd podczas wysyłania e-maila.' };
     }
 }
