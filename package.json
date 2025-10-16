@@ -16,6 +16,7 @@
     "cors": "^2.8.5",
     "csv-parser": "^3.0.0",
     "date-fns": "^2.30.0",
+    "dexie": "^4.2.1",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "iconv-lite": "^0.6.3",
@@ -31,12 +32,7 @@
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.25.1",
     "react-scripts": "5.0.1",
-    "serverless-http": "^4.0.0",
-    "workbox-core": "^7.3.0",
-    "workbox-expiration": "^7.3.0",
-    "workbox-precaching": "^7.3.0",
-    "workbox-routing": "^7.3.0",
-    "workbox-strategies": "^7.3.0"
+    "serverless-http": "^4.0.0"
   },
   "browserslist": {
     "production": [

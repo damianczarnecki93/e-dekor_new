@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Search } from 'lucide-react';
-import { api } from '../../api';
+import { searchProducts } from '../../data/repository';
 import { useNotification } from '../../contexts/NotificationContext';
 
 const SearchView = ({ onProductSelect }) => {
@@ -15,7 +15,7 @@ const SearchView = ({ onProductSelect }) => {
         setIsLoading(true);
         setSuggestions([]);
         try {
-            const results = await api.searchProducts(searchQuery, filterByQuantity);
+            const results = await searchProducts(searchQuery, filterByQuantity);
             const isEanLike = /^\d{8,13}$/.test(searchQuery.trim());
 
             if (isEanLike && results.length > 0) {

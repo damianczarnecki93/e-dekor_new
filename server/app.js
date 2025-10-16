@@ -972,6 +972,52 @@ app.get('/api/dashboard-stats', authMiddleware, async (req, res) => {
 });
 
 
+// --- API Endpoints - Synchronizacja Offline ---
+app.get('/api/sync/products/count', authMiddleware, async (req, res) => {
+    try {
+        const count = await Product.countDocuments();
+        res.json({ total: count });
+    } catch (error) {
+        res.status(500).json({ message: 'Błąd pobierania liczby produktów.' });
+    }
+});
+
+app.get('/api/sync/products', authMiddleware, async (req, res) => {
+    try {
+        const page = parseInt(req.query.page, 10) || 1;
+        const limit = parseInt(req.query.limit, 10) || 1000;
+        const skip = (page - 1) * limit;
+
+        const products = await Product.find({}).skip(skip).limit(limit).lean();
+        res.json(products);
+    } catch (error) {
+        res.status(500).json({ message: 'Błąd pobierania paczki produktów.' });
+    }
+});
+
+app.get('/api/sync/contacts/count', authMiddleware, async (req, res) => {
+    try {
+        const count = await Contact.countDocuments();
+        res.json({ total: count });
+    } catch (error) {
+        res.status(500).json({ message: 'Błąd pobierania liczby kontaktów.' });
+    }
+});
+
+app.get('/api/sync/contacts', authMiddleware, async (req, res) => {
+    try {
+        const page = parseInt(req.query.page, 10) || 1;
+        const limit = parseInt(req.query.limit, 10) || 1000;
+        const skip = (page - 1) * limit;
+
+        const contacts = await Contact.find({}).skip(skip).limit(limit).lean();
+        res.json(contacts);
+    } catch (error) {
+        res.status(500).json({ message: 'Błąd pobierania paczki kontaktów.' });
+    }
+});
+
+
 // --- API Endpoints - Produkty i Zamówienia ---
 app.get('/api/products', authMiddleware, async (req, res) => {
     try {

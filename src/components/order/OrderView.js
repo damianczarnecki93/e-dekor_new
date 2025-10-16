@@ -3,6 +3,7 @@ import { PlusCircle, FileText, FileDown, FileUp, CheckCircle2 } from 'lucide-rea
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { api } from '../../api';
+import { searchContacts } from '../../data/repository';
 import { useNotification } from '../../contexts/NotificationContext';
 import { useSortableData } from '../../hooks/useSortableData';
 import Modal from '../common/Modal';
@@ -50,7 +51,7 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
         const handler = setTimeout(async () => {
             setIsContactLoading(true);
             try {
-                const results = await api.searchContacts(contactSearchQuery);
+                const results = await searchContacts(contactSearchQuery);
                 setContactSuggestions(results);
             } catch (error) {
                 showNotification(error.message, 'error');

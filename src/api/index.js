@@ -390,4 +390,24 @@ unarchiveOrder: async (orderId) => {
     }
     return await response.json();
 	},
+    getProductsCount: async () => {
+        const response = await fetchWithAuth(`/api/sync/products/count`);
+        if (!response.ok) throw new Error('Błąd pobierania liczby produktów');
+        return await response.json();
+    },
+    getProductsPage: async (page, limit) => {
+        const response = await fetchWithAuth(`/api/sync/products?page=${page}&limit=${limit}`);
+        if (!response.ok) throw new Error('Błąd pobierania strony produktów');
+        return await response.json();
+    },
+    getContactsCount: async () => {
+        const response = await fetchWithAuth(`/api/sync/contacts/count`);
+        if (!response.ok) throw new Error('Błąd pobierania liczby kontaktów');
+        return await response.json();
+    },
+    getContactsPage: async (page, limit) => {
+        const response = await fetchWithAuth(`/api/sync/contacts?page=${page}&limit=${limit}`);
+        if (!response.ok) throw new Error('Błąd pobierania strony kontaktów');
+        return await response.json();
+    },
 };

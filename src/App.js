@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 
-import { NotificationProvider } from './contexts/NotificationContext';
+import { NotificationProvider, useNotification } from './contexts/NotificationContext';
+import { runSynchronization, getSyncInfo } from './sync';
 import ErrorBoundary from './components/ErrorBoundary';
 import AuthPage from './components/auth/AuthPage';
 import Topbar from './components/layout/Topbar';
@@ -46,7 +47,18 @@ function App() {
     const [isDirty, setIsDirty] = useState(false);
     const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
     const [isDarkMode, setIsDarkMode] = useState(document.documentElement.classList.contains('dark'));
+    const [syncProgress, setSyncProgress] = useState({ status: 'idle' });
     const navigate = useNavigate();
+    const { showNotification } = useNotification();
+
+    const triggerSync = useCallback(async () => {
+        const result = await runSynchronization(setSyncProgress);
+        if (result.success) {
+            showNotification('Dane zsynchronizowane pomyślnie!', 'success');
+        } else {
+            showNotification(`Błąd synchronizacji: ${result.error.message}`, 'error');
+        }
+    }, [showNotification]);
 
     const toggleTheme = () => {
         const newIsDarkMode = !isDarkMode;
@@ -65,7 +77,8 @@ function App() {
         localStorage.setItem('userData', JSON.stringify(data.user));
         setUser(data.user);
         navigate('/dashboard');
-    }, [navigate]);
+        triggerSync();
+    }, [navigate, triggerSync]);
 
     const handleLogout = useCallback(async () => {
         localStorage.removeItem('userToken');
@@ -114,7 +127,15 @@ function App() {
     useEffect(() => {
         const userData = localStorage.getItem('userData');
         if (userData) {
-            try { setUser(JSON.parse(userData)); } catch (e) { handleLogout(); }
+            try {
+                setUser(JSON.parse(userData));
+                // Sprawdź, czy dane kiedykolwiek były synchronizowane
+                Promise.all([getSyncInfo('products'), getSyncInfo('contacts')]).then(([p, c]) => {
+                    if (!p || !c) {
+                        setSyncProgress({ status: 'required' });
+                    }
+                });
+            } catch (e) { handleLogout(); }
         }
         setIsLoading(false);
     }, [handleLogout]);
@@ -133,6 +154,8 @@ function App() {
                         onOpenPasswordModal={() => setIsPasswordModalOpen(true)}
                         isDarkMode={isDarkMode}
                         toggleTheme={toggleTheme}
+                        syncProgress={syncProgress}
+                        onForceSync={triggerSync}
                     />
                 )}
                 <main className="flex-1 overflow-y-auto">
