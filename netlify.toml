@@ -1,0 +1,17 @@
+# Konfiguracja dla Netlify
+
+[build]
+  # Komenda do budowania frontendu
+  command = "npm run build"
+
+  # Katalog, w którym znajdują się zbudowane pliki frontendu
+  publish = "build"
+
+  # Katalog, w którym znajdują się funkcje serwerowe
+  functions = "netlify/functions"
+
+# Przekierowanie zapytań API do funkcji serwerowej
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/api/:splat"
+  status = 200
