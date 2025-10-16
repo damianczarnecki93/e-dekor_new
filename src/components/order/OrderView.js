@@ -61,8 +61,14 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
         return () => clearTimeout(handler);
     }, [contactSearchQuery, order.customerId, order.customerName, showNotification]);
 
-    const scrollToBottom = () => listEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    useEffect(scrollToBottom, [order.items]);
+    const prevItemsLength = useRef((order.items || []).length);
+    useEffect(() => {
+        const currentItemsLength = (order.items || []).length;
+        if (currentItemsLength > prevItemsLength.current) {
+            listEndRef.current?.scrollIntoView({ behavior: "smooth" });
+        }
+        prevItemsLength.current = currentItemsLength;
+    }, [order.items]);
 
     const updateOrder = (updates, isDirtyFlag = true) => {
         const newOrder = { ...order, ...updates, isDirty: isDirtyFlag };
