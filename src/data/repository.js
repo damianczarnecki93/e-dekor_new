@@ -63,3 +63,46 @@ export async function searchContacts(term) {
         return await api.searchContacts(term);
     }
 }
+
+/**
+ * Zapisuje zamówienie, stosując strategię "offline-first".
+ * Najpierw zapisuje w lokalnej bazie, a potem próbuje wysłać na serwer.
+ */
+export async function saveOrderOfflineFirst(order, user) {
+    // Przygotuj obiekt zamówienia do zapisu
+    const orderToSave = {
+        ...order,
+        author: user.username,
+        statusSync: 'pending_sync', // Dodajemy status synchronizacji
+        updatedAt: new Date()
+    };
+
+    // Jeśli zamówienie nie ma lokalnego ID, to znaczy, że jest nowe.
+    if (!orderToSave.localId) {
+        // Zapisz w lokalnej bazie i uzyskaj lokalne ID
+        const localId = await db.orders.put(orderToSave);
+        orderToSave.localId = localId;
+    } else {
+        // Zaktualizuj istniejące zamówienie w lokalnej bazie
+        await db.orders.put(orderToSave);
+    }
+
+    try {
+        // Spróbuj wysłać na serwer
+        const { order: savedOrder } = await api.saveOrder(orderToSave);
+
+        // Jeśli się udało, zaktualizuj lokalne zamówienie o ID z serwera i status
+        await db.orders.update(orderToSave.localId, {
+            _id: savedOrder._id,
+            statusSync: 'synced',
+            items: savedOrder.items // Użyj itemów zwróconych z serwera
+        });
+
+        return { ...savedOrder, localId: orderToSave.localId };
+    } catch (error) {
+        // Jeśli wystąpił błąd sieciowy, service worker powinien przejąć żądanie.
+        // Zwracamy zamówienie z lokalnym ID, aby UI mogło się zaktualizować.
+        console.warn('Nie udało się zapisać zamówienia na serwerze, przechodzę w tryb offline.', error.message);
+        return orderToSave;
+    }
+}

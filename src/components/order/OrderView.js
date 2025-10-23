@@ -3,7 +3,7 @@ import { PlusCircle, FileText, FileDown, FileUp, CheckCircle2 } from 'lucide-rea
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { api } from '../../api';
-import { searchContacts } from '../../data/repository';
+import { searchContacts, saveOrderOfflineFirst } from '../../data/repository';
 import { useNotification } from '../../contexts/NotificationContext';
 import { useSortableData } from '../../hooks/useSortableData';
 import Modal from '../common/Modal';
@@ -95,18 +95,22 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
         if (isSaving || !updatedOrder.customerName) return;
         setIsSaving(true);
         try {
-            const orderToSave = { ...updatedOrder, author: user.username };
-            const { order: savedOrder } = await api.saveOrder(orderToSave);
+            const savedOrder = await saveOrderOfflineFirst(updatedOrder, user);
 
             const finalOrder = {
                 ...savedOrder,
                 items: savedOrder.items.map(item => ({ ...item, isSaved: true })),
-                isDirty: false
+                isDirty: savedOrder.statusSync === 'pending_sync'
             };
 
             setCurrentOrder(finalOrder);
             localStorage.setItem('draftOrder', JSON.stringify(finalOrder));
-            setDirty(false);
+            setDirty(finalOrder.isDirty);
+
+            if (savedOrder.statusSync === 'pending_sync') {
+                showNotification('Jesteś offline. Zamówienie zostało zapisane lokalnie i zostanie wysłane po odzyskaniu połączenia.', 'info');
+            }
+
         } catch (error) {
             showNotification(error.message, 'error');
             setDirty(true);

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Edit, Archive, Trash2, RotateCcw, Filter, FileUp } from 'lucide-react';
+import { Edit, Archive, Trash2, RotateCcw, Filter, FileUp, WifiOff, CheckCircle } from 'lucide-react';
 import { api } from '../../api';
+import { db } from '../../db';
 import { useNotification } from '../../contexts/NotificationContext';
 import Modal from '../common/Modal';
 import Tooltip from '../common/Tooltip';
@@ -17,8 +18,40 @@ const OrdersListView = ({ onEdit }) => {
     const fetchOrders = useCallback(async () => {
         setIsLoading(true);
         try {
-            const fetchedOrders = await api.getOrders(filters);
-            setOrders(fetchedOrders);
+            // 1. Pobierz zamówienia z lokalnej bazy danych
+            const localOrders = await db.orders.toArray();
+
+            // 2. Spróbuj pobrać zamówienia z API
+            let remoteOrders = [];
+            try {
+                remoteOrders = await api.getOrders(filters);
+            } catch (error) {
+                console.warn("Nie udało się pobrać zamówień z serwera, wyświetlam dane lokalne.", error.message);
+                showNotification("Jesteś offline. Wyświetlane dane mogą być nieaktualne.", "info");
+            }
+
+            // 3. Połącz i zdeduplikuj dane
+            const combinedOrders = new Map();
+
+            // Najpierw dodaj dane z serwera (są "ważniejsze")
+            remoteOrders.forEach(order => combinedOrders.set(order._id, order));
+
+            // Następnie dodaj dane lokalne, nadpisując tylko jeśli nie ma wersji z serwera
+            localOrders.forEach(localOrder => {
+                if (localOrder._id && combinedOrders.has(localOrder._id)) {
+                    // Jeśli mamy już wersję z serwera, upewnijmy się, że ma status synced
+                    const serverVersion = combinedOrders.get(localOrder._id);
+                    serverVersion.statusSync = 'synced';
+                } else {
+                    // Jeśli nie ma wersji serwerowej (lub zamówienie jest czysto lokalne), dodaj
+                    const key = localOrder._id || `local-${localOrder.localId}`;
+                    combinedOrders.set(key, localOrder);
+                }
+            });
+
+            const finalOrders = Array.from(combinedOrders.values());
+
+            setOrders(finalOrders);
         } catch (error) {
             showNotification(error.message, 'error');
         } finally {
@@ -47,6 +80,7 @@ const OrdersListView = ({ onEdit }) => {
 
     const handleDelete = async () => {
         try {
+            // TODO: Obsługa usuwania w trybie offline
             await api.deleteOrder(modalState.orderId);
             showNotification('Zamówienie usunięte!', 'success');
             setModalState({ isOpen: false, orderId: null, type: '' });
@@ -78,6 +112,7 @@ const OrdersListView = ({ onEdit }) => {
 
     const groupedOrders = useMemo(() => {
         const groups = {
+            'Oczekujące na synchronizację': [],
             'Braki': [],
             'Zapisane': [],
             'Skompletowane': [],
@@ -85,7 +120,9 @@ const OrdersListView = ({ onEdit }) => {
             'Archiwum': []
         };
         orders.forEach(order => {
-            if (order.isArchived) {
+            if (order.statusSync === 'pending_sync') {
+                 groups['Oczekujące na synchronizację'].push(order);
+            } else if (order.isArchived) {
                 groups['Archiwum'].push(order);
             } else if (groups[order.status]) {
                 groups[order.status].push(order);
@@ -97,15 +134,16 @@ const OrdersListView = ({ onEdit }) => {
     const renderOrderTable = (orderList, isArchivedView = false) => (
         <div className="space-y-4 lg:space-y-0 lg:bg-white lg:dark:bg-gray-800 lg:rounded-lg lg:shadow">
             <div className="hidden lg:grid grid-cols-12 gap-4 font-bold p-3 bg-gray-50 dark:bg-gray-700 rounded-t-lg">
-                <div className="col-span-4">Klient</div>
+                <div className="col-span-3">Klient</div>
                 <div className="col-span-2">Autor</div>
                 <div className="col-span-2">Data</div>
-                <div className="col-span-2 text-right">Wartość</div>
+                <div className="col-span-2">Status synchronizacji</div>
+                <div className="col-span-1 text-right">Wartość</div>
                 <div className="col-span-2 text-center">Akcje</div>
             </div>
             <div className="lg:divide-y lg:divide-gray-200 lg:dark:divide-gray-700">
                 {orderList.map(order => (
-                    <div key={order._id} className="bg-white dark:bg-gray-800 rounded-lg shadow lg:shadow-none lg:grid lg:grid-cols-12 lg:gap-4 lg:items-center p-4 lg:p-3">
+                    <div key={order._id || order.localId} className="bg-white dark:bg-gray-800 rounded-lg shadow lg:shadow-none lg:grid lg:grid-cols-12 lg:gap-4 lg:items-center p-4 lg:p-3">
                         <div className="lg:hidden">
                              <div className="flex justify-between items-start">
                                 <h3 className="font-bold text-lg text-indigo-600 dark:text-indigo-400">{order.customerName}</h3>
@@ -113,23 +151,30 @@ const OrdersListView = ({ onEdit }) => {
                             </div>
                             <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                                 <p>Autor: {order.author}</p>
-                                <p>Data: {new Date(order.date).toLocaleDateString()}</p>
+                                <p>Data: {new Date(order.date || order.updatedAt).toLocaleDateString()}</p>
                             </div>
                         </div>
-                        <div className="hidden lg:block col-span-4 font-medium">{order.customerName}</div>
+                        <div className="hidden lg:block col-span-3 font-medium">{order.customerName}</div>
                         <div className="hidden lg:block col-span-2">{order.author}</div>
-                        <div className="hidden lg:block col-span-2">{new Date(order.date).toLocaleDateString()}</div>
-                        <div className="hidden lg:block col-span-2 text-right font-semibold">{(order.total || 0).toFixed(2)}</div>
+                        <div className="hidden lg:block col-span-2">{new Date(order.date || order.updatedAt).toLocaleDateString()}</div>
+                        <div className="hidden lg:flex col-span-2 items-center">
+                            {order.statusSync === 'pending_sync' ? (
+                                <><WifiOff className="w-4 h-4 mr-2 text-yellow-500" /> Oczekuje</>
+                            ) : (
+                                <><CheckCircle className="w-4 h-4 mr-2 text-green-500" /> Zsynchronizowano</>
+                            )}
+                        </div>
+                        <div className="hidden lg:block col-span-1 text-right font-semibold">{(order.total || 0).toFixed(2)}</div>
                         <div className="flex justify-end lg:justify-center items-center mt-3 lg:mt-0 lg:col-span-2 border-t lg:border-t-0 pt-3 lg:pt-0">
                              {!isArchivedView && (
-                                <Tooltip text="Edytuj/Pokaż"><button onClick={() => onEdit(order._id)} className="p-2 text-blue-500 hover:text-blue-700"><Edit className="w-5 h-5"/></button></Tooltip>
+                                <Tooltip text="Edytuj/Pokaż"><button onClick={() => onEdit(order._id || order.localId)} className="p-2 text-blue-500 hover:text-blue-700"><Edit className="w-5 h-5"/></button></Tooltip>
                             )}
                             <Tooltip text={isArchivedView ? "Przywróć" : "Archiwizuj"}>
-                                <button onClick={() => handleArchiveToggle(order._id, order.isArchived)} className={`p-2 ${isArchivedView ? 'text-green-500 hover:text-green-700' : 'text-gray-500 hover:text-gray-700'}`}>
+                                <button onClick={() => handleArchiveToggle(order._id, order.isArchived)} className={`p-2 ${isArchivedView ? 'text-green-500 hover:text-green-700' : 'text-gray-500 hover:text-gray-700'}`} disabled={!order._id}>
                                     {isArchivedView ? <RotateCcw className="w-5 h-5"/> : <Archive className="w-5 h-5"/>}
                                 </button>
                             </Tooltip>
-                            <Tooltip text="Usuń"><button onClick={() => setModalState({ isOpen: true, orderId: order._id, type: 'delete' })} className="p-2 text-red-500 hover:text-red-700"><Trash2 className="w-5 h-5"/></button></Tooltip>
+                            <Tooltip text="Usuń"><button onClick={() => setModalState({ isOpen: true, orderId: order._id, type: 'delete' })} className="p-2 text-red-500 hover:text-red-700" disabled={!order._id}><Trash2 className="w-5 h-5"/></button></Tooltip>
                         </div>
                     </div>
                 ))}

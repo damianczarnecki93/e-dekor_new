@@ -2,7 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 
 import { NotificationProvider, useNotification } from './contexts/NotificationContext';
-import { runSynchronization, getSyncInfo } from './sync';
+import { synchronizeData } from './data/synchronization';
+import { db } from './db';
 import ErrorBoundary from './components/ErrorBoundary';
 import AuthPage from './components/auth/AuthPage';
 import Topbar from './components/layout/Topbar';
@@ -47,16 +48,23 @@ function App() {
     const [isDirty, setIsDirty] = useState(false);
     const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
     const [isDarkMode, setIsDarkMode] = useState(document.documentElement.classList.contains('dark'));
-    const [syncProgress, setSyncProgress] = useState({ status: 'idle' });
+    const [syncProgress, setSyncProgress] = useState({ status: 'idle', tableName: '', progress: 0 });
     const navigate = useNavigate();
     const { showNotification } = useNotification();
 
+    const handleSyncProgress = (tableName, progress) => {
+        setSyncProgress({ status: 'syncing', tableName, progress });
+    };
+
     const triggerSync = useCallback(async () => {
-        const result = await runSynchronization(setSyncProgress);
-        if (result.success) {
+        setSyncProgress({ status: 'syncing', tableName: 'products', progress: 0 });
+        const success = await synchronizeData(handleSyncProgress);
+        if (success) {
             showNotification('Dane zsynchronizowane pomyślnie!', 'success');
+            setSyncProgress({ status: 'idle' });
         } else {
-            showNotification(`Błąd synchronizacji: ${result.error.message}`, 'error');
+            showNotification(`Błąd synchronizacji.`, 'error');
+            setSyncProgress({ status: 'error' });
         }
     }, [showNotification]);
 
@@ -130,7 +138,7 @@ function App() {
             try {
                 setUser(JSON.parse(userData));
                 // Sprawdź, czy dane kiedykolwiek były synchronizowane
-                Promise.all([getSyncInfo('products'), getSyncInfo('contacts')]).then(([p, c]) => {
+                Promise.all([db.syncStatus.get('products'), db.syncStatus.get('contacts')]).then(([p, c]) => {
                     if (!p || !c) {
                         setSyncProgress({ status: 'required' });
                     }
