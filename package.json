@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "start": "react-scripts start",
-    "build": "GENERATE_SOURCEMAP=false react-scripts build && workbox injectManifest workbox-config.js",
+    "build": "GENERATE_SOURCEMAP=false react-scripts build",
     "test": "react-scripts test"
   },
   "proxy": "http://localhost:3001",
@@ -32,11 +32,7 @@
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.25.1",
     "react-scripts": "5.0.1",
-    "serverless-http": "^4.0.0",
-    "workbox-window": "^7.1.0"
-  },
-  "devDependencies": {
-    "workbox-cli": "^7.1.0"
+    "serverless-http": "^4.0.0"
   },
   "browserslist": {
     "production": [

@@ -69,3 +69,16 @@ registerRoute(
     ]
   })
 );
+
+// Listen for push notifications
+self.addEventListener('push', event => {
+  const data = event.data.json();
+  const options = {
+    body: data.body,
+    icon: data.icon || '/logo.png',
+    badge: '/logo.png'
+  };
+  event.waitUntil(
+    self.registration.showNotification(data.title, options)
+  );
+});

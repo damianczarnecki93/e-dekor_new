@@ -410,4 +410,12 @@ unarchiveOrder: async (orderId) => {
         if (!response.ok) throw new Error('Błąd pobierania strony kontaktów');
         return await response.json();
     },
+    subscribeToPush: async (subscription) => {
+        const response = await fetchWithAuth('/api/subscribe', {
+            method: 'POST',
+            body: JSON.stringify(subscription),
+        });
+        if (!response.ok) throw new Error('Błąd podczas subskrypcji powiadomień.');
+        return await response.json();
+    },
 };
