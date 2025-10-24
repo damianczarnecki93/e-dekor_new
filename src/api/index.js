@@ -398,7 +398,8 @@ unarchiveOrder: async (orderId) => {
     getProductsPage: async (page, limit) => {
         const response = await fetchWithAuth(`/api/sync/products?page=${page}&limit=${limit}`);
         if (!response.ok) throw new Error('Błąd pobierania strony produktów');
-        return await response.json();
+        const data = await response.json();
+        return data.products; // Zakładamy, że serwer zwraca { products: [...] }
     },
     getContactsCount: async () => {
         const response = await fetchWithAuth(`/api/sync/contacts/count`);
@@ -408,7 +409,8 @@ unarchiveOrder: async (orderId) => {
     getContactsPage: async (page, limit) => {
         const response = await fetchWithAuth(`/api/sync/contacts?page=${page}&limit=${limit}`);
         if (!response.ok) throw new Error('Błąd pobierania strony kontaktów');
-        return await response.json();
+        const data = await response.json();
+        return data.contacts; // Zakładamy, że serwer zwraca { contacts: [...] }
     },
     subscribeToPush: async (subscription) => {
         const response = await fetchWithAuth('/api/subscribe', {
