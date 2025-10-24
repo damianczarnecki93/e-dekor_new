@@ -1,17 +1,15 @@
 import { db } from '../db';
 import { api } from '../api';
 
-/**
- * Wyszukuje produkty, preferując lokalną bazę danych.
- * W przypadku błędu lub braku danych, może (opcjonalnie) odwołać się do API.
- */
+// ... (searchProducts i searchContacts bez zmian)
+
 export async function searchProducts(searchTerm, filterByQuantity = false) {
     let results = [];
     try {
         const searchRegex = new RegExp(searchTerm, 'i');
-        let collection = db.products.where('name').equalsIgnoreCase(searchTerm)
-                                  .or('product_code').equalsIgnoreCase(searchTerm)
-                                  .or('barcodes').equalsIgnoreCase(searchTerm);
+        let collection = db.products.where('name').startsWithIgnoreCase(searchTerm)
+                                  .or('product_code').startsWithIgnoreCase(searchTerm)
+                                  .or('barcodes').equals(searchTerm);
 
         if (filterByQuantity) {
             collection = collection.and(product => product.quantity > 0);
@@ -42,8 +40,6 @@ export async function searchProducts(searchTerm, filterByQuantity = false) {
         return results;
     } catch (error) {
         console.error("Błąd wyszukiwania w repozytorium:", error);
-        // W przypadku błędu (np. offline), spróbuj mimo wszystko odwołać się do API,
-        // ale obsłuż błąd sieciowy.
         if (navigator.onLine) {
             try {
                 return await api.searchProducts(searchTerm, filterByQuantity);
@@ -51,14 +47,10 @@ export async function searchProducts(searchTerm, filterByQuantity = false) {
                 console.warn("Błąd API po błędzie repozytorium, zwracam puste wyniki.", apiError);
             }
         }
-        // Jeśli jesteśmy offline lub API zawiodło, zwróć puste wyniki
         return [];
     }
 }
 
-/**
- * Wyszukuje kontakty, preferując lokalną bazę danych.
- */
 export async function searchContacts(term) {
     let results = [];
     try {
@@ -93,46 +85,66 @@ export async function searchContacts(term) {
     }
 }
 
-
 /**
  * Zapisuje zamówienie, stosując strategię "offline-first".
- * Najpierw zapisuje w lokalnej bazie, a potem próbuje wysłać na serwer.
  */
 export async function saveOrderOfflineFirst(order, user) {
-    // Przygotuj obiekt zamówienia do zapisu
     const orderToSave = {
         ...order,
         author: user.username,
-        statusSync: 'pending_sync', // Dodajemy status synchronizacji
+        statusSync: 'pending_sync',
         updatedAt: new Date()
     };
 
-    // Jeśli zamówienie nie ma lokalnego ID, to znaczy, że jest nowe.
-    if (!orderToSave.localId) {
-        // Zapisz w lokalnej bazie i uzyskaj lokalne ID
-        const localId = await db.orders.put(orderToSave);
-        orderToSave.localId = localId;
-    } else {
-        // Zaktualizuj istniejące zamówienie w lokalnej bazie
-        await db.orders.put(orderToSave);
+    // Zawsze zapisuj/aktualizuj w lokalnej bazie
+    const localId = await db.orders.put(orderToSave);
+    orderToSave.localId = localId;
+
+    // Jeśli jesteśmy online, od razu spróbuj wysłać
+    if (navigator.onLine) {
+        try {
+            const { order: savedOrder } = await api.saveOrder(orderToSave);
+            await db.orders.update(localId, {
+                _id: savedOrder._id,
+                statusSync: 'synced',
+                items: savedOrder.items
+            });
+            return { ...savedOrder, localId };
+        } catch (error) {
+            console.warn('Nie udało się zapisać zamówienia na serwerze, zostanie zsynchronizowane później.', error.message);
+            // Zwracamy wersję lokalną, synchronizacja nastąpi później
+            return orderToSave;
+        }
     }
 
-    try {
-        // Spróbuj wysłać na serwer
-        const { order: savedOrder } = await api.saveOrder(orderToSave);
+    // Jeśli jesteśmy offline, po prostu zwróć wersję lokalną
+    return orderToSave;
+}
 
-        // Jeśli się udało, zaktualizuj lokalne zamówienie o ID z serwera i status
-        await db.orders.update(orderToSave.localId, {
-            _id: savedOrder._id,
-            statusSync: 'synced',
-            items: savedOrder.items // Użyj itemów zwróconych z serwera
-        });
 
-        return { ...savedOrder, localId: orderToSave.localId };
-    } catch (error) {
-        // Jeśli wystąpił błąd sieciowy, service worker powinien przejąć żądanie.
-        // Zwracamy zamówienie z lokalnym ID, aby UI mogło się zaktualizować.
-        console.warn('Nie udało się zapisać zamówienia na serwerze, przechodzę w tryb offline.', error.message);
-        return orderToSave;
+/**
+ * Synchronizuje wszystkie zamówienia oczekujące na wysłanie.
+ */
+export async function syncPendingOrders() {
+    const pendingOrders = await db.orders.where('statusSync').equals('pending_sync').toArray();
+    if (pendingOrders.length === 0) {
+        return;
+    }
+
+    console.log(`Znaleziono ${pendingOrders.length} zamówień do synchronizacji.`);
+
+    for (const order of pendingOrders) {
+        try {
+            const { order: savedOrder } = await api.saveOrder(order);
+            await db.orders.update(order.localId, {
+                _id: savedOrder._id,
+                statusSync: 'synced',
+                items: savedOrder.items
+            });
+            console.log(`Zamówienie ${order.localId} zsynchronizowane.`);
+        } catch (error) {
+            console.error(`Nie udało się zsynchronizować zamówienia ${order.localId}:`, error);
+            // Nie przerywamy pętli, próbujemy zsynchronizować kolejne
+        }
     }
 }

@@ -9,7 +9,7 @@ import Tooltip from '../common/Tooltip';
 const OrdersListView = ({ onEdit }) => {
     const [orders, setOrders] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [modalState, setModalState] = useState({ isOpen: false, orderId: null, type: '' });
+    const [modalState, setModalState] = useState({ isOpen: false, orderToDelete: null, type: '' });
     const { showNotification } = useNotification();
     const [filters, setFilters] = useState({ customer: '', author: '', dateFrom: '', dateTo: '', showArchived: false });
     const [showFilters, setShowFilters] = useState(false);
@@ -79,12 +79,25 @@ const OrdersListView = ({ onEdit }) => {
     };
 
     const handleDelete = async () => {
+        const { orderToDelete } = modalState;
+        if (!orderToDelete) return;
+
         try {
-            await api.deleteOrder(modalState.orderId);
-            showNotification('Zamówienie usunięte!', 'success');
-            setModalState({ isOpen: false, orderId: null, type: '' });
+            // Jeśli zamówienie jest tylko lokalne, usuń je z Dexie
+            if (orderToDelete.statusSync === 'pending_sync' && orderToDelete.localId) {
+                await db.orders.delete(orderToDelete.localId);
+                showNotification('Lokalne zamówienie usunięte!', 'success');
+            } else if (orderToDelete._id) {
+                // Jeśli jest zsynchronizowane, usuń z serwera i Dexie
+                await api.deleteOrder(orderToDelete._id);
+                await db.orders.delete(orderToDelete.localId); // Usuwamy też lokalną kopię
+                showNotification('Zamówienie usunięte!', 'success');
+            }
+            setModalState({ isOpen: false, orderToDelete: null, type: '' });
             fetchOrders();
-        } catch (error) { showNotification(error.message, 'error'); }
+        } catch (error) {
+            showNotification(error.message, 'error');
+        }
     };
 
     const handleFilterChange = (e) => {
@@ -173,7 +186,7 @@ const OrdersListView = ({ onEdit }) => {
                                     {isArchivedView ? <RotateCcw className="w-5 h-5"/> : <Archive className="w-5 h-5"/>}
                                 </button>
                             </Tooltip>
-                            <Tooltip text="Usuń"><button onClick={() => setModalState({ isOpen: true, orderId: order._id, type: 'delete' })} className="p-2 text-red-500 hover:text-red-700" disabled={!order._id}><Trash2 className="w-5 h-5"/></button></Tooltip>
+                            <Tooltip text="Usuń"><button onClick={() => setModalState({ isOpen: true, orderToDelete: order, type: 'delete' })} className="p-2 text-red-500 hover:text-red-700"><Trash2 className="w-5 h-5"/></button></Tooltip>
                         </div>
                     </div>
                 ))}

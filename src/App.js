@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'r
 
 import { NotificationProvider, useNotification } from './contexts/NotificationContext';
 import { synchronizeData } from './data/synchronization';
+import { syncPendingOrders } from './data/repository';
 import { db } from './db';
 import ErrorBoundary from './components/ErrorBoundary';
 import AuthPage from './components/auth/AuthPage';
@@ -68,6 +69,7 @@ function App() {
             showNotification('Połączenie internetowe przywrócone.', 'success');
             if (user) { // Synchronizuj tylko, jeśli użytkownik jest zalogowany
                 triggerSync();
+                syncPendingOrders(); // Dodajemy synchronizację oczekujących zamówień
             }
         };
 

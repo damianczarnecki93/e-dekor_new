@@ -2,10 +2,9 @@
   "name": "e-dekor-frontend",
   "version": "1.0.0",
   "private": true,
-  "homepage": ".",
   "scripts": {
     "start": "react-scripts start",
-    "build": "GENERATE_SOURCEMAP=false react-scripts build",
+    "build": "GENERATE_SOURCEMAP=false react-scripts build && ./node_modules/workbox-cli/build/bin.js injectManifest workbox-config.js",
     "test": "react-scripts test"
   },
   "proxy": "http://localhost:3001",
@@ -46,5 +45,8 @@
       "last 1 firefox version",
       "last 1 safari version"
     ]
+  },
+  "devDependencies": {
+    "workbox-cli": "^7.3.0"
   }
 }

@@ -4,8 +4,7 @@ import { clientsClaim } from 'workbox-core';
 import { ExpirationPlugin } from 'workbox-expiration';
 import { precacheAndRoute, createHandlerBoundToURL } from 'workbox-precaching';
 import { registerRoute } from 'workbox-routing';
-import { StaleWhileRevalidate, CacheFirst, NetworkOnly } from 'workbox-strategies';
-import { BackgroundSyncPlugin } from 'workbox-background-sync';
+import { StaleWhileRevalidate, CacheFirst } from 'workbox-strategies';
 
 clientsClaim();
 
@@ -33,27 +32,6 @@ registerRoute(
       new ExpirationPlugin({ maxEntries: 50, maxAgeSeconds: 30 * 24 * 60 * 60 }), // 30 Days
     ],
   })
-);
-
-// Background sync for order creation/update
-const bgSyncPlugin = new BackgroundSyncPlugin('ordersQueue', {
-  maxRetentionTime: 24 * 60 // Retry for max 24 Hours
-});
-
-registerRoute(
-  ({ url }) => url.pathname.startsWith('/api/orders'),
-  new NetworkOnly({
-    plugins: [bgSyncPlugin],
-  }),
-  'POST'
-);
-
-registerRoute(
-  ({ url }) => url.pathname.startsWith('/api/orders'),
-  new NetworkOnly({
-    plugins: [bgSyncPlugin],
-  }),
-  'PUT'
 );
 
 // Cache other API GET requests with a StaleWhileRevalidate strategy
