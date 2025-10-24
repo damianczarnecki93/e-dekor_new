@@ -80,7 +80,6 @@ const OrdersListView = ({ onEdit }) => {
 
     const handleDelete = async () => {
         try {
-            // TODO: Obsługa usuwania w trybie offline
             await api.deleteOrder(modalState.orderId);
             showNotification('Zamówienie usunięte!', 'success');
             setModalState({ isOpen: false, orderId: null, type: '' });

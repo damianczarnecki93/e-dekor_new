@@ -6,6 +6,7 @@ import { api } from '../api';
  * W przypadku błędu lub braku danych, może (opcjonalnie) odwołać się do API.
  */
 export async function searchProducts(searchTerm, filterByQuantity = false) {
+    let results = [];
     try {
         const searchRegex = new RegExp(searchTerm, 'i');
         let collection = db.products.where('name').equalsIgnoreCase(searchTerm)
@@ -16,7 +17,7 @@ export async function searchProducts(searchTerm, filterByQuantity = false) {
             collection = collection.and(product => product.quantity > 0);
         }
 
-        let results = await collection.limit(20).toArray();
+        results = await collection.limit(20).toArray();
 
         // Jeśli wyszukiwanie po indeksach nic nie dało, spróbuj regex na nazwie
         if (results.length === 0 && searchTerm.length > 2) {
@@ -27,16 +28,31 @@ export async function searchProducts(searchTerm, filterByQuantity = false) {
             }).limit(20).toArray();
         }
 
-        // Jeśli lokalnie nic nie znaleziono, spróbuj przez sieć
-        if (results.length === 0) {
-            console.log("Nie znaleziono lokalnie, próba przez API...");
-            return await api.searchProducts(searchTerm, filterByQuantity);
+        // Jeśli lokalnie nic nie znaleziono, spróbuj przez sieć (tylko jeśli online)
+        if (results.length === 0 && navigator.onLine) {
+            try {
+                console.log("Nie znaleziono lokalnie, próba przez API...");
+                return await api.searchProducts(searchTerm, filterByQuantity);
+            } catch (apiError) {
+                console.warn("Błąd API podczas wyszukiwania produktów, zwracam puste wyniki.", apiError);
+                return [];
+            }
         }
 
         return results;
     } catch (error) {
-        console.error("Błąd wyszukiwania w repozytorium, powrót do API sieciowego:", error);
-        return await api.searchProducts(searchTerm, filterByQuantity);
+        console.error("Błąd wyszukiwania w repozytorium:", error);
+        // W przypadku błędu (np. offline), spróbuj mimo wszystko odwołać się do API,
+        // ale obsłuż błąd sieciowy.
+        if (navigator.onLine) {
+            try {
+                return await api.searchProducts(searchTerm, filterByQuantity);
+            } catch (apiError) {
+                console.warn("Błąd API po błędzie repozytorium, zwracam puste wyniki.", apiError);
+            }
+        }
+        // Jeśli jesteśmy offline lub API zawiodło, zwróć puste wyniki
+        return [];
     }
 }
 
@@ -44,25 +60,39 @@ export async function searchProducts(searchTerm, filterByQuantity = false) {
  * Wyszukuje kontakty, preferując lokalną bazę danych.
  */
 export async function searchContacts(term) {
+    let results = [];
     try {
         if (!term) return [];
         const searchRegex = new RegExp(term, 'i');
-        const results = await db.contacts
+        results = await db.contacts
             .filter(contact => searchRegex.test(contact.name) || searchRegex.test(contact.company))
             .limit(10)
             .toArray();
 
-        if (results.length === 0) {
-            console.log("Nie znaleziono lokalnie, próba przez API...");
-            return await api.searchContacts(term);
+        if (results.length === 0 && navigator.onLine) {
+            try {
+                console.log("Nie znaleziono lokalnie, próba przez API...");
+                return await api.searchContacts(term);
+            } catch (apiError) {
+                console.warn("Błąd API podczas wyszukiwania kontaktów, zwracam puste wyniki.", apiError);
+                return [];
+            }
         }
 
         return results;
     } catch (error) {
-        console.error("Błąd wyszukiwania kontaktów w repozytorium, powrót do API sieciowego:", error);
-        return await api.searchContacts(term);
+        console.error("Błąd wyszukiwania kontaktów w repozytorium:", error);
+        if (navigator.onLine) {
+            try {
+                return await api.searchContacts(term);
+            } catch (apiError) {
+                console.warn("Błąd API po błędzie repozytorium, zwracam puste wyniki.", apiError);
+            }
+        }
+        return [];
     }
 }
+
 
 /**
  * Zapisuje zamówienie, stosując strategię "offline-first".
