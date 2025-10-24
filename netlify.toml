@@ -15,3 +15,10 @@
   from = "/api/*"
   to = "/.netlify/functions/api/:splat"
   status = 200
+
+# Reguła "catch-all" dla aplikacji SPA (React Router)
+# Musi być na końcu pliku.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
