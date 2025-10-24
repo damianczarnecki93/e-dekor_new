@@ -48,23 +48,16 @@ function App() {
     const [isDirty, setIsDirty] = useState(false);
     const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
     const [isDarkMode, setIsDarkMode] = useState(document.documentElement.classList.contains('dark'));
-    const [syncProgress, setSyncProgress] = useState({ status: 'idle', tableName: '', progress: 0 });
+    const [syncProgress, setSyncProgress] = useState({ status: 'idle' });
     const navigate = useNavigate();
     const { showNotification } = useNotification();
 
-    const handleSyncProgress = (tableName, progress) => {
-        setSyncProgress({ status: 'syncing', tableName, progress });
-    };
-
     const triggerSync = useCallback(async () => {
-        setSyncProgress({ status: 'syncing', tableName: 'products', progress: 0 });
-        const success = await synchronizeData(handleSyncProgress);
+        const success = await synchronizeData(setSyncProgress);
         if (success) {
             showNotification('Dane zsynchronizowane pomyślnie!', 'success');
-            setSyncProgress({ status: 'idle' });
         } else {
             showNotification(`Błąd synchronizacji.`, 'error');
-            setSyncProgress({ status: 'error' });
         }
     }, [showNotification]);
 
