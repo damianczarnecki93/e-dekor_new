@@ -49,6 +49,7 @@ function App() {
     const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
     const [isDarkMode, setIsDarkMode] = useState(document.documentElement.classList.contains('dark'));
     const [syncProgress, setSyncProgress] = useState({ status: 'idle' });
+    const [isOnline, setIsOnline] = useState(navigator.onLine);
     const navigate = useNavigate();
     const { showNotification } = useNotification();
 
@@ -60,6 +61,29 @@ function App() {
             showNotification(`Błąd synchronizacji.`, 'error');
         }
     }, [showNotification]);
+
+    useEffect(() => {
+        const handleOnline = () => {
+            setIsOnline(true);
+            showNotification('Połączenie internetowe przywrócone.', 'success');
+            if (user) { // Synchronizuj tylko, jeśli użytkownik jest zalogowany
+                triggerSync();
+            }
+        };
+
+        const handleOffline = () => {
+            setIsOnline(false);
+            showNotification('Brak połączenia z internetem. Przechodzę w tryb offline.', 'warning');
+        };
+
+        window.addEventListener('online', handleOnline);
+        window.addEventListener('offline', handleOffline);
+
+        return () => {
+            window.removeEventListener('online', handleOnline);
+            window.removeEventListener('offline', handleOffline);
+        };
+    }, [showNotification, triggerSync, user]);
 
     const toggleTheme = () => {
         const newIsDarkMode = !isDarkMode;
@@ -157,6 +181,7 @@ function App() {
                         toggleTheme={toggleTheme}
                         syncProgress={syncProgress}
                         onForceSync={triggerSync}
+                        isOnline={isOnline}
                     />
                 )}
                 <main className="flex-1 overflow-y-auto">
