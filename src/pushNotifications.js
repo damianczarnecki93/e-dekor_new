@@ -24,11 +24,12 @@ function urlBase64ToUint8Array(base64String) {
  */
 export async function subscribeUser() {
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-    console.warn('Powiadomienia push nie są wspierane w tej przeglądarce.');
-    return;
+    throw new Error('Powiadomienia push nie są wspierane w tej przeglądarce.');
   }
 
-  const registration = await navigator.serviceWorker.ready;
+  const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Service worker timeout')), 5000));
+  const registration = await Promise.race([navigator.serviceWorker.ready, timeout]);
+
   const existingSubscription = await registration.pushManager.getSubscription();
 
   if (existingSubscription) {

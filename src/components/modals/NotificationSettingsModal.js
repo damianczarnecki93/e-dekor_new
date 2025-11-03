@@ -12,9 +12,11 @@ const NotificationSettingsModal = ({ isOpen, onClose }) => {
         newDelegation: true,
     });
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
 
     useEffect(() => {
         if (isOpen) {
+            setError(null); // Resetuj błąd przy otwarciu
             let isMounted = true;
             const loadSettings = async () => {
                 if (!isMounted) return;
@@ -52,29 +54,23 @@ const NotificationSettingsModal = ({ isOpen, onClose }) => {
     }, [isOpen]);
 
     const handleSubscribe = async () => {
-        if (isSubscribed) {
-            // Anuluj subskrypcję
-            try {
+        setError(null);
+        try {
+            if (isSubscribed) {
                 const registration = await navigator.serviceWorker.ready;
                 const subscription = await registration.pushManager.getSubscription();
                 if (subscription) {
                     await api.unsubscribeFromPush(subscription.endpoint);
                     await subscription.unsubscribe();
-                    console.log("Subskrypcja anulowana.");
                     setIsSubscribed(false);
                 }
-            } catch (error) {
-                console.error("Błąd podczas anulowania subskrypcji:", error);
-            }
-        } else {
-            // Zasubskrybuj
-            try {
+            } else {
                 await subscribeUser();
                 setIsSubscribed(true);
-                console.log("Subskrypcja pomyślna.");
-            } catch (error) {
-                console.error("Błąd podczas subskrypcji:", error);
             }
+        } catch (err) {
+            console.error("Operacja subskrypcji nie powiodła się:", err);
+            setError(err.message || 'Nieznany błąd. Sprawdź konsolę przeglądarki.');
         }
     };
 
@@ -116,8 +112,14 @@ const NotificationSettingsModal = ({ isOpen, onClose }) => {
                         </button>
                     </div>
 
+                    {error && (
+                        <div className="mt-2 text-sm text-red-600 dark:text-red-400 p-3 bg-red-100 dark:bg-red-900/30 rounded-lg">
+                            <strong>Błąd:</strong> {error}
+                        </div>
+                    )}
+
                     {isSubscribed && (
-                        <div>
+                        <div className="mt-4">
                             <h3 className="text-lg font-semibold mb-2">Otrzymuj powiadomienia o:</h3>
                             <div className="space-y-2">
                                 <label className="flex items-center">
