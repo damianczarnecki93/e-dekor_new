@@ -13,10 +13,12 @@ const NotificationSettingsModal = ({ isOpen, onClose }) => {
     });
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const [saveStatus, setSaveStatus] = useState('');
 
     useEffect(() => {
         if (isOpen) {
-            setError(null); // Resetuj błąd przy otwarciu
+            setError(null);
+            setSaveStatus('');
             let isMounted = true;
             const loadSettings = async () => {
                 if (!isMounted) return;
@@ -82,11 +84,15 @@ const NotificationSettingsModal = ({ isOpen, onClose }) => {
     };
 
     const handleSave = async () => {
+        setSaveStatus('saving');
         try {
             await api.updateNotificationPreferences(preferences);
-            console.log("Preferencje zapisane.");
-            onClose();
+            setSaveStatus('success');
+            setTimeout(() => {
+                onClose();
+            }, 1500);
         } catch (error) {
+            setSaveStatus('error');
             console.error("Błąd podczas zapisywania preferencji:", error);
         }
     };
@@ -138,9 +144,13 @@ const NotificationSettingsModal = ({ isOpen, onClose }) => {
                         </div>
                     )}
 
-                    <div className="mt-6 flex justify-end gap-2">
+                    <div className="mt-6 flex justify-end items-center gap-2">
+                        {saveStatus === 'success' && <span className="text-sm text-green-500">Zapisano pomyślnie!</span>}
+                        {saveStatus === 'error' && <span className="text-sm text-red-500">Błąd zapisu.</span>}
                         <button onClick={onClose} className="px-4 py-2 bg-gray-200 dark:bg-gray-600 rounded-md">Anuluj</button>
-                        <button onClick={handleSave} className="px-4 py-2 bg-blue-500 text-white rounded-md">Zapisz</button>
+                        <button onClick={handleSave} className="px-4 py-2 bg-blue-500 text-white rounded-md" disabled={saveStatus === 'saving'}>
+                            {saveStatus === 'saving' ? 'Zapisywanie...' : 'Zapisz'}
+                        </button>
                     </div>
                 </div>
             )}

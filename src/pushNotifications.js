@@ -30,12 +30,12 @@ export async function subscribeUser() {
   const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Service worker timeout')), 5000));
   const registration = await Promise.race([navigator.serviceWorker.ready, timeout]);
 
-  const existingSubscription = await registration.pushManager.getSubscription();
+  let subscription = await registration.pushManager.getSubscription();
 
-  if (existingSubscription) {
-    console.log('Użytkownik jest już zasubskrybowany.');
-    return;
-  }
+  if (subscription) {
+    console.log('Użytkownik jest już zasubskrybowany. Synchronizuję subskrypcję z serwerem...');
+  } else {
+    console.log('Użytkownik nie jest zasubskrybowany. Prośba o nową subskrypcję...');
 
   try {
     const vapidPublicKey = process.env.REACT_APP_VAPID_PUBLIC_KEY;
@@ -44,14 +44,15 @@ export async function subscribeUser() {
     }
     const applicationServerKey = urlBase64ToUint8Array(vapidPublicKey);
 
-    const subscription = await registration.pushManager.subscribe({
+    subscription = await registration.pushManager.subscribe({
       userVisibleOnly: true,
       applicationServerKey: applicationServerKey,
     });
+  }
 
-    console.log('Zapisywanie subskrypcji na serwerze...');
-    await api.subscribeToPush(subscription);
-    console.log('Subskrypcja zapisana pomyślnie.');
+  console.log('Zapisywanie subskrypcji na serwerze...');
+  await api.subscribeToPush(subscription);
+  console.log('Subskrypcja zapisana pomyślnie.');
 
   } catch (error) {
     console.error('Nie udało się zasubskrybować użytkownika: ', error);
