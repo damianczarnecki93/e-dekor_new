@@ -32,29 +32,30 @@ export async function subscribeUser() {
 
   let subscription = await registration.pushManager.getSubscription();
 
-  if (subscription) {
-    console.log('Użytkownik jest już zasubskrybowany. Synchronizuję subskrypcję z serwerem...');
-  } else {
-    console.log('Użytkownik nie jest zasubskrybowany. Prośba o nową subskrypcję...');
-
   try {
-    const vapidPublicKey = process.env.REACT_APP_VAPID_PUBLIC_KEY;
-    if (!vapidPublicKey) {
-        throw new Error("REACT_APP_VAPID_PUBLIC_KEY is not defined");
+    if (subscription) {
+      console.log('Użytkownik jest już zasubskrybowany. Synchronizuję subskrypcję z serwerem...');
+    } else {
+      console.log('Użytkownik nie jest zasubskrybowany. Prośba o nową subskrypcję...');
+      const vapidPublicKey = process.env.REACT_APP_VAPID_PUBLIC_KEY;
+      if (!vapidPublicKey) {
+          throw new Error("REACT_APP_VAPID_PUBLIC_KEY is not defined");
+      }
+      const applicationServerKey = urlBase64ToUint8Array(vapidPublicKey);
+
+      subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: applicationServerKey,
+      });
     }
-    const applicationServerKey = urlBase64ToUint8Array(vapidPublicKey);
 
-    subscription = await registration.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: applicationServerKey,
-    });
-  }
-
-  console.log('Zapisywanie subskrypcji na serwerze...');
-  await api.subscribeToPush(subscription);
-  console.log('Subskrypcja zapisana pomyślnie.');
+    console.log('Zapisywanie subskrypcji na serwerze...');
+    await api.subscribeToPush(subscription);
+    console.log('Subskrypcja zapisana pomyślnie.');
 
   } catch (error) {
     console.error('Nie udało się zasubskrybować użytkownika: ', error);
+    // Rzuć błąd dalej, aby komponent UI mógł go obsłużyć
+    throw error;
   }
 }
