@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import Modal from './Modal';
+import Modal from '../common/Modal';
 import { api } from '../../api';
 import { subscribeUser } from '../../pushNotifications';
 import { Bell, Loader2 } from 'lucide-react';
