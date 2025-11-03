@@ -20,7 +20,7 @@ registerRoute(
     if (url.pathname.match(fileExtensionRegexp)) return false;
     return true;
   },
-  createHandlerBoundToURL(process.env.PUBLIC_URL + '/index.html')
+  createHandlerBoundToURL('/index.html')
 );
 
 // Cache images with a CacheFirst strategy
