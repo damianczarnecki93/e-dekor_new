@@ -74,7 +74,21 @@ const OrdersListView = ({ onEdit }) => {
             }
             fetchOrders();
         } catch (error) {
-            showNotification(error.message, 'error');
+            // Jeśli serwer zwróci 404 (Nie znaleziono), a zamówienie ma lokalne ID,
+            // oznacza to, że mamy do czynienia z "osieroconym" zamówieniem.
+            // W takim przypadku pozwalamy na usunięcie go tylko z lokalnej bazy danych.
+            if (error.message.includes('Nie znaleziono') && orderToDelete.localId) {
+                try {
+                    await db.orders.delete(orderToDelete.localId);
+                    showNotification('Usunięto lokalną kopię zamówienia (nie znaleziono na serwerze).', 'warning');
+                    setModalState({ isOpen: false, orderToDelete: null, type: '' });
+                    fetchOrders();
+                } catch (localError) {
+                    showNotification(`Błąd usuwania lokalnego: ${localError.message}`, 'error');
+                }
+            } else {
+                showNotification(error.message, 'error');
+            }
         }
     };
 
