@@ -15,22 +15,39 @@ const NotificationSettingsModal = ({ isOpen, onClose }) => {
 
     useEffect(() => {
         if (isOpen) {
-            const checkSubscriptionAndFetchPreferences = async () => {
+            let isMounted = true;
+            const loadSettings = async () => {
+                if (!isMounted) return;
                 setLoading(true);
-                try {
-                    const registration = await navigator.serviceWorker.ready;
-                    const existingSubscription = await registration.pushManager.getSubscription();
-                    setIsSubscribed(!!existingSubscription);
 
+                // Zawsze pobieraj preferencje
+                try {
                     const fetchedPreferences = await api.getNotificationPreferences();
-                    setPreferences(fetchedPreferences);
+                    if (isMounted) setPreferences(fetchedPreferences);
                 } catch (error) {
-                    console.error("Błąd podczas sprawdzania subskrypcji lub pobierania preferencji:", error);
-                } finally {
-                    setLoading(false);
+                    console.error("Błąd podczas pobierania preferencji:", error);
                 }
+
+                // Sprawdź status subskrypcji z timeoutem, aby uniknąć zawieszenia
+                if ('serviceWorker' in navigator) {
+                    try {
+                        const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Service worker timeout')), 3000));
+                        const registration = await Promise.race([navigator.serviceWorker.ready, timeout]);
+                        const subscription = await registration.pushManager.getSubscription();
+                        if (isMounted) setIsSubscribed(!!subscription);
+                    } catch (error) {
+                        console.error("Nie można zweryfikować subskrypcji push:", error.message);
+                        if (isMounted) setIsSubscribed(false);
+                    }
+                } else {
+                    if (isMounted) setIsSubscribed(false);
+                }
+
+                if (isMounted) setLoading(false);
             };
-            checkSubscriptionAndFetchPreferences();
+
+            loadSettings();
+            return () => { isMounted = false; };
         }
     }, [isOpen]);
 
