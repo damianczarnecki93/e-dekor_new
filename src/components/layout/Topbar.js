@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Home, ArrowLeft, KeyRound, LogOut, Sun, Moon, ChevronDown, RefreshCw, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
+import { Home, ArrowLeft, KeyRound, LogOut, Sun, Moon, ChevronDown, RefreshCw, CheckCircle, XCircle, AlertTriangle, Bell } from 'lucide-react';
 
 const SyncStatusIndicator = ({ progress, onForceSync }) => {
     if (!progress || progress.status === 'idle') return null;
@@ -46,7 +46,7 @@ const SyncStatusIndicator = ({ progress, onForceSync }) => {
 };
 
 
-const Topbar = ({ user, onLogout, onOpenPasswordModal, isDarkMode, toggleTheme, syncProgress, onForceSync }) => {
+const Topbar = ({ user, onLogout, onOpenPasswordModal, onOpenNotificationSettings, isDarkMode, toggleTheme, syncProgress, onForceSync }) => {
     const navigate = useNavigate();
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const menuRef = useRef(null);
@@ -90,6 +90,9 @@ const Topbar = ({ user, onLogout, onOpenPasswordModal, isDarkMode, toggleTheme, 
                         <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-md shadow-lg py-1 z-50">
                             <button onClick={() => { onOpenPasswordModal(); setIsMenuOpen(false); }} className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center">
                                 <KeyRound className="w-4 h-4 mr-2" /> Zmień hasło
+                            </button>
+                            <button onClick={() => { onOpenNotificationSettings(); setIsMenuOpen(false); }} className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center">
+                                <Bell className="w-4 h-4 mr-2" /> Powiadomienia
                             </button>
                             <button onClick={() => { onLogout(); setIsMenuOpen(false); }} className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center">
                                 <LogOut className="w-4 h-4 mr-2" /> Wyloguj

@@ -413,11 +413,32 @@ unarchiveOrder: async (orderId) => {
         return data.contacts; // Zakładamy, że serwer zwraca { contacts: [...] }
     },
     subscribeToPush: async (subscription) => {
-        const response = await fetchWithAuth('/api/subscribe', {
+        const response = await fetchWithAuth('/api/push/subscribe', {
             method: 'POST',
-            body: JSON.stringify(subscription),
+            body: JSON.stringify({ subscription }),
         });
         if (!response.ok) throw new Error('Błąd podczas subskrypcji powiadomień.');
+        return await response.json();
+    },
+    getNotificationPreferences: async () => {
+        const response = await fetchWithAuth('/api/user/notification-preferences');
+        if (!response.ok) throw new Error('Błąd pobierania preferencji powiadomień.');
+        return await response.json();
+    },
+    updateNotificationPreferences: async (preferences) => {
+        const response = await fetchWithAuth('/api/user/notification-preferences', {
+            method: 'PUT',
+            body: JSON.stringify({ preferences }),
+        });
+        if (!response.ok) throw new Error('Błąd zapisywania preferencji powiadomień.');
+        return await response.json();
+    },
+    unsubscribeFromPush: async (endpoint) => {
+        const response = await fetchWithAuth('/api/push/unsubscribe', {
+            method: 'POST',
+            body: JSON.stringify({ endpoint }),
+        });
+        if (!response.ok) throw new Error('Błąd podczas anulowania subskrypcji.');
         return await response.json();
     },
 };

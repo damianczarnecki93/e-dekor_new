@@ -12,6 +12,7 @@ const fs = require('fs');
 const path = require('path');
 const nodemailer = require('nodemailer');
 const axios = require('axios');
+const webpush = require('web-push');
 
 const app = express();
 const corsOptions = {
@@ -24,6 +25,22 @@ app.use(cors(corsOptions));
 app.options('*', cors(corsOptions)); // Umożliwia obsługę zapytań preflight (OPTIONS)
 
 app.use(express.json());
+
+// --- Konfiguracja Web Push ---
+const vapidPublicKey = process.env.VAPID_PUBLIC_KEY;
+const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY;
+const vapidContactEmail = process.env.VAPID_CONTACT_EMAIL || 'mailto:your-email@example.com';
+
+if (vapidPublicKey && vapidPrivateKey) {
+    webpush.setVapidDetails(
+        vapidContactEmail,
+        vapidPublicKey,
+        vapidPrivateKey
+    );
+    console.log('Web Push skonfigurowany pomyślnie.');
+} else {
+    console.warn('OSTRZEŻENIE: Klucze VAPID nie są ustawione. Wysyłanie powiadomień push będzie niemożliwe.');
+}
 
 // --- Konfiguracja i połączenie z bazą danych ---
 const dbUrl = process.env.DATABASE_URL;
@@ -48,10 +65,28 @@ const userSchema = new mongoose.Schema({
     salesGoal: { type: Number, default: 0 },
     manualSales: { type: Number, default: 0 },
     visibleModules: { type: [String], default: [] },
-	dashboardLayout: { type: [String], default: ['stats_products', 'stats_pending_orders', 'stats_completed_orders', 'quick_actions', 'my_tasks'] }
+	dashboardLayout: { type: [String], default: ['stats_products', 'stats_pending_orders', 'stats_completed_orders', 'quick_actions', 'my_tasks'] },
+    notificationPreferences: {
+        newOrder: { type: Boolean, default: true },
+        orderCompleted: { type: Boolean, default: true },
+        newDelegation: { type: Boolean, default: true }
+    }
 });
 
 const User = mongoose.models.User || mongoose.model('User', userSchema);
+
+const pushSubscriptionSchema = new mongoose.Schema({
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    subscription: {
+        endpoint: { type: String, required: true, unique: true },
+        expirationTime: { type: Number, default: null },
+        keys: {
+            p256dh: { type: String, required: true },
+            auth: { type: String, required: true }
+        }
+    }
+});
+const PushSubscription = mongoose.models.PushSubscription || mongoose.model('PushSubscription', pushSubscriptionSchema);
 
 const productSchema = new mongoose.Schema({
     name: String,
@@ -218,6 +253,50 @@ async function sendNotificationEmail(subject, htmlContent) {
             console.error('Odpowiedź serwera:', error.response.body);
         }
         return { success: false, error: error.message || 'Nieznany błąd podczas wysyłania e-maila.' };
+    }
+}
+
+async function sendPushNotification(userIds, notificationType, title, body) {
+    if (!vapidPublicKey || !vapidPrivateKey) {
+        console.log('Powiadomienie push pominięte - brak konfiguracji kluczy VAPID.');
+        return;
+    }
+
+    // Zapewniamy, że userIds jest tablicą
+    const targetUserIds = Array.isArray(userIds) ? userIds : [userIds];
+
+    try {
+        const users = await User.find({
+            '_id': { $in: targetUserIds },
+            [`notificationPreferences.${notificationType}`]: true
+        }).select('_id');
+
+        if (users.length === 0) {
+            console.log(`Brak użytkowników do powiadomienia dla typu: ${notificationType}`);
+            return;
+        }
+
+        const userObjectIds = users.map(u => u._id);
+        const subscriptions = await PushSubscription.find({ userId: { $in: userObjectIds } });
+
+        const payload = JSON.stringify({ title, body });
+
+        const sendPromises = subscriptions.map(sub =>
+            webpush.sendNotification(sub.subscription, payload)
+                .catch(error => {
+                    console.error(`Błąd wysyłania powiadomienia do ${sub.subscription.endpoint}:`, error.statusCode);
+                    // Jeśli subskrypcja wygasła lub jest nieprawidłowa (np. 410 Gone), usuwamy ją z bazy
+                    if (error.statusCode === 410 || error.statusCode === 404) {
+                        return PushSubscription.findByIdAndDelete(sub._id);
+                    }
+                })
+        );
+
+        await Promise.all(sendPromises);
+        console.log(`Wysłano ${subscriptions.length} powiadomień typu "${notificationType}".`);
+
+    } catch (error) {
+        console.error('Błąd podczas wysyłania powiadomień push:', error);
     }
 }
 
@@ -555,6 +634,14 @@ app.put('/api/orders/:id/status', authMiddleware, async (req, res) => {
 				<p>Szczegóły zamówienia dostępne w Panelu Sprzedaży</p>
             `;
             sendNotificationEmail(emailSubject, emailHtml).catch(console.error);
+
+            // Wyślij powiadomienie push do autora zamówienia
+            const author = await User.findOne({ username: updatedOrder.author });
+            if (author) {
+                const title = 'Zamówienie zakończone';
+                const body = `Twoje zamówienie dla ${updatedOrder.customerName} zostało zakończone.`;
+                sendPushNotification(author._id, 'orderCompleted', title, body).catch(console.error);
+            }
         }
         res.json({ message: 'Status zamówienia zaktualizowany!', order: updatedOrder });
     } catch (error) {
@@ -585,6 +672,36 @@ app.put('/api/user/dashboard-layout', authMiddleware, async (req, res) => {
         res.json({ message: 'Układ pulpitu zapisany.', user: userData });
     } catch (error) {
         res.status(500).json({ message: 'Błąd zapisywania układu pulpitu.' });
+    }
+});
+
+app.get('/api/user/notification-preferences', authMiddleware, async (req, res) => {
+    try {
+        const user = await User.findById(req.user.userId).select('notificationPreferences');
+        if (!user) {
+            return res.status(404).json({ message: 'Nie znaleziono użytkownika.' });
+        }
+        res.json(user.notificationPreferences);
+    } catch (error) {
+        res.status(500).json({ message: 'Błąd pobierania preferencji powiadomień.' });
+    }
+});
+
+app.put('/api/user/notification-preferences', authMiddleware, async (req, res) => {
+    try {
+        const { preferences } = req.body;
+        const user = await User.findByIdAndUpdate(
+            req.user.userId,
+            { $set: { notificationPreferences: preferences } },
+            { new: true }
+        ).select('notificationPreferences');
+
+        if (!user) {
+            return res.status(404).json({ message: 'Nie znaleziono użytkownika.' });
+        }
+        res.json({ message: 'Preferencje zapisane.', preferences: user.notificationPreferences });
+    } catch (error) {
+        res.status(500).json({ message: 'Błąd zapisywania preferencji.' });
     }
 });
 
@@ -1123,6 +1240,16 @@ app.post('/api/orders', authMiddleware, async (req, res) => {
     const newOrder = new Order({ id: `ZAM-${Date.now()}`, ...orderData, total: total, author: req.user.username, status: 'Zapisane', isDirty: false });
     try {
         const savedOrder = await newOrder.save();
+
+        // Wyślij powiadomienie do administratorów
+        const admins = await User.find({ role: 'administrator' }).select('_id');
+        const adminIds = admins.map(admin => admin._id);
+        if (adminIds.length > 0) {
+            const title = 'Nowe zamówienie';
+            const body = `Użytkownik ${savedOrder.author} utworzył zamówienie dla ${savedOrder.customerName} na kwotę ${savedOrder.total.toFixed(2)} PLN.`;
+            sendPushNotification(adminIds, 'newOrder', title, body).catch(console.error);
+        }
+
         res.status(201).json({ message: 'Zamówienie zapisane!', order: savedOrder });
     } catch (error) {
         res.status(400).json({ message: 'Błąd zapisywania zamówienia', error: error.message });
@@ -1575,6 +1702,16 @@ app.post('/api/delegations', authMiddleware, async (req, res) => {
             <p>Proszę o weryfikację w panelu.</p>
         `;
         sendNotificationEmail(emailSubject, emailHtml).catch(console.error);
+
+        // Wyślij powiadomienie push do administratorów
+        const admins = await User.find({ role: 'administrator' }).select('_id');
+        const adminIds = admins.map(admin => admin._id);
+        if (adminIds.length > 0) {
+            const title = 'Nowa delegacja do akceptacji';
+            const body = `Użytkownik ${newDelegation.author} utworzył nową delegację: ${newDelegation.destination}.`;
+            sendPushNotification(adminIds, 'newDelegation', title, body).catch(console.error);
+        }
+
         res.status(201).json(newDelegation);
     } catch (error) {
         res.status(500).json({ message: 'Błąd tworzenia delegacji' });
@@ -1672,6 +1809,46 @@ app.post('/api/delegations/:id/visits/:clientIndex/end', authMiddleware, async (
         res.status(500).json({ message: 'Błąd zakończenia wizyty' });
     }
 });
+
+// --- API Endpoints - Push Notifications ---
+app.post('/api/push/subscribe', authMiddleware, async (req, res) => {
+    try {
+        const { subscription } = req.body;
+        if (!subscription || !subscription.endpoint) {
+            return res.status(400).json({ message: 'Subskrypcja jest nieprawidłowa.' });
+        }
+
+        // Używamy `findOneAndUpdate` z `upsert`, aby uniknąć duplikatów i zaktualizować istniejące subskrypcje
+        await PushSubscription.findOneAndUpdate(
+            { userId: req.user.userId, 'subscription.endpoint': subscription.endpoint },
+            { $set: { subscription: subscription } },
+            { upsert: true, new: true }
+        );
+
+        res.status(201).json({ message: 'Subskrypcja zapisana pomyślnie.' });
+    } catch (error) {
+        console.error('Błąd podczas zapisywania subskrypcji:', error);
+        res.status(500).json({ message: 'Błąd serwera podczas zapisywania subskrypcji.' });
+    }
+});
+
+app.post('/api/push/unsubscribe', authMiddleware, async (req, res) => {
+    try {
+        const { endpoint } = req.body;
+        if (!endpoint) {
+            return res.status(400).json({ message: 'Endpoint jest wymagany.' });
+        }
+        await PushSubscription.findOneAndDelete({
+            userId: req.user.userId,
+            'subscription.endpoint': endpoint
+        });
+        res.status(200).json({ message: 'Subskrypcja usunięta.' });
+    } catch (error) {
+        console.error('Błąd podczas usuwania subskrypcji:', error);
+        res.status(500).json({ message: 'Błąd serwera podczas usuwania subskrypcji.' });
+    }
+});
+
 
 const buildPath = path.join(__dirname, '..', 'build');
 app.use(express.static(buildPath));

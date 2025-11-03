@@ -24,6 +24,7 @@ import AdminProductsView from './components/admin/AdminProductsView';
 import AdminEmailConfigView from './components/admin/AdminEmailConfigView';
 import ShortageReportView from './components/reports/ShortageReportView';
 import UserChangePasswordModal from './components/modals/UserChangePasswordModal';
+import NotificationSettingsModal from './components/modals/NotificationSettingsModal';
 import { api } from './api';
 
 const getInitialOrder = () => {
@@ -48,6 +49,7 @@ function App() {
     const [currentOrder, setCurrentOrder] = useState(getInitialOrder);
     const [isDirty, setIsDirty] = useState(false);
     const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
+    const [isNotificationModalOpen, setIsNotificationModalOpen] = useState(false);
     const [isDarkMode, setIsDarkMode] = useState(document.documentElement.classList.contains('dark'));
     const [syncProgress, setSyncProgress] = useState({ status: 'idle' });
     const [isOnline, setIsOnline] = useState(navigator.onLine);
@@ -179,6 +181,7 @@ function App() {
                         user={user}
                         onLogout={handleLogout}
                         onOpenPasswordModal={() => setIsPasswordModalOpen(true)}
+                        onOpenNotificationSettings={() => setIsNotificationModalOpen(true)}
                         isDarkMode={isDarkMode}
                         toggleTheme={toggleTheme}
                         syncProgress={syncProgress}
@@ -219,6 +222,7 @@ function App() {
                 </main>
             </div>
             <UserChangePasswordModal isOpen={isPasswordModalOpen} onClose={() => setIsPasswordModalOpen(false)} />
+            <NotificationSettingsModal isOpen={isNotificationModalOpen} onClose={() => setIsNotificationModalOpen(false)} />
         </>
     );
 }
