@@ -1854,6 +1854,7 @@ const buildPath = path.join(__dirname, '..', 'build');
 app.use(express.static(buildPath));
 
 app.get('/service-worker.js', (req, res) => {
+  res.setHeader('Content-Type', 'application/javascript');
   res.sendFile(path.resolve(buildPath, 'service-worker.js'));
 });
 
