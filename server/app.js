@@ -1853,6 +1853,10 @@ app.post('/api/push/unsubscribe', authMiddleware, async (req, res) => {
 const buildPath = path.join(__dirname, '..', 'build');
 app.use(express.static(buildPath));
 
+app.get('/service-worker.js', (req, res) => {
+  res.sendFile(path.resolve(buildPath, 'service-worker.js'));
+});
+
 app.get('*', (req, res) => {
   res.sendFile(path.join(buildPath, 'index.html'));
 });
