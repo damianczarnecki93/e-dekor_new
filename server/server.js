@@ -66,6 +66,7 @@ const Product = mongoose.models.Product || mongoose.model('Product', productSche
 const orderSchema = new mongoose.Schema({
     id: { type: String, required: true, unique: true },
     customerName: String,
+    customerId: { type: mongoose.Schema.Types.ObjectId, ref: 'Contact' },
     author: String,
     items: Array,
     total: Number,
@@ -189,17 +190,10 @@ async function sendNotificationEmail(subject, htmlContent) {
             return { success: false, error: 'Brak konfiguracji email.' };
         }
 
-        // --- POCZĄTEK POPRAWKI ---
-        // Automatycznie ustawiamy 'secure' na podstawie portu.
-        // Tylko port 465 używa bezpiecznego połączenia od samego początku.
-        const isSecurePort = parseInt(config.port, 10) === 465;
-        // --- KONIEC POPRAWKI ---
-
         let transporter = nodemailer.createTransport({
             host: config.host,
             port: config.port,
-            // Używamy naszej nowej zmiennej zamiast wartości z bazy danych
-            secure: isSecurePort,
+            secure: config.secure, // Używamy wartości 'secure' bezpośrednio z konfiguracji
             auth: {
                 user: config.user,
                 pass: config.pass,
@@ -363,6 +357,27 @@ app.get('/api/crm/contacts', authMiddleware, async (req, res) => {
         res.json(contacts);
     } catch (error) {
         res.status(500).json({ message: 'Błąd podczas pobierania kontaktów.' });
+    }
+});
+
+// Wyszukiwanie kontaktów na potrzeby sugestii
+app.get('/api/crm/search', authMiddleware, async (req, res) => {
+    try {
+        const { term } = req.query;
+        if (!term) {
+            return res.json([]);
+        }
+        const searchRegex = new RegExp(term, 'i');
+        const contacts = await Contact.find({
+            ownerId: req.user.userId,
+            $or: [
+                { name: searchRegex },
+                { company: searchRegex }
+            ]
+        }).limit(10); // Ograniczamy do 10 sugestii
+        res.json(contacts);
+    } catch (error) {
+        res.status(500).json({ message: 'Błąd podczas wyszukiwania kontaktów.' });
     }
 });
 
