@@ -99,33 +99,27 @@ const OrdersListView = ({ onEdit }) => {
         try {
             const isSynced = orderToDelete.statusSync !== 'pending_sync' && orderToDelete._id;
 
-            // 1. Spróbuj usunąć z serwera, jeśli zamówienie jest zsynchronizowane
             if (isSynced) {
                 try {
                     await api.deleteOrder(orderToDelete._id);
                 } catch (serverError) {
-                    // Ignoruj błąd "Nie znaleziono", ale zgłoś inne błędy serwera
                     if (!serverError.message.includes('Nie znaleziono')) {
                         throw serverError;
                     }
-                    console.warn(`Zamówienie ${orderToDelete._id} nie znalezione na serwerze, kontynuuję usuwanie lokalne.`);
+                    console.warn(`Order ${orderToDelete._id} not found on server, deleting locally.`);
                 }
             }
 
-            // 2. Niezależnie od wyniku, usuń z lokalnej bazy danych (jeśli ma klucz)
             const localKey = orderToDelete.localId || orderToDelete._id;
             if (localKey) {
-                // Musimy sprawdzić oba możliwe klucze, bo logika mogła być niekonsekwentna
-                await db.orders.delete(orderToDelete.localId);
-                await db.orders.delete(orderToDelete._id);
+                await db.orders.delete(localKey);
             }
 
-            showNotification('Zamówienie zostało usunięte.', 'success');
+            showNotification('Zamówienie zostało pomyślnie usunięte.', 'success');
 
         } catch (error) {
             showNotification(`Wystąpił nieoczekiwany błąd: ${error.message}`, 'error');
         } finally {
-            // Zawsze zamknij modal i odśwież listę
             setModalState({ isOpen: false, orderToDelete: null, type: '' });
             fetchOrders();
         }
