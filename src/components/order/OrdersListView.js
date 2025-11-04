@@ -97,20 +97,37 @@ const OrdersListView = ({ onEdit }) => {
         if (!orderToDelete) return;
 
         try {
-            // Jeśli zamówienie jest tylko lokalne, usuń je z Dexie
-            if (orderToDelete.statusSync === 'pending_sync' && orderToDelete.localId) {
-                await db.orders.delete(orderToDelete.localId);
-                showNotification('Lokalne zamówienie usunięte!', 'success');
-            } else if (orderToDelete._id) {
-                // Jeśli jest zsynchronizowane, usuń z serwera i Dexie
-                await api.deleteOrder(orderToDelete._id);
-                await db.orders.delete(orderToDelete.localId); // Usuwamy też lokalną kopię
-                showNotification('Zamówienie usunięte!', 'success');
+            const isSynced = orderToDelete.statusSync !== 'pending_sync' && orderToDelete._id;
+
+            // 1. Spróbuj usunąć z serwera, jeśli zamówienie jest zsynchronizowane
+            if (isSynced) {
+                try {
+                    await api.deleteOrder(orderToDelete._id);
+                } catch (serverError) {
+                    // Ignoruj błąd "Nie znaleziono", ale zgłoś inne błędy serwera
+                    if (!serverError.message.includes('Nie znaleziono')) {
+                        throw serverError;
+                    }
+                    console.warn(`Zamówienie ${orderToDelete._id} nie znalezione na serwerze, kontynuuję usuwanie lokalne.`);
+                }
             }
+
+            // 2. Niezależnie od wyniku, usuń z lokalnej bazy danych (jeśli ma klucz)
+            const localKey = orderToDelete.localId || orderToDelete._id;
+            if (localKey) {
+                // Musimy sprawdzić oba możliwe klucze, bo logika mogła być niekonsekwentna
+                await db.orders.delete(orderToDelete.localId);
+                await db.orders.delete(orderToDelete._id);
+            }
+
+            showNotification('Zamówienie zostało usunięte.', 'success');
+
+        } catch (error) {
+            showNotification(`Wystąpił nieoczekiwany błąd: ${error.message}`, 'error');
+        } finally {
+            // Zawsze zamknij modal i odśwież listę
             setModalState({ isOpen: false, orderToDelete: null, type: '' });
             fetchOrders();
-        } catch (error) {
-            showNotification(error.message, 'error');
         }
     };
 
