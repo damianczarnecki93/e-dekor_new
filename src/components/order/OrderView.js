@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { PlusCircle, FileText, FileDown, FileUp, CheckCircle2 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
@@ -25,6 +25,34 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
     const [contactSearchQuery, setContactSearchQuery] = useState(currentOrder.customerName || '');
     const [contactSuggestions, setContactSuggestions] = useState([]);
     const [isContactLoading, setIsContactLoading] = useState(false);
+
+    const handleAutoSave = useCallback(async (updatedOrder) => {
+        if (isSaving || !updatedOrder.customerName) return;
+        setIsSaving(true);
+        try {
+            const savedOrder = await saveOrderOfflineFirst(updatedOrder, user);
+
+            const finalOrder = {
+                ...savedOrder,
+                items: savedOrder.items.map(item => ({ ...item, isSaved: true })),
+                isDirty: savedOrder.statusSync === 'pending_sync'
+            };
+
+            setCurrentOrder(finalOrder);
+            localStorage.setItem('draftOrder', JSON.stringify(finalOrder));
+            setDirty(finalOrder.isDirty);
+
+            if (savedOrder.statusSync === 'pending_sync') {
+                showNotification('Jesteś offline. Zamówienie zostało zapisane lokalnie i zostanie wysłane po odzyskaniu połączenia.', 'info');
+            }
+
+        } catch (error) {
+            showNotification(error.message, 'error');
+            setDirty(true);
+        } finally {
+            setIsSaving(false);
+        }
+    }, [isSaving, user, setCurrentOrder, setDirty, showNotification]);
 
     const getSortIcon = (name) => {
         if (!sortConfig || sortConfig.key !== name) {
@@ -58,7 +86,7 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
             } finally {
                 setIsContactLoading(false);
             }
-        }, 300);
+        }, 3000);
         return () => clearTimeout(handler);
     }, [contactSearchQuery, order.customerId, order.customerName, showNotification]);
 
@@ -70,6 +98,22 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
         }
         prevItemsLength.current = currentItemsLength;
     }, [order.items]);
+
+    const autoSaveTimer = useRef(null);
+    useEffect(() => {
+        if (!order.isDirty) {
+            return;
+        }
+        if (autoSaveTimer.current) {
+            clearTimeout(autoSaveTimer.current);
+        }
+        autoSaveTimer.current = setTimeout(() => {
+            handleAutoSave(order);
+        }, 20000);
+        return () => {
+            clearTimeout(autoSaveTimer.current);
+        };
+    }, [order, handleAutoSave]);
 
     const updateOrder = (updates, isDirtyFlag = true) => {
         const newOrder = { ...order, ...updates, isDirty: isDirtyFlag };
@@ -86,37 +130,8 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
             items: order.items.map(item => ({...item, isSaved: false}))
         };
         updateOrder(updatedOrder, true);
-        handleAutoSave(updatedOrder);
         setContactSearchQuery(contact.name);
         setContactSuggestions([]);
-    };
-
-    const handleAutoSave = async (updatedOrder) => {
-        if (isSaving || !updatedOrder.customerName) return;
-        setIsSaving(true);
-        try {
-            const savedOrder = await saveOrderOfflineFirst(updatedOrder, user);
-
-            const finalOrder = {
-                ...savedOrder,
-                items: savedOrder.items.map(item => ({ ...item, isSaved: true })),
-                isDirty: savedOrder.statusSync === 'pending_sync'
-            };
-
-            setCurrentOrder(finalOrder);
-            localStorage.setItem('draftOrder', JSON.stringify(finalOrder));
-            setDirty(finalOrder.isDirty);
-
-            if (savedOrder.statusSync === 'pending_sync') {
-                showNotification('Jesteś offline. Zamówienie zostało zapisane lokalnie i zostanie wysłane po odzyskaniu połączenia.', 'info');
-            }
-
-        } catch (error) {
-            showNotification(error.message, 'error');
-            setDirty(true);
-        } finally {
-            setIsSaving(false);
-        }
     };
 
     const addProductToOrder = (product, quantity) => {
@@ -138,7 +153,6 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
 
         const updatedOrder = { ...order, items: newItems, isDirty: true };
         updateOrder(updatedOrder, true);
-        handleAutoSave(updatedOrder);
     };
 
     const updateQuantity = (itemIndex, newQuantityStr) => {
@@ -155,7 +169,6 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
             }
             const updatedOrder = { ...order, items: newItems, isDirty: true };
             updateOrder(updatedOrder, true);
-            handleAutoSave(updatedOrder);
         }
     };
 
@@ -177,7 +190,6 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
             newItems.splice(targetIndex, 1);
             const updatedOrder = { ...order, items: newItems, isDirty: true };
             updateOrder(updatedOrder, true);
-            handleAutoSave(updatedOrder);
         }
     };
 
@@ -186,7 +198,6 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
         newItems[noteModal.itemIndex].note = noteModal.text;
         const updatedOrder = { ...order, items: newItems, isDirty: true };
         updateOrder(updatedOrder, true);
-        handleAutoSave(updatedOrder);
         setNoteModal({ isOpen: false, itemIndex: null, text: '' });
     };
 
@@ -312,7 +323,6 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
                                     items: order.items.map(item => ({...item, isSaved: false}))
                                 };
                                 updateOrder(updatedOrder, true);
-                                handleAutoSave(updatedOrder);
                             }}
                             placeholder="Wprowadź nazwę klienta"
                             className="w-full p-3 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"

@@ -35,7 +35,7 @@ const NotificationSettingsModal = ({ isOpen, onClose }) => {
                 // Sprawdź status subskrypcji z timeoutem, aby uniknąć zawieszenia
                 if ('serviceWorker' in navigator) {
                     try {
-                        const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Service worker timeout')), 3000));
+                        const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Service worker timeout')), 7000));
                         const registration = await Promise.race([navigator.serviceWorker.ready, timeout]);
                         const subscription = await registration.pushManager.getSubscription();
                         if (isMounted) setIsSubscribed(!!subscription);
@@ -67,7 +67,11 @@ const NotificationSettingsModal = ({ isOpen, onClose }) => {
                     setIsSubscribed(false);
                 }
             } else {
-                await subscribeUser();
+                 const subscribePromise = subscribeUser();
+                 const timeoutPromise = new Promise((_, reject) =>
+                    setTimeout(() => reject(new Error('Operacja subskrypcji przekroczyła limit czasu.')), 7000)
+                 );
+                await Promise.race([subscribePromise, timeoutPromise]);
                 setIsSubscribed(true);
             }
         } catch (err) {
