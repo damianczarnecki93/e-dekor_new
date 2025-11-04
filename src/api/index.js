@@ -101,12 +101,18 @@ unarchiveOrder: async (orderId) => {
     },
     getOrderById: async (id) => {
         const response = await fetchWithAuth(`/api/orders/${id}`);
-        if (!response.ok) throw new Error('Nie znaleziono zamówienia');
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || 'Nie znaleziono zamówienia');
+        }
         return await response.json();
     },
     deleteOrder: async (id) => {
         const response = await fetchWithAuth(`/api/orders/${id}`, { method: 'DELETE' });
-        if (!response.ok) throw new Error('Błąd usuwania zamówienia');
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || 'Błąd usuwania zamówienia');
+        }
         return await response.json();
     },
     completeOrder: async (orderId, pickedItems) => {
