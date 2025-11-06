@@ -26,6 +26,9 @@ app.options('*', cors(corsOptions)); // Umożliwia obsługę zapytań preflight 
 
 app.use(express.json());
 
+// Serwuj pliki statyczne z katalogu 'build'
+app.use(express.static(path.join(__dirname, '..', 'build')));
+
 // --- Konfiguracja Web Push ---
 const vapidPublicKey = process.env.VAPID_PUBLIC_KEY;
 const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY;
@@ -1851,12 +1854,6 @@ app.post('/api/push/unsubscribe', authMiddleware, async (req, res) => {
 
 
 const buildPath = path.join(__dirname, '..', 'build');
-app.use(express.static(buildPath));
-
-app.get('/service-worker.js', (req, res) => {
-  res.setHeader('Content-Type', 'application/javascript');
-  res.sendFile(path.resolve(buildPath, 'service-worker.js'));
-});
 
 app.get('*', (req, res) => {
   res.sendFile(path.join(buildPath, 'index.html'));
