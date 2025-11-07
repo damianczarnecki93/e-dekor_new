@@ -26,22 +26,9 @@ app.options('*', cors(corsOptions)); // Umożliwia obsługę zapytań preflight 
 
 app.use(express.json());
 
-// --- DIAGNOSTYCZNY ENDPOINT DLA SERVICE WORKERA ---
-app.get('/service-worker.js', (req, res) => {
-    const swPath = path.join(__dirname, '..', 'build', 'service-worker.js');
-    console.log(`[DIAGNOSTYKA] Zapytanie o /service-worker.js`);
-    console.log(`[DIAGNOSTYKA] Oczekiwana ścieżka pliku: ${swPath}`);
-    const fileExists = fs.existsSync(swPath);
-    console.log(`[DIAGNOSTYKA] Czy plik istnieje? ${fileExists}`);
-
-    if (fileExists) {
-        res.setHeader('Content-Type', 'application/javascript');
-        res.sendFile(swPath);
-    } else {
-        res.status(404).send('Plik service-worker.js nie został znaleziony.');
-    }
-});
-
+// Serwowanie plików statycznych z folderu 'build' musi być PRZED trasami API
+const buildPath = path.join(__dirname, '..', 'build');
+app.use(express.static(buildPath));
 
 // --- Konfiguracja Web Push ---
 const vapidPublicKey = process.env.VAPID_PUBLIC_KEY;
@@ -1866,12 +1853,8 @@ app.post('/api/push/unsubscribe', authMiddleware, async (req, res) => {
     }
 });
 
-
-const buildPath = path.join(__dirname, '..', 'build');
-app.use(express.static(buildPath));
-
 app.get('*', (req, res) => {
-  res.sendFile(path.join(buildPath, 'index.html'));
+  res.sendFile(path.join(__dirname, '..', 'build', 'index.html'));
 });
 
 // Eksport aplikacji Express na potrzeby funkcji serwerowej i testów
