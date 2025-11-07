@@ -1110,7 +1110,7 @@ app.get('/api/sync/products', authMiddleware, async (req, res) => {
         const skip = (page - 1) * limit;
 
         const products = await Product.find({}).skip(skip).limit(limit).lean();
-        res.json(products);
+        res.json({ products }); // Zwracamy w formacie { products: [...] }
     } catch (error) {
         res.status(500).json({ message: 'Błąd pobierania paczki produktów.' });
     }
@@ -1132,7 +1132,7 @@ app.get('/api/sync/contacts', authMiddleware, async (req, res) => {
         const skip = (page - 1) * limit;
 
         const contacts = await Contact.find({}).skip(skip).limit(limit).lean();
-        res.json(contacts);
+        res.json({ contacts }); // Zwracamy w formacie { contacts: [...] }
     } catch (error) {
         res.status(500).json({ message: 'Błąd pobierania paczki kontaktów.' });
     }
