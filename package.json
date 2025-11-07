@@ -7,7 +7,7 @@
     "build": "GENERATE_SOURCEMAP=false react-scripts build",
     "test": "react-scripts test"
   },
-  "proxy": "http://localhost:3001",
+  "proxy": "http://localhost:10000",
   "dependencies": {
     "@react-google-maps/api": "^2.19.3",
     "axios": "^1.7.2",
