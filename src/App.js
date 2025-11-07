@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 
 import { NotificationProvider, useNotification } from './contexts/NotificationContext';
@@ -57,6 +57,7 @@ function App() {
     const [isOnline, setIsOnline] = useState(navigator.onLine);
     const navigate = useNavigate();
     const { showNotification } = useNotification();
+    const initialCheckDone = useRef(false);
 
     const triggerSync = useCallback(async () => {
         const success = await synchronizeData(setSyncProgress);
@@ -170,7 +171,8 @@ function App() {
             try {
                 const loggedUser = JSON.parse(userData);
                 setUser(loggedUser);
-                if (loggedUser) {
+                if (loggedUser && !initialCheckDone.current) {
+                    initialCheckDone.current = true;
                     checkLocalData();
                 }
             } catch (e) {
