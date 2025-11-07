@@ -94,6 +94,11 @@ const Topbar = ({ user, onLogout, onOpenPasswordModal, onOpenNotificationSetting
                             <button onClick={() => { onOpenNotificationSettings(); setIsMenuOpen(false); }} className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center">
                                 <Bell className="w-4 h-4 mr-2" /> Powiadomienia
                             </button>
+                            <div className="border-t border-gray-200 dark:border-gray-700 my-1"></div>
+                            <button onClick={() => { onForceSync(); setIsMenuOpen(false); }} className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center">
+                                <RefreshCw className="w-4 h-4 mr-2" /> Odśwież dane
+                            </button>
+                            <div className="border-t border-gray-200 dark:border-gray-700 my-1"></div>
                             <button onClick={() => { onLogout(); setIsMenuOpen(false); }} className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center">
                                 <LogOut className="w-4 h-4 mr-2" /> Wyloguj
                             </button>

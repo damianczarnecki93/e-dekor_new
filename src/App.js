@@ -25,6 +25,8 @@ import AdminEmailConfigView from './components/admin/AdminEmailConfigView';
 import ShortageReportView from './components/reports/ShortageReportView';
 import UserChangePasswordModal from './components/modals/UserChangePasswordModal';
 import NotificationSettingsModal from './components/modals/NotificationSettingsModal';
+import SyncProgressModal from './components/modals/SyncProgressModal';
+import OfflineIndicator from './components/common/OfflineIndicator';
 import { api } from './api';
 
 const getInitialOrder = () => {
@@ -154,20 +156,31 @@ function App() {
     };
     
     useEffect(() => {
+        const checkLocalData = async () => {
+            const productsCount = await db.products.count();
+            const contactsCount = await db.contacts.count();
+            if (productsCount === 0 || contactsCount === 0) {
+                console.log("Brak danych lokalnych, uruchamiam synchronizację...");
+                triggerSync();
+            }
+        };
+
         const userData = localStorage.getItem('userData');
         if (userData) {
             try {
-                setUser(JSON.parse(userData));
-                // Sprawdź, czy dane kiedykolwiek były synchronizowane
-                Promise.all([db.syncStatus.get('products'), db.syncStatus.get('contacts')]).then(([p, c]) => {
-                    if (!p || !c) {
-                        setSyncProgress({ status: 'required' });
-                    }
-                });
-            } catch (e) { handleLogout(); }
+                const loggedUser = JSON.parse(userData);
+                setUser(loggedUser);
+                if (loggedUser) {
+                    checkLocalData();
+                }
+            } catch (e) {
+                console.error("Błąd parsowania danych użytkownika, wylogowywanie.", e);
+                handleLogout();
+            }
         }
         setIsLoading(false);
-    }, [handleLogout]);
+    }, [handleLogout, triggerSync]);
+
 
     if (isLoading) {
         return <div className="flex items-center justify-center h-screen">Ładowanie...</div>;
@@ -175,7 +188,9 @@ function App() {
     
     return (
         <>
+            <SyncProgressModal syncProgress={syncProgress} />
             <div className="flex flex-col h-screen bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-sans">
+                <OfflineIndicator isOnline={isOnline} />
                 {user && (
                     <Topbar
                         user={user}
