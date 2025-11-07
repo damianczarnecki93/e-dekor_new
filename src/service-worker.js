@@ -1,18 +1,17 @@
-// A minimalist service worker for diagnostic purposes.
+// A minimalist, build-compliant service worker for diagnostic purposes.
+import { precacheAndRoute } from 'workbox-precaching';
+
+console.log('Build-compliant minimal service worker script loaded.');
 
 self.addEventListener('install', event => {
-  console.log('Minimal Service Worker: Install event received.');
+  console.log('Build-compliant SW: Install event received.');
   self.skipWaiting();
 });
 
 self.addEventListener('activate', event => {
-  console.log('Minimal Service Worker: Activate event received.');
+  console.log('Build-compliant SW: Activate event received.');
   event.waitUntil(self.clients.claim());
 });
 
-self.addEventListener('fetch', event => {
-  // This service worker doesn't handle fetch events.
-  // We're only using it to test the registration process.
-});
-
-console.log('Minimal service worker script loaded.');
+// This line is required by the Create React App build process.
+precacheAndRoute(self.__WB_MANIFEST);
