@@ -26,10 +26,11 @@ export async function searchProducts(searchTerm, filterByQuantity = false) {
             }).limit(20).toArray();
         }
 
-        // Jeśli lokalnie nic nie znaleziono, spróbuj przez sieć (tylko jeśli online)
-        if (results.length === 0 && navigator.onLine) {
+        // Jeśli lokalnie nic nie znaleziono, zawsze próbuj przez sieć.
+        // Service worker obsłuży to w trybie offline.
+        if (results.length === 0) {
             try {
-                console.log("Nie znaleziono lokalnie, próba przez API...");
+                console.log("Nie znaleziono lokalnie, próba przez API/Service Worker...");
                 return await api.searchProducts(searchTerm, filterByQuantity);
             } catch (apiError) {
                 console.warn("Błąd API podczas wyszukiwania produktów, zwracam puste wyniki.", apiError);
@@ -40,14 +41,13 @@ export async function searchProducts(searchTerm, filterByQuantity = false) {
         return results;
     } catch (error) {
         console.error("Błąd wyszukiwania w repozytorium:", error);
-        if (navigator.onLine) {
-            try {
-                return await api.searchProducts(searchTerm, filterByQuantity);
-            } catch (apiError) {
-                console.warn("Błąd API po błędzie repozytorium, zwracam puste wyniki.", apiError);
-            }
+        // Po błędzie lokalnym, zawsze próbuj przez API/SW
+        try {
+            return await api.searchProducts(searchTerm, filterByQuantity);
+        } catch (apiError) {
+            console.warn("Błąd API po błędzie repozytorium, zwracam puste wyniki.", apiError);
+            return [];
         }
-        return [];
     }
 }
 
@@ -61,9 +61,9 @@ export async function searchContacts(term) {
             .limit(10)
             .toArray();
 
-        if (results.length === 0 && navigator.onLine) {
+        if (results.length === 0) {
             try {
-                console.log("Nie znaleziono lokalnie, próba przez API...");
+                console.log("Nie znaleziono lokalnie, próba przez API/Service Worker...");
                 return await api.searchContacts(term);
             } catch (apiError) {
                 console.warn("Błąd API podczas wyszukiwania kontaktów, zwracam puste wyniki.", apiError);
@@ -74,14 +74,12 @@ export async function searchContacts(term) {
         return results;
     } catch (error) {
         console.error("Błąd wyszukiwania kontaktów w repozytorium:", error);
-        if (navigator.onLine) {
-            try {
-                return await api.searchContacts(term);
-            } catch (apiError) {
-                console.warn("Błąd API po błędzie repozytorium, zwracam puste wyniki.", apiError);
-            }
+        try {
+            return await api.searchContacts(term);
+        } catch (apiError) {
+            console.warn("Błąd API po błędzie repozytorium, zwracam puste wyniki.", apiError);
+            return [];
         }
-        return [];
     }
 }
 
