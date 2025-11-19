@@ -11,6 +11,14 @@ export async function synchronizeData(onProgress) {
   onProgress({ status: 'starting_all' });
 
   try {
+    // Wyczyść tabele przed synchronizacją, aby uniknąć duplikatów
+    console.log('Czyszczenie lokalnych tabel...');
+    await Promise.all([
+      db.products.clear(),
+      db.contacts.clear()
+    ]);
+    console.log('Lokalne tabele wyczyszczone.');
+
     // Synchronizacja produktów
     await synchronizeTable('products', api.getProductsCount, api.getProductsPage, onProgress);
 

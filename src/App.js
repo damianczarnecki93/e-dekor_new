@@ -73,8 +73,8 @@ function App() {
             setIsOnline(true);
             showNotification('Połączenie internetowe przywrócone.', 'success');
             if (user) { // Synchronizuj tylko, jeśli użytkownik jest zalogowany
-                triggerSync();
-                syncPendingOrders(); // Dodajemy synchronizację oczekujących zamówień
+                console.log('Online again, synchronizing pending orders...');
+                syncPendingOrders();
             }
         };
 
@@ -109,8 +109,9 @@ function App() {
         localStorage.setItem('userData', JSON.stringify(data.user));
         setUser(data.user);
         navigate('/dashboard');
-        triggerSync();
-    }, [navigate, triggerSync]);
+        // Usunięto triggerSync() - synchronizacja będzie uruchamiana tylko wtedy,
+        // gdy baza danych jest pusta, co jest sprawdzane w `useEffect`.
+    }, [navigate]);
 
     const handleLogout = useCallback(async () => {
         localStorage.removeItem('userToken');
@@ -181,7 +182,7 @@ function App() {
             }
         }
         setIsLoading(false);
-    }, [handleLogout, triggerSync]);
+    }, [handleLogout]);
 
 
     if (isLoading) {
