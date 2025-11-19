@@ -109,6 +109,7 @@ const orderSchema = new mongoose.Schema({
     author: String,
     items: Array,
     total: Number,
+    discount: { type: Number, default: 0 },
     status: {
         type: String,
         default: 'Zapisane',
@@ -1240,7 +1241,9 @@ app.post('/api/orders/import-multiple-csv', authMiddleware, upload.array('orderF
 
 app.post('/api/orders', authMiddleware, async (req, res) => {
     const orderData = req.body;
-    const total = (orderData.items || []).reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    const subtotal = (orderData.items || []).reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    const discount = orderData.discount || 0;
+    const total = subtotal * (1 - discount / 100);
     const newOrder = new Order({ id: `ZAM-${Date.now()}`, ...orderData, total: total, author: req.user.username, status: 'Zapisane', isDirty: false });
     try {
         const savedOrder = await newOrder.save();
@@ -1262,7 +1265,9 @@ app.post('/api/orders', authMiddleware, async (req, res) => {
 app.put('/api/orders/:id', authMiddleware, async (req, res) => {
     try {
         const orderData = req.body;
-        orderData.total = (orderData.items || []).reduce((sum, item) => sum + (item.price * item.quantity), 0);
+        const subtotal = (orderData.items || []).reduce((sum, item) => sum + (item.price * item.quantity), 0);
+        const discount = orderData.discount || 0;
+        orderData.total = subtotal * (1 - discount / 100);
         orderData.isDirty = false;
         const updatedOrder = await Order.findByIdAndUpdate(req.params.id, orderData, { new: true });
         if (!updatedOrder) return res.status(404).json({ message: 'Nie znaleziono zamówienia.' });

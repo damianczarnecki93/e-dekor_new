@@ -201,7 +201,18 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
         setNoteModal({ isOpen: false, itemIndex: null, text: '' });
     };
 
+    const handleDiscountChange = (e) => {
+        const newDiscount = e.target.value;
+        const discountValue = Math.max(0, parseFloat(newDiscount) || 0);
+        updateOrder({ discount: discountValue });
+    };
+
     const totalValue = useMemo(() => (order.items || []).reduce((sum, item) => sum + item.price * (item.quantity || 0), 0), [order.items]);
+
+    const totalValueWithDiscount = useMemo(() => {
+        const discountValue = parseFloat(order.discount) || 0;
+        return totalValue * (1 - discountValue / 100);
+    }, [totalValue, order.discount]);
 
     const handleSaveOrder = async () => {
         if (!order.customerName) {
@@ -418,8 +429,24 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
                     <div ref={listEndRef} />
                 </div>
                 <div className="flex flex-wrap justify-end items-center gap-4 mt-4">
-                    <span className="text-lg font-bold text-gray-700 dark:text-gray-300">Suma:</span>
-                    <span className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">{totalValue.toFixed(2)} PLN</span>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-right">
+                        <span className="text-md font-medium text-gray-600 dark:text-gray-400">Kwota bez rabatu:</span>
+                        <span className="text-md font-semibold text-gray-800 dark:text-gray-200">{totalValue.toFixed(2)} PLN</span>
+
+                        <label htmlFor="discount" className="text-md font-medium text-gray-600 dark:text-gray-400 self-center">Rabat:</label>
+                        <input
+                            type="number"
+                            id="discount"
+                            value={order.discount || '0'}
+                            onChange={handleDiscountChange}
+                            onFocus={(e) => e.target.select()}
+                            className="w-24 p-1 text-right bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-indigo-500 outline-none"
+                            placeholder="0"
+                        />
+
+                        <span className="text-lg font-bold text-gray-800 dark:text-gray-200 mt-2">Do zapłaty:</span>
+                        <span className="text-2xl font-bold text-indigo-600 dark:text-indigo-400 mt-2">{totalValueWithDiscount.toFixed(2)} PLN</span>
+                    </div>
                 </div>
             </div>
 
