@@ -40,7 +40,9 @@ async function synchronizeTable(tableName, countApiFn, pageApiFn, onProgress) {
     let loadedCount = 0;
 
     for (let page = 1; page <= totalPages; page++) {
-      const data = await pageApiFn(page, limit);
+      const response = await pageApiFn(page, limit);
+      // Data is wrapped in an object, e.g., { products: [...] }
+      const data = response[tableName];
       if (data && data.length > 0) {
         await db[tableName].bulkPut(data);
         loadedCount += data.length;
