@@ -11,5 +11,10 @@ db.version(1).stores({
 
 // Wersja 2 - dodajemy tabelę zamówień
 db.version(2).stores({
-  orders: '++localId, _id, status' // localId - klucz główny, _id - ID z Mongo (indeksowane), status - status synchronizacji (indeksowane)
+  orders: '++localId, _id, status'
+});
+
+// Wersja 3 - dodajemy indeks dla statusSync w tabeli orders
+db.version(3).stores({
+  orders: '++localId, _id, status, statusSync'
 });
