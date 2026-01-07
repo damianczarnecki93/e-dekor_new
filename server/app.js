@@ -877,52 +877,116 @@ app.post('/api/admin/upload-products', authMiddleware, adminMiddleware, upload.s
 
 app.post('/api/admin/merge-products', authMiddleware, adminMiddleware, async (req, res) => {
     try {
-        const productInfo = new Map();
-        const p2Path = path.join(__dirname, 'produkty2.csv');
-        if (fs.existsSync(p2Path)) {
-            const stream2 = fs.createReadStream(p2Path).pipe(iconv.decodeStream('win1250')).pipe(csv({ separator: ';' }));
-            for await (const row of stream2) {
-                if (row.product_code) {
-                    productInfo.set(row.product_code, { name: row.name });
-                }
-            }
-        }
+        const bulkOps = [];
+        const processedIds = new Set();
+        let mergedByCodeCount = 0;
+        let mergedByEanCount = 0;
 
-        const aggregation = await Product.aggregate([
-            { $unwind: "$barcodes" },
-            { $group: { _id: "$product_code", allBarcodes: { $addToSet: "$barcodes" }, originalDocs: { $push: "$$ROOT" } } }
+        // --- Etap 1: Łączenie duplikatów po `product_code` ---
+        const aggregationByCode = await Product.aggregate([
+            { $match: { product_code: { $ne: null, $ne: "" } } },
+            { $sort: { _id: -1 } },
+            {
+                $group: {
+                    _id: "$product_code",
+                    latestDocId: { $first: "$_id" },
+                    docIds: { $push: "$_id" },
+                    count: { $sum: 1 }
+                }
+            },
+            { $match: { count: { $gt: 1 } } }
         ]);
 
-        let mergedCount = 0;
-        const bulkOps = [];
-        for (const group of aggregation) {
-            if (!group._id || group.originalDocs.length <= 1) continue;
+        for (const group of aggregationByCode) {
+            const docsInGroup = await Product.find({ _id: { $in: group.docIds } }).lean();
+            if (docsInGroup.length <= 1) continue;
 
-            const firstDoc = group.originalDocs[0];
-            const preferredInfo = productInfo.get(group._id) || { name: firstDoc.name };
-            const totalQuantity = group.originalDocs.reduce((sum, doc) => sum + (doc.quantity || 0), 0);
-            const idsToDelete = group.originalDocs.map(doc => doc._id);
+            const latestDoc = docsInGroup.find(doc => doc._id.equals(group.latestDocId));
+            const idsToDelete = docsInGroup.map(doc => doc._id);
 
-            bulkOps.push({ deleteMany: { filter: { _id: { $in: idsToDelete } } } });
+            const uniqueBarcodes = [...new Set(docsInGroup.flatMap(p => p.barcodes || []))];
+            const totalQuantity = docsInGroup.reduce((sum, doc) => sum + (doc.quantity || 0), 0);
+
+            bulkOps.push({
+                deleteMany: { filter: { _id: { $in: idsToDelete } } }
+            });
             bulkOps.push({
                 insertOne: {
                     document: {
-                        name: preferredInfo.name,
-                        product_code: group._id,
-                        barcodes: group.allBarcodes,
-                        price: firstDoc.price,
+                        ...latestDoc,
+                        _id: new mongoose.Types.ObjectId(),
+                        barcodes: uniqueBarcodes,
                         quantity: totalQuantity,
                         availability: totalQuantity > 0
                     }
                 }
             });
-            mergedCount++;
+
+            idsToDelete.forEach(id => processedIds.add(id.toString()));
+            mergedByCodeCount++;
         }
 
         if (bulkOps.length > 0) {
-            await Product.bulkWrite(bulkOps);
+            await Product.bulkWrite(bulkOps, { ordered: false });
         }
-        res.status(200).json({ message: `Operacja zakończona. Połączono ${mergedCount} grup produktów.` });
+
+        // --- Etap 2: Łączenie duplikatów po `barcodes` (EAN) ---
+        const bulkOpsEan = [];
+        const aggregationByEan = await Product.aggregate([
+            { $unwind: "$barcodes" },
+            { $match: { barcodes: { $ne: null, $ne: "" } } },
+            { $sort: { _id: -1 } },
+            {
+                $group: {
+                    _id: "$barcodes",
+                    latestDocId: { $first: "$_id" },
+                    docIds: { $push: "$_id" },
+                    count: { $sum: 1 }
+                }
+            },
+            { $match: { count: { $gt: 1 } } }
+        ]);
+
+        for (const group of aggregationByEan) {
+            const docIdsToProcess = group.docIds.filter(id => !processedIds.has(id.toString()));
+            if (docIdsToProcess.length <= 1) continue;
+
+            const docsInGroup = await Product.find({ _id: { $in: docIdsToProcess } }).lean();
+            if (docsInGroup.length <= 1) continue;
+
+            const latestDoc = docsInGroup.find(doc => doc._id.equals(group.latestDocId)) || docsInGroup.sort((a, b) => b._id.getTimestamp() - a._id.getTimestamp())[0];
+            const idsToDelete = docsInGroup.map(doc => doc._id);
+
+            const uniqueBarcodes = [...new Set(docsInGroup.flatMap(p => p.barcodes || []))];
+            const totalQuantity = docsInGroup.reduce((sum, doc) => sum + (doc.quantity || 0), 0);
+
+            bulkOpsEan.push({
+                deleteMany: { filter: { _id: { $in: idsToDelete } } }
+            });
+            bulkOpsEan.push({
+                insertOne: {
+                    document: {
+                        ...latestDoc,
+                        _id: new mongoose.Types.ObjectId(),
+                        barcodes: uniqueBarcodes,
+                        quantity: totalQuantity,
+                        availability: totalQuantity > 0,
+                    }
+                }
+            });
+            mergedByEanCount++;
+        }
+
+        if (bulkOpsEan.length > 0) {
+            await Product.bulkWrite(bulkOpsEan, { ordered: false });
+        }
+
+        res.status(200).json({
+            message: `Operacja zakończona. Połączono ${mergedByCodeCount} grup po kodzie produktu i ${mergedByEanCount} grup po EAN.`,
+            mergedByCode: mergedByCodeCount,
+            mergedByEan: mergedByEanCount
+        });
+
     } catch (error) {
         console.error("Błąd podczas łączenia produktów:", error);
         res.status(500).json({ message: 'Wystąpił błąd serwera.', error: error.message });
