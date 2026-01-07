@@ -751,41 +751,122 @@ app.post('/api/admin/merge-products', authMiddleware, adminMiddleware, async (re
             }
         }
 
-        const aggregation = await Product.aggregate([
-            { $unwind: "$barcodes" },
-            { $group: { _id: "$product_code", allBarcodes: { $addToSet: "$barcodes" }, originalDocs: { $push: "$$ROOT" } } }
+        // --- ETAP 1: Łączenie po product_code ---
+        console.log('Etap 1: Rozpoczynanie łączenia produktów po product_code...');
+        const aggregationByCode = await Product.aggregate([
+            { $sort: { _id: -1 } }, // Sortuje, aby najnowszy dokument był pierwszy
+            {
+                $group: {
+                    _id: "$product_code",
+                    originalDocs: { $push: "$$ROOT" },
+                    latestDoc: { $first: "$$ROOT" }
+                }
+            }
         ]);
 
-        let mergedCount = 0;
-        const bulkOps = [];
-        for (const group of aggregation) {
+        let codeMergedCount = 0;
+        const codeBulkOps = [];
+        for (const group of aggregationByCode) {
+            // Pomijamy grupy z jednym produktem lub bez kodu produktu
             if (!group._id || group.originalDocs.length <= 1) continue;
 
-            const firstDoc = group.originalDocs[0];
-            const preferredInfo = productInfo.get(group._id) || { name: firstDoc.name };
+            const latestDoc = group.latestDoc;
+            const preferredInfo = productInfo.get(group._id);
+
+            // Zbiera unikalne kody kreskowe ze wszystkich duplikatów
+            const allBarcodes = [...new Set(group.originalDocs.flatMap(doc => doc.barcodes || []))];
+
+            // Sumuje ilość ze wszystkich duplikatów
             const totalQuantity = group.originalDocs.reduce((sum, doc) => sum + (doc.quantity || 0), 0);
+
+            // Zbiera ID wszystkich duplikatów do usunięcia
             const idsToDelete = group.originalDocs.map(doc => doc._id);
 
-            bulkOps.push({ deleteMany: { filter: { _id: { $in: idsToDelete } } } });
-            bulkOps.push({
+            // Przygotowuje operacje: usunięcie starych i wstawienie nowego
+            codeBulkOps.push({ deleteMany: { filter: { _id: { $in: idsToDelete } } } });
+            codeBulkOps.push({
                 insertOne: {
                     document: {
-                        name: preferredInfo.name,
+                        name: preferredInfo ? preferredInfo.name : latestDoc.name,
                         product_code: group._id,
-                        barcodes: group.allBarcodes,
-                        price: firstDoc.price,
+                        barcodes: allBarcodes,
+                        price: latestDoc.price,
                         quantity: totalQuantity,
-                        availability: totalQuantity > 0
+                        availability: totalQuantity > 0,
+                        last_updated: new Date() // Dodajemy znacznik czasu dla pewności
                     }
                 }
             });
-            mergedCount++;
+            codeMergedCount++;
         }
 
-        if (bulkOps.length > 0) {
-            await Product.bulkWrite(bulkOps);
+        if (codeBulkOps.length > 0) {
+            await Product.bulkWrite(codeBulkOps);
+            console.log(`Zakończono łączenie po product_code. Połączono ${codeMergedCount} grup.`);
+        } else {
+            console.log('Nie znaleziono duplikatów po product_code do połączenia.');
         }
-        res.status(200).json({ message: `Operacja zakończona. Połączono ${mergedCount} grup produktów.` });
+
+        // --- ETAP 2: Łączenie po EAN (zoptymalizowane) ---
+        console.log('Etap 2: Rozpoczynanie łączenia produktów po EAN...');
+        const aggregationByEan = await Product.aggregate([
+            { $unwind: "$barcodes" },
+            { $sort: { _id: -1 } }, // Sortujemy malejąco, aby najnowszy dokument był pierwszy
+            {
+                $group: {
+                    _id: "$barcodes",
+                    originalDocs: { $push: "$$ROOT" },
+                    latestDoc: { $first: "$$ROOT" } // Pobieramy najnowszy dokument
+                }
+            }
+        ]);
+
+        let eanMergedCount = 0;
+        const eanBulkOps = [];
+        const processedDocIds = new Set(); // Zapobiega podwójnemu przetwarzaniu
+
+        for (const group of aggregationByEan) {
+            // Pomijamy grupy z jednym dokumentem
+            if (group.originalDocs.length <= 1) continue;
+
+            // Filtrujemy dokumenty, które już przetworzyliśmy
+            const docsToMerge = group.originalDocs.filter(doc => !processedDocIds.has(doc._id.toString()));
+            if (docsToMerge.length <= 1) continue;
+
+            const latestDoc = group.latestDoc;
+            const allBarcodes = [...new Set(docsToMerge.flatMap(doc => doc.barcodes || []))];
+            const totalQuantity = docsToMerge.reduce((sum, doc) => sum + (doc.quantity || 0), 0);
+            const idsToDelete = docsToMerge.map(doc => doc._id);
+
+            eanBulkOps.push({ deleteMany: { filter: { _id: { $in: idsToDelete } } } });
+            eanBulkOps.push({
+                insertOne: {
+                    document: {
+                        ...latestDoc, // Kopiujemy dane z najnowszego dokumentu
+                        barcodes: allBarcodes,
+                        quantity: totalQuantity,
+                        availability: totalQuantity > 0,
+                        last_updated: new Date()
+                    }
+                }
+            });
+
+            // Dodajemy ID do przetworzonych, aby uniknąć duplikatów
+            idsToDelete.forEach(id => processedDocIds.add(id.toString()));
+            eanMergedCount += docsToMerge.length; // Liczymy wszystkie połączone dokumenty
+        }
+
+        if (eanBulkOps.length > 0) {
+            await Product.bulkWrite(eanBulkOps);
+            console.log(`Zakończono łączenie po EAN. Połączono ${eanMergedCount} duplikatów.`);
+        } else {
+            console.log('Nie znaleziono duplikatów po EAN do połączenia.');
+        }
+
+        res.status(200).json({
+            message: `Operacja zakończona. Połączono ${codeMergedCount} grup wg kodu produktu i ${eanMergedCount} duplikatów wg EAN.`
+        });
+
     } catch (error) {
         console.error("Błąd podczas łączenia produktów:", error);
         res.status(500).json({ message: 'Wystąpił błąd serwera.', error: error.message });
