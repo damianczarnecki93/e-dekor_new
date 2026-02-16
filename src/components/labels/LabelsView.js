@@ -6,23 +6,23 @@ import { useNotification } from '../../contexts/NotificationContext';
 const HERMA_FORMATS = {
     HERMA_11001: {
         id: '11001',
-        name: 'HERMA 11001 (48.3 x 25.4 mm) - 44 szt.',
-        cols: 4,
-        rows: 11,
-        width: '48.3mm',
-        height: '25.4mm',
-        marginTop: '8.8mm',
-        marginLeft: '8.4mm',
+        name: 'HERMA 11001 (38.0 x 20.1 mm) - 65 szt.',
+        cols: 5,
+        rows: 13,
+        width: '38.0mm',
+        height: '20.1mm',
+        marginTop: '10mm', // Orientacyjne marginesy, jeśli nie podano
+        marginLeft: '10mm',
     },
     HERMA_10000: {
         id: '10000',
-        name: 'HERMA 10000 (105 x 148 mm) - 4 szt.',
-        cols: 2,
-        rows: 2,
-        width: '105mm',
-        height: '148.5mm',
-        marginTop: '0mm',
-        marginLeft: '0mm',
+        name: 'HERMA 10000 (17.8 x 10 mm) - 270 szt.',
+        cols: 10,
+        rows: 27,
+        width: '17.8mm',
+        height: '10mm',
+        marginTop: '10mm',
+        marginLeft: '10mm',
     }
 };
 
@@ -202,11 +202,21 @@ const LabelsView = () => {
                         padding: 0;
                         background: white !important;
                     }
-                    .print\\:hidden {
+                    .print\\:hidden, .no-print {
                         display: none !important;
                     }
                     .print-page {
                         display: block !important;
+                    }
+                    /* Ukryj wszystko co mogłoby wystawać poza obszar wydruku */
+                    #root > div {
+                        height: auto !important;
+                        display: block !important;
+                    }
+                    main {
+                        overflow: visible !important;
+                        padding: 0 !important;
+                        margin: 0 !important;
                     }
                 }
             `}</style>
@@ -248,43 +258,37 @@ const LabelsPrintContent = ({ products, formatConfig }) => {
                         <div key={index} style={{
                             width: formatConfig.width,
                             height: formatConfig.height,
-                            padding: formatConfig.id === '11001' ? '1.5mm 2mm' : '15mm',
+                            padding: formatConfig.id === '10000' ? '0.5mm' : '1mm',
                             boxSizing: 'border-box',
                             overflow: 'hidden',
                             display: 'flex',
                             flexDirection: 'column',
-                            justifyContent: 'space-between',
+                            justifyContent: 'center',
+                            alignItems: 'center',
                             color: 'black',
                             fontFamily: 'sans-serif',
-                            border: '0.01mm solid transparent' // Można zmienić na #eee do testów
+                            border: '0.01mm solid transparent',
+                            textAlign: 'center'
                         }}>
-                             {formatConfig.id === '11001' ? (
-                                 <>
-                                    <div style={{ fontWeight: 'bold', fontSize: '6pt', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                        {p.name}
-                                    </div>
-                                    <div style={{ fontSize: '7pt' }}>
-                                        Kod: {p.product_code}
-                                    </div>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', borderTop: '0.1mm solid #000', paddingTop: '0.5mm' }}>
-                                        <div style={{ fontSize: '5pt' }}>Net: {(p.price || 0).toFixed(2)}</div>
-                                        <div style={{ fontSize: '9pt', fontWeight: '900' }}>
-                                            {(p.price * 1.23).toFixed(2)} <span style={{ fontSize: '6pt' }}>PLN</span>
-                                        </div>
-                                    </div>
-                                 </>
+                             {formatConfig.id === '10000' ? (
+                                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', lineHeight: '1.1' }}>
+                                    <div style={{ fontSize: '3.5pt', fontWeight: 'bold', whiteSpace: 'nowrap' }}>{p.product_code}</div>
+                                    <div style={{ fontSize: '3.2pt' }}>N: {(p.price || 0).toFixed(2)}</div>
+                                    <div style={{ fontSize: '5pt', fontWeight: '900' }}>{(p.price * 1.23).toFixed(2)} <span style={{ fontSize: '3pt' }}>PLN</span></div>
+                                 </div>
                              ) : (
                                  <>
-                                    <div>
-                                        <div style={{ fontSize: '24pt', fontWeight: 'bold', marginBottom: '8mm', lineHeight: '1.2' }}>{p.name}</div>
-                                        <div style={{ fontSize: '18pt', color: '#333' }}>Kod produktu: {p.product_code}</div>
+                                    <div style={{ fontWeight: 'bold', fontSize: '7pt', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%' }}>
+                                        {p.name}
                                     </div>
-                                    <div style={{ textAlign: 'right' }}>
-                                        <div style={{ fontSize: '14pt', color: '#666', marginBottom: '2mm' }}>Cena netto: {(p.price || 0).toFixed(2)} PLN</div>
-                                        <div style={{ fontSize: '48pt', fontWeight: '900', fontStyle: 'italic' }}>
-                                            {(p.price * 1.23).toFixed(2)} <span style={{ fontSize: '24pt' }}>PLN</span>
+                                    <div style={{ fontSize: '6pt' }}>
+                                        {p.product_code}
+                                    </div>
+                                    <div style={{ width: '100%', borderTop: '0.1mm solid #000', marginTop: '0.5mm', paddingTop: '0.5mm' }}>
+                                        <div style={{ fontSize: '5pt' }}>Net: {(p.price || 0).toFixed(2)}</div>
+                                        <div style={{ fontSize: '10pt', fontWeight: '900' }}>
+                                            {(p.price * 1.23).toFixed(2)} <span style={{ fontSize: '6pt' }}>PLN</span>
                                         </div>
-                                        <div style={{ fontSize: '16pt', fontWeight: 'bold', marginTop: '2mm', textTransform: 'uppercase' }}>Cena BRUTTO (z VAT 23%)</div>
                                     </div>
                                  </>
                              )}

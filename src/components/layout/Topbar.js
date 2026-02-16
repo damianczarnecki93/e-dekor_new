@@ -62,7 +62,7 @@ const Topbar = ({ user, onLogout, onOpenPasswordModal, onOpenNotificationSetting
     }, [menuRef]);
 
     return (
-        <div className="bg-white dark:bg-gray-800 shadow-md p-2 flex justify-between items-center sticky top-0 z-30">
+        <div className="bg-white dark:bg-gray-800 shadow-md p-2 flex justify-between items-center sticky top-0 z-30 print:hidden">
             <div className="flex items-center gap-2">
                 <button onClick={() => navigate('/dashboard')} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700">
                     <Home className="w-6 h-6" />

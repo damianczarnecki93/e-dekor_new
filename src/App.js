@@ -194,7 +194,9 @@ function App() {
         <>
             <SyncProgressModal syncProgress={syncProgress} />
             <div className="flex flex-col h-screen bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-sans">
-                <OfflineIndicator isOnline={isOnline} />
+                <div className="print:hidden">
+                    <OfflineIndicator isOnline={isOnline} />
+                </div>
                 {user && (
                     <Topbar
                         user={user}
