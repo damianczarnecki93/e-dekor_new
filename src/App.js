@@ -23,6 +23,7 @@ import AdminUsersView from './components/admin/AdminUsersView';
 import AdminProductsView from './components/admin/AdminProductsView';
 import AdminEmailConfigView from './components/admin/AdminEmailConfigView';
 import ShortageReportView from './components/reports/ShortageReportView';
+import LabelsView from './components/labels/LabelsView';
 import UserChangePasswordModal from './components/modals/UserChangePasswordModal';
 import NotificationSettingsModal from './components/modals/NotificationSettingsModal';
 import SyncProgressModal from './components/modals/SyncProgressModal';
@@ -232,6 +233,7 @@ function App() {
                                 <Route path="/admin-products" element={<AdminProductsView />} />
                                 <Route path="/shortage-report" element={<ShortageReportView />} />
                                 <Route path="/admin-email" element={<AdminEmailConfigView />} />
+                                <Route path="/labels" element={<LabelsView />} />
                                 <Route path="/" element={<Navigate to="/dashboard" replace />} />
                                 <Route path="*" element={<Navigate to="/dashboard" replace />} />
                             </>
