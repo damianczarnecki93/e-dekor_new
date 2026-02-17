@@ -70,9 +70,11 @@ const AdminProductsView = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                 <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
                     <h3 className="text-lg font-medium mb-2">Synchronizuj bazę danych</h3>
-                    <p className="text-sm text-gray-500 mb-4">Kolumny: barcode, name, price, product_code, quantity, availability (separator: średnik, separator dziesiętny: przecinek)</p>
-                    <div className="flex justify-center gap-4 mb-4">
-                        <label className="flex items-center"><input type="radio" name="importMode" value="append" checked={importMode === 'append'} onChange={() => setImportMode('append')} className="mr-2"/>Dopisz / Zaktualizuj</label>
+                    <p className="text-sm text-gray-500 mb-2">Kolumny (Pełny): barcode, name, price, product_code, quantity, availability</p>
+                    <p className="text-sm text-gray-500 mb-4">Kolumny (Tylko ilości): product_code, quantity</p>
+                    <div className="flex flex-wrap justify-center gap-4 mb-4">
+                        <label className="flex items-center"><input type="radio" name="importMode" value="append" checked={importMode === 'append'} onChange={() => setImportMode('append')} className="mr-2"/>Dopisz / Aktualizuj</label>
+                        <label className="flex items-center"><input type="radio" name="importMode" value="update_quantity" checked={importMode === 'update_quantity'} onChange={() => setImportMode('update_quantity')} className="mr-2"/>Tylko ilości</label>
                         <label className="flex items-center"><input type="radio" name="importMode" value="overwrite" checked={importMode === 'overwrite'} onChange={() => setImportMode('overwrite')} className="mr-2"/>Nadpisz wszystko</label>
                     </div>
                     <label className={`cursor-pointer w-full text-center block px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 ${isUploading ? 'opacity-50 cursor-not-allowed' : ''}`}>
