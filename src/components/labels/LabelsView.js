@@ -68,7 +68,7 @@ const LabelsView = () => {
     const totalLabels = selectedProducts.reduce((sum, p) => sum + p.printQuantity, 0);
 
     return (
-        <div className="p-4 md:p-8 max-w-6xl mx-auto">
+        <div className="p-4 md:p-8 max-w-6xl mx-auto print:p-0 print:m-0 print:max-w-none">
             <div className="print:hidden">
                 <h1 className="text-3xl font-bold mb-6 text-gray-800 dark:text-white flex items-center">
                     <Printer className="mr-3 text-indigo-500" /> Wydruk Etykiet Cenowych
@@ -206,22 +206,26 @@ const LabelsView = () => {
             <style>{`
                 @media print {
                     @page {
-                        margin: 0;
+                        margin: 0 !important;
                         size: A4 portrait;
+                    }
+                    * {
+                        -webkit-print-color-adjust: exact !important;
+                        print-color-adjust: exact !important;
                     }
                     html, body {
                         margin: 0 !important;
                         padding: 0 !important;
-                        height: auto !important;
-                        width: 100% !important;
+                        width: 210mm !important;
+                        height: 297mm !important;
                         background: white !important;
                     }
                     #root, #root > div, main {
                         margin: 0 !important;
                         padding: 0 !important;
                         display: block !important;
-                        height: auto !important;
-                        width: auto !important;
+                        height: 100% !important;
+                        width: 100% !important;
                         overflow: visible !important;
                         position: static !important;
                     }
@@ -232,6 +236,8 @@ const LabelsView = () => {
                         display: block !important;
                         margin: 0 !important;
                         padding: 0 !important;
+                        width: 210mm !important;
+                        height: 297mm !important;
                     }
                 }
             `}</style>
@@ -270,7 +276,10 @@ const LabelsPrintContent = ({ products, formatConfig }) => {
                     overflow: 'hidden',
                     columnGap: 0,
                     rowGap: 0,
-                    backgroundColor: 'white'
+                    backgroundColor: 'white',
+                    // Force the container to be exactly A4 and not shrink
+                    minWidth: '210mm',
+                    minHeight: '297mm'
                 }}>
                     {pageLabels.map((p, index) => (
                         <div key={index} style={{

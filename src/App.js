@@ -192,24 +192,26 @@ function App() {
     
     return (
         <>
-            <SyncProgressModal syncProgress={syncProgress} />
-            <div className="flex flex-col h-screen bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-sans">
+            <div className="print:hidden">
+                <SyncProgressModal syncProgress={syncProgress} />
+            </div>
+            <div className="flex flex-col h-screen bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-sans print:bg-white print:h-auto">
                 <div className="print:hidden">
                     <OfflineIndicator isOnline={isOnline} />
+                    {user && (
+                        <Topbar
+                            user={user}
+                            onLogout={handleLogout}
+                            onOpenPasswordModal={() => setIsPasswordModalOpen(true)}
+                            onOpenNotificationSettings={() => setIsNotificationModalOpen(true)}
+                            isDarkMode={isDarkMode}
+                            toggleTheme={toggleTheme}
+                            syncProgress={syncProgress}
+                            onForceSync={triggerSync}
+                            isOnline={isOnline}
+                        />
+                    )}
                 </div>
-                {user && (
-                    <Topbar
-                        user={user}
-                        onLogout={handleLogout}
-                        onOpenPasswordModal={() => setIsPasswordModalOpen(true)}
-                        onOpenNotificationSettings={() => setIsNotificationModalOpen(true)}
-                        isDarkMode={isDarkMode}
-                        toggleTheme={toggleTheme}
-                        syncProgress={syncProgress}
-                        onForceSync={triggerSync}
-                        isOnline={isOnline}
-                    />
-                )}
                 <main className="flex-1 overflow-y-auto">
                     <Routes>
                         {!user ? (
