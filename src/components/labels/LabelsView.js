@@ -118,6 +118,18 @@ const LabelsView = () => {
                         </div>
                     </div>
 
+                    <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-4 rounded-lg mb-6 text-amber-800 dark:text-amber-200 text-sm flex items-start">
+                        <XCircle className="h-5 w-5 mr-3 mt-0.5 flex-shrink-0 text-amber-500 rotate-45" />
+                        <div>
+                            <p className="font-bold mb-1">Ważne ustawienia drukowania:</p>
+                            <ul className="list-disc list-inside space-y-1">
+                                <li>Skala: <strong>100%</strong> (nie "Dopasuj do strony")</li>
+                                <li>Marginesy: <strong>Brak</strong> lub <strong>Minimalne</strong></li>
+                                <li>Opcja "Nagłówki i stopki": <strong>Wyłączona</strong></li>
+                            </ul>
+                        </div>
+                    </div>
+
                     {selectedProducts.length === 0 ? (
                         <div className="text-center py-16 flex flex-col items-center">
                             <div className="bg-gray-100 dark:bg-gray-700 p-4 rounded-full mb-4">
@@ -195,28 +207,31 @@ const LabelsView = () => {
                 @media print {
                     @page {
                         margin: 0;
-                        size: A4;
+                        size: A4 portrait;
                     }
                     html, body {
-                        margin: 0;
-                        padding: 0;
+                        margin: 0 !important;
+                        padding: 0 !important;
+                        height: auto !important;
+                        width: 100% !important;
                         background: white !important;
                     }
-                    .print\\:hidden, .no-print {
+                    #root, #root > div, main {
+                        margin: 0 !important;
+                        padding: 0 !important;
+                        display: block !important;
+                        height: auto !important;
+                        width: auto !important;
+                        overflow: visible !important;
+                        position: static !important;
+                    }
+                    .print\\:hidden, .no-print, nav, header, footer {
                         display: none !important;
                     }
                     .print-page {
                         display: block !important;
-                    }
-                    /* Ukryj wszystko co mogłoby wystawać poza obszar wydruku */
-                    #root > div {
-                        height: auto !important;
-                        display: block !important;
-                    }
-                    main {
-                        overflow: visible !important;
-                        padding: 0 !important;
                         margin: 0 !important;
+                        padding: 0 !important;
                     }
                 }
             `}</style>
@@ -240,7 +255,7 @@ const LabelsPrintContent = ({ products, formatConfig }) => {
     }
 
     return (
-        <div style={{ backgroundColor: 'white' }}>
+        <div style={{ backgroundColor: 'white', margin: 0, padding: 0 }}>
             {pages.map((pageLabels, pageIndex) => (
                 <div key={pageIndex} style={{
                     display: 'grid',
@@ -252,7 +267,10 @@ const LabelsPrintContent = ({ products, formatConfig }) => {
                     width: '210mm',
                     height: '297mm',
                     boxSizing: 'border-box',
-                    overflow: 'hidden'
+                    overflow: 'hidden',
+                    columnGap: 0,
+                    rowGap: 0,
+                    backgroundColor: 'white'
                 }}>
                     {pageLabels.map((p, index) => (
                         <div key={index} style={{
@@ -267,7 +285,7 @@ const LabelsPrintContent = ({ products, formatConfig }) => {
                             alignItems: 'center',
                             color: 'black',
                             fontFamily: 'sans-serif',
-                            border: '0.01mm solid transparent',
+                            border: 'none',
                             textAlign: 'center'
                         }}>
                              {formatConfig.id === '10000' ? (
