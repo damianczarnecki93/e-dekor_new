@@ -11,7 +11,7 @@ const HERMA_FORMATS = {
         rows: 13,
         width: '38.0mm',
         height: '20.1mm',
-        marginTop: '10mm', // Orientacyjne marginesy, jeśli nie podano
+        marginTop: '17.85mm',
         marginLeft: '10mm',
     },
     HERMA_10000: {
@@ -21,8 +21,8 @@ const HERMA_FORMATS = {
         rows: 27,
         width: '17.8mm',
         height: '10mm',
-        marginTop: '10mm',
-        marginLeft: '10mm',
+        marginTop: '13.5mm',
+        marginLeft: '16mm',
     }
 };
 
