@@ -1,4 +1,4 @@
-import { Home, Search, PlusCircle, Archive, List, Wrench, ClipboardList, Plane, Users, Settings, ClipboardCheck } from 'lucide-react';
+import { Home, Search, PlusCircle, Archive, List, Wrench, ClipboardList, Plane, Users, Settings, ClipboardCheck, Printer } from 'lucide-react';
 
 export const navConfig = (onNewOrder) => [
     {
@@ -20,6 +20,7 @@ export const navConfig = (onNewOrder) => [
         items: [
             { id: 'picking', label: 'Kompletacja', icon: List, roles: ['user', 'administrator'], color: 'bg-purple-200' },
             { id: 'inventory', label: 'Inwentaryzacja', icon: Wrench, roles: ['user', 'administrator'], color: 'bg-pink-200' },
+            { id: 'labels', label: 'Etykiety', icon: Printer, roles: ['user', 'administrator'], color: 'bg-orange-200' },
         ]
     },
     {

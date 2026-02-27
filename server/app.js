@@ -828,27 +828,39 @@ app.delete('/api/admin/users/:id', authMiddleware, adminMiddleware, async (req, 
 app.post('/api/admin/upload-products', authMiddleware, adminMiddleware, upload.single('productsFile'), async (req, res) => {
     if (!req.file) return res.status(400).json({ message: 'Nie przesłano pliku.' });
     const { mode } = req.query;
-    if (!['overwrite', 'append'].includes(mode)) {
+    if (!['overwrite', 'append', 'update_quantity'].includes(mode)) {
         return res.status(400).json({ message: 'Nieprawidłowy tryb importu.' });
     }
     try {
         const productsToImport = [];
-        const csvHeaders = ['barcode', 'name', 'price', 'product_code', 'quantity', 'availability'];
+        const isUpdateQuantity = mode === 'update_quantity';
+        const csvHeaders = isUpdateQuantity
+            ? ['product_code', 'quantity']
+            : ['barcode', 'name', 'price', 'product_code', 'quantity', 'availability'];
+
         const decodedBuffer = req.file.buffer.toString('utf8');
         const readableStream = Readable.from(decodedBuffer);
 
         await new Promise((resolve, reject) => {
             readableStream.pipe(csv({ headers: csvHeaders, separator: ';', skipLines: 1 }))
                 .on('data', (row) => {
-                    if (!row.barcode) return;
-                    productsToImport.push({
-                        name: row.name || 'Brak nazwy',
-                        product_code: row.product_code || '',
-                        barcodes: [row.barcode],
-                        price: parseFloat((row.price || '0').replace(',', '.')) || 0,
-                        quantity: parseInt(row.quantity) || 0,
-                        availability: String(row.availability).toLowerCase() === 'true'
-                    });
+                    if (isUpdateQuantity) {
+                        if (!row.product_code) return;
+                        productsToImport.push({
+                            product_code: row.product_code.trim(),
+                            quantity: parseInt(row.quantity) || 0
+                        });
+                    } else {
+                        if (!row.barcode) return;
+                        productsToImport.push({
+                            name: row.name || 'Brak nazwy',
+                            product_code: row.product_code || '',
+                            barcodes: [row.barcode],
+                            price: parseFloat((row.price || '0').replace(',', '.')) || 0,
+                            quantity: parseInt(row.quantity) || 0,
+                            availability: String(row.availability).toLowerCase() === 'true'
+                        });
+                    }
                 }).on('end', resolve).on('error', reject);
         });
 
@@ -858,7 +870,7 @@ app.post('/api/admin/upload-products', authMiddleware, adminMiddleware, upload.s
             await Product.deleteMany({});
             await Product.insertMany(productsToImport);
             res.status(200).json({ message: `Import zakończony. Nadpisano bazę ${productsToImport.length} produktami.` });
-        } else { // append
+        } else if (mode === 'append') {
             const bulkOps = productsToImport.map(p => ({
                 updateOne: {
                     filter: { product_code: p.product_code },
@@ -871,6 +883,18 @@ app.post('/api/admin/upload-products', authMiddleware, adminMiddleware, upload.s
             }));
             const result = await Product.bulkWrite(bulkOps);
             res.status(200).json({ message: `Import zakończony. Zmodyfikowano ${result.modifiedCount + result.upsertedCount} produktów.` });
+        } else if (mode === 'update_quantity') {
+            const bulkOps = productsToImport.map(p => ({
+                updateOne: {
+                    filter: { product_code: p.product_code },
+                    update: {
+                        $set: { quantity: p.quantity, availability: p.quantity > 0 }
+                    },
+                    upsert: false
+                }
+            }));
+            const result = await Product.bulkWrite(bulkOps);
+            res.status(200).json({ message: `Aktualizacja ilości zakończona. Zaktualizowano ${result.modifiedCount} produktów.` });
         }
     } catch (error) { res.status(500).json({ message: 'Wystąpił błąd serwera podczas importu.', error: error.message }); }
 });

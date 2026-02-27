@@ -23,6 +23,7 @@ import AdminUsersView from './components/admin/AdminUsersView';
 import AdminProductsView from './components/admin/AdminProductsView';
 import AdminEmailConfigView from './components/admin/AdminEmailConfigView';
 import ShortageReportView from './components/reports/ShortageReportView';
+import LabelsView from './components/labels/LabelsView';
 import UserChangePasswordModal from './components/modals/UserChangePasswordModal';
 import NotificationSettingsModal from './components/modals/NotificationSettingsModal';
 import SyncProgressModal from './components/modals/SyncProgressModal';
@@ -191,22 +192,26 @@ function App() {
     
     return (
         <>
-            <SyncProgressModal syncProgress={syncProgress} />
-            <div className="flex flex-col h-screen bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-sans">
-                <OfflineIndicator isOnline={isOnline} />
-                {user && (
-                    <Topbar
-                        user={user}
-                        onLogout={handleLogout}
-                        onOpenPasswordModal={() => setIsPasswordModalOpen(true)}
-                        onOpenNotificationSettings={() => setIsNotificationModalOpen(true)}
-                        isDarkMode={isDarkMode}
-                        toggleTheme={toggleTheme}
-                        syncProgress={syncProgress}
-                        onForceSync={triggerSync}
-                        isOnline={isOnline}
-                    />
-                )}
+            <div className="print:hidden">
+                <SyncProgressModal syncProgress={syncProgress} />
+            </div>
+            <div className="flex flex-col h-screen bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-sans print:bg-white print:h-auto">
+                <div className="print:hidden">
+                    <OfflineIndicator isOnline={isOnline} />
+                    {user && (
+                        <Topbar
+                            user={user}
+                            onLogout={handleLogout}
+                            onOpenPasswordModal={() => setIsPasswordModalOpen(true)}
+                            onOpenNotificationSettings={() => setIsNotificationModalOpen(true)}
+                            isDarkMode={isDarkMode}
+                            toggleTheme={toggleTheme}
+                            syncProgress={syncProgress}
+                            onForceSync={triggerSync}
+                            isOnline={isOnline}
+                        />
+                    )}
+                </div>
                 <main className="flex-1 overflow-y-auto">
                     <Routes>
                         {!user ? (
@@ -232,6 +237,7 @@ function App() {
                                 <Route path="/admin-products" element={<AdminProductsView />} />
                                 <Route path="/shortage-report" element={<ShortageReportView />} />
                                 <Route path="/admin-email" element={<AdminEmailConfigView />} />
+                                <Route path="/labels" element={<LabelsView />} />
                                 <Route path="/" element={<Navigate to="/dashboard" replace />} />
                                 <Route path="*" element={<Navigate to="/dashboard" replace />} />
                             </>
