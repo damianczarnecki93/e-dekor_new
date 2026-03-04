@@ -112,6 +112,11 @@ const api = {
         if (!response.ok) throw new Error(data.message || 'Błąd importu pliku');
         return data;
     },
+    searchContacts: async (term) => {
+        const response = await fetchWithAuth(`/api/crm/search?term=${encodeURIComponent(term)}`);
+        if (!response.ok) throw new Error('Błąd wyszukiwania kontaktów');
+        return await response.json();
+    },
     archiveOrder: async (orderId) => {
     const response = await fetchWithAuth(`/api/orders/${orderId}/archive`, { method: 'POST' });
     if (!response.ok) throw new Error('Błąd archiwizacji zamówienia');
@@ -759,6 +764,49 @@ const MainSearchView = () => {
     );
 };
 
+const CustomProductForm = ({ ean, onSubmit, onSkip }) => {
+    const [name, setName] = useState('');
+    const [price, setPrice] = useState('0');
+
+    const handleSubmit = (e) => {
+        e.preventDefault();
+        const finalName = name.trim() === '' ? 'produkt spoza listy' : name;
+        const finalPrice = parseFloat(price) || 0;
+        onSubmit({ name: finalName, price: finalPrice });
+    };
+
+    return (
+        <form onSubmit={handleSubmit} className="space-y-4">
+            <p>Nie znaleziono produktu o kodzie EAN: <strong>{ean}</strong>. Możesz dodać go ręcznie.</p>
+            <div>
+                <label className="block mb-2 text-sm font-medium">Nazwa produktu (opcjonalnie)</label>
+                <input
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="w-full p-3 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg"
+                    placeholder="produkt spoza listy"
+                />
+            </div>
+            <div>
+                <label className="block mb-2 text-sm font-medium">Cena (opcjonalnie)</label>
+                <input
+                    type="number"
+                    value={price}
+                    onChange={(e) => setPrice(e.target.value)}
+                    className="w-full p-3 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg"
+                    placeholder="0.00"
+                    step="0.01"
+                />
+            </div>
+            <div className="flex justify-end gap-4 pt-4">
+                <button type="button" onClick={onSkip} className="px-4 py-2 bg-gray-200 dark:bg-gray-600 rounded-lg">Pomiń</button>
+                <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg">Zapisz</button>
+            </div>
+        </form>
+    );
+};
+
 const PinnedInputBar = ({ onProductAdd, onSave, isDirty }) => {
     const [query, setQuery] = useState('');
     const [quantity, setQuantity] = useState(1);
@@ -766,6 +814,7 @@ const PinnedInputBar = ({ onProductAdd, onSave, isDirty }) => {
     const [isLoading, setIsLoading] = useState(false);
     const { showNotification } = useNotification();
     const inputRef = useRef(null);
+    const [customProductModal, setCustomProductModal] = useState({ isOpen: false, ean: '' });
 
     useEffect(() => {
         if (query.length < 2) {
@@ -801,102 +850,201 @@ const PinnedInputBar = ({ onProductAdd, onSave, isDirty }) => {
     
 	 const handleQueryChange = (e) => {
         const value = e.target.value;
-        if (value.length > 13) {
-            alert("Kod EAN nie może przekraczać 13 znaków.");
-            setQuery('');
-        } else {
-            setQuery(value);
-        }
+        setQuery(value);
     };
 	
     const handleKeyDown = async (e) => {
         if (e.key === 'Enter' && query.trim() !== '') {
             e.preventDefault();
-            
-            const exactMatch = suggestions.find(s => s.barcodes.includes(query.trim()) || s.product_code === query.trim());
-            if (exactMatch) {
-                handleAdd(exactMatch);
-                return;
-            }
-
-            if (suggestions.length === 0) {
-                try {
-                    const results = await api.searchProducts(query.trim());
-                    if (results.length === 1) {
-                        handleAdd(results[0]);
-                        return;
-                    } else if (results.length > 1) {
-                        setSuggestions(results);
-                        return;
-                    }
-                } catch (error) {
-                    // Ignoruj błąd
+            setIsLoading(true);
+            setSuggestions([]); // Hide suggestions while processing
+            try {
+                const results = await api.searchProducts(query.trim());
+                if (results.length > 0) {
+                    onProductAdd(results[0], 1); // Add first match with quantity 1
+                    setQuery(''); // Clear input for next scan
+                    setQuantity(1); // Reset quantity field
+                    inputRef.current?.focus();
+                } else {
+                    // No product found, open modal to add custom product
+                    setCustomProductModal({ isOpen: true, ean: query.trim() });
                 }
+            } catch (error) {
+                showNotification(error.message, 'error');
+                setQuery(''); // Clear input on error
+            } finally {
+                setIsLoading(false);
             }
-
-            const customItem = {
-                _id: `custom-${Date.now()}`,
-                name: `EAN: ${query}`,
-                product_code: 'SPOZA LISTY',
-                barcodes: [query],
-                price: 0,
-                isCustom: true,
-            };
-            handleAdd(customItem);
         }
     };
 
+    const handleCustomSubmit = ({ name, price }) => {
+        const customItem = {
+            _id: `custom-${Date.now()}`,
+            name: name,
+            product_code: customProductModal.ean,
+            barcodes: [customProductModal.ean],
+            price: price,
+            isCustom: true,
+        };
+        onProductAdd(customItem, 1);
+        setCustomProductModal({ isOpen: false, ean: '' });
+        setQuery('');
+        inputRef.current?.focus();
+    };
+
+    const handleCustomSkip = () => {
+        const customItem = {
+            _id: `custom-${Date.now()}`,
+            name: 'produkt spoza listy',
+            product_code: customProductModal.ean,
+            barcodes: [customProductModal.ean],
+            price: 0,
+            isCustom: true,
+        };
+        onProductAdd(customItem, 1);
+        setCustomProductModal({ isOpen: false, ean: '' });
+        setQuery('');
+        inputRef.current?.focus();
+    };
+
     return (
-        <div className="fixed bottom-0 left-0 lg:left-64 right-0 bg-white dark:bg-gray-800 border-t dark:border-gray-700 shadow-top z-20 p-4">
-            <div className="max-w-4xl mx-auto relative">
-                {suggestions.length > 0 && (
-                    <ul className="absolute bottom-full mb-2 w-full bg-white dark:bg-gray-700 border rounded-lg shadow-xl max-h-60 overflow-y-auto z-30">
-                        {suggestions.map(p => (
-                            <li key={p._id} onClick={() => handleAdd(p)} className="p-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 border-b last:border-b-0">
-                                <p className="font-semibold">{p.name}</p>
-                                <p className="text-sm text-gray-500">{p.product_code}</p>
-                            </li>
-                        ))}
-                    </ul>
-                )}
-                <div className="flex items-center gap-2 sm:gap-4">
-                    <input
-                        ref={inputRef}
-                        type="text"
-                        value={query}
-                        onChange={handleQueryChange}
-                        onKeyDown={handleKeyDown}
-                        placeholder="Wyszukaj lub zeskanuj produkt..."
-                        className="w-full p-3 bg-gray-100 dark:bg-gray-700 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    />
-                    <input
-                        type="number"
-                        value={quantity}
-                        onFocus={(e) => e.target.select()}
-                        onChange={(e) => setQuantity(e.target.value)}
-                        onKeyDown={handleKeyDown}
-                        className="w-20 sm:w-24 p-3 text-center bg-gray-100 dark:bg-gray-700 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    />
-                    {onSave && (
-                        <button onClick={onSave} className="flex items-center justify-center px-3 sm:px-5 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-blue-400" disabled={!isDirty}>
-                            <Save className="w-5 h-5"/>
-                            <span className="hidden sm:inline ml-2">{isDirty ? 'Zapisz' : 'Zapisano'}</span>
-                        </button>
+        <>
+            <div className="fixed bottom-0 left-0 lg:left-64 right-0 bg-white dark:bg-gray-800 border-t dark:border-gray-700 shadow-top z-20 p-4">
+                <div className="max-w-4xl mx-auto relative">
+                    {suggestions.length > 0 && (
+                        <ul className="absolute bottom-full mb-2 w-full bg-white dark:bg-gray-700 border rounded-lg shadow-xl max-h-60 overflow-y-auto z-30">
+                            {suggestions.map(p => (
+                                <li key={p._id} onClick={() => handleAdd(p)} className="p-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 border-b last:border-b-0">
+                                    <p className="font-semibold">{p.name}</p>
+                                    <p className="text-sm text-gray-500">{p.product_code}</p>
+                                </li>
+                            ))}
+                        </ul>
                     )}
+                    <div className="flex items-center gap-2 sm:gap-4">
+                        <input
+                            ref={inputRef}
+                            type="text"
+                            value={query}
+                            onChange={handleQueryChange}
+                            onKeyDown={handleKeyDown}
+                            placeholder="Wyszukaj lub zeskanuj produkt..."
+                            className="w-full p-3 bg-gray-100 dark:bg-gray-700 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        />
+                        <input
+                            type="number"
+                            value={quantity}
+                            onFocus={(e) => e.target.select()}
+                            onChange={(e) => setQuantity(e.target.value)}
+                            onKeyDown={handleKeyDown}
+                            className="w-16 sm:w-24 p-3 text-center bg-gray-100 dark:bg-gray-700 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        />
+                        {onSave && (
+                            <button onClick={onSave} className="flex items-center justify-center px-3 sm:px-5 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-blue-400" disabled={!isDirty}>
+                                <Save className="w-5 h-5"/>
+                                <span className="hidden sm:inline ml-2">{isDirty ? 'Zapisz' : 'Zapisano'}</span>
+                            </button>
+                        )}
+                    </div>
                 </div>
             </div>
-        </div>
+            <Modal
+                isOpen={customProductModal.isOpen}
+                onClose={() => {
+                    setCustomProductModal({ isOpen: false, ean: '' });
+                    setQuery('');
+                    inputRef.current?.focus();
+                }}
+                title="Dodaj produkt spoza listy"
+            >
+                <CustomProductForm
+                    ean={customProductModal.ean}
+                    onSubmit={handleCustomSubmit}
+                    onSkip={handleCustomSkip}
+                />
+            </Modal>
+        </>
+    );
+};
+
+const EditProductModal = ({ isOpen, onClose, itemData, onSave }) => {
+    const [editedItem, setEditedItem] = useState(null);
+
+    useEffect(() => {
+        if (itemData) {
+            setEditedItem({
+                ...itemData,
+                barcodes: Array.isArray(itemData.barcodes) ? itemData.barcodes.join(', ') : ''
+            });
+        }
+    }, [itemData]);
+
+    const handleChange = (e) => {
+        const { name, value } = e.target;
+        setEditedItem(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleSave = () => {
+        const finalItem = {
+            ...editedItem,
+            barcodes: editedItem.barcodes.split(',').map(b => b.trim()).filter(b => b),
+            price: parseFloat(editedItem.price) || 0,
+            quantity: parseInt(editedItem.quantity, 10) || 0
+        };
+        onSave(finalItem);
+        onClose();
+    };
+
+    if (!isOpen || !editedItem) return null;
+
+    return (
+        <Modal isOpen={isOpen} onClose={onClose} title="Edytuj pozycję" maxWidth="lg">
+            <div className="space-y-4">
+                <div>
+                    <label className="block text-sm font-medium">Nazwa</label>
+                    <input type="text" name="name" value={editedItem.name} onChange={handleChange} className="w-full p-2 border rounded-md bg-white dark:bg-gray-700" />
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label className="block text-sm font-medium">Kod produktu</label>
+                        <input type="text" name="product_code" value={editedItem.product_code} onChange={handleChange} className="w-full p-2 border rounded-md bg-white dark:bg-gray-700" />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium">Kody EAN (oddzielone przecinkami)</label>
+                        <input type="text" name="barcodes" value={editedItem.barcodes} onChange={handleChange} className="w-full p-2 border rounded-md bg-white dark:bg-gray-700" />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium">Cena</label>
+                        <input type="number" step="0.01" name="price" value={editedItem.price} onChange={handleChange} className="w-full p-2 border rounded-md bg-white dark:bg-gray-700" />
+                    </div>
+                     <div>
+                        <label className="block text-sm font-medium">Ilość</label>
+                        <input type="number" name="quantity" value={editedItem.quantity} onChange={handleChange} className="w-full p-2 border rounded-md bg-white dark:bg-gray-700" />
+                    </div>
+                </div>
+                <div className="flex justify-end gap-4 pt-4">
+                    <button onClick={onClose} className="px-4 py-2 bg-gray-200 dark:bg-gray-600 rounded-lg">Anuluj</button>
+                    <button onClick={handleSave} className="px-4 py-2 bg-blue-600 text-white rounded-lg">Zapisz zmiany</button>
+                </div>
+            </div>
+        </Modal>
     );
 };
 
 const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }) => {
     const [order, setOrder] = useState(currentOrder);
     const [noteModal, setNoteModal] = useState({ isOpen: false, itemIndex: null, text: '' });
+    const [editModal, setEditModal] = useState({ isOpen: false, itemData: null });
     const listEndRef = useRef(null);
     const printRef = useRef(null);
     const importFileRef = useRef(null);
     const { showNotification } = useNotification();
     const { items: sortedItems, requestSort, sortConfig } = useSortableData(order.items || []);
+
+    const [contactSearchQuery, setContactSearchQuery] = useState(currentOrder.customerName || '');
+    const [contactSuggestions, setContactSuggestions] = useState([]);
+    const [isContactLoading, setIsContactLoading] = useState(false);
 
     const getSortIcon = (name) => {
         if (!sortConfig || sortConfig.key !== name) {
@@ -908,7 +1056,31 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
     useEffect(() => { 
         setOrder(currentOrder);
         setDirty(currentOrder.isDirty || false);
+        setContactSearchQuery(currentOrder.customerName || '');
     }, [currentOrder, setDirty]);
+
+    useEffect(() => {
+        if (order.customerId && order.customerName === contactSearchQuery) {
+            setContactSuggestions([]);
+            return;
+        }
+        if (contactSearchQuery.trim().length < 2) {
+            setContactSuggestions([]);
+            return;
+        }
+        const handler = setTimeout(async () => {
+            setIsContactLoading(true);
+            try {
+                const results = await api.searchContacts(contactSearchQuery);
+                setContactSuggestions(results);
+            } catch (error) {
+                showNotification(error.message, 'error');
+            } finally {
+                setIsContactLoading(false);
+            }
+        }, 300);
+        return () => clearTimeout(handler);
+    }, [contactSearchQuery, order.customerId, order.customerName, showNotification]);
     
     const scrollToBottom = () => listEndRef.current?.scrollIntoView({ behavior: "smooth" });
     useEffect(scrollToBottom, [order.items]);
@@ -918,6 +1090,15 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
         setOrder(newOrder);
         setCurrentOrder(newOrder);
         setDirty(isDirtyFlag);
+    };
+
+    const handleSelectContact = (contact) => {
+        updateOrder({
+            customerName: contact.name,
+            customerId: contact._id,
+        });
+        setContactSearchQuery(contact.name);
+        setContactSuggestions([]);
     };
 
     const addProductToOrder = (product, quantity) => {
@@ -1102,16 +1283,38 @@ const handlePrint = () => {
                     </div>
                 </div>
 					<div className="flex flex-wrap items-center gap-4 mb-6">
-                    <input 
-                        type="text" 
-                        value={order.customerName || ''} 
-                        onChange={(e) => updateOrder({ customerName: e.target.value })} 
-                        placeholder="Wprowadź nazwę klienta" 
-                        className="w-full max-w-lg p-3 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    />
+                    <div className="relative w-full max-w-lg">
+                        <input
+                            type="text"
+                            value={contactSearchQuery}
+                            onChange={(e) => {
+                                setContactSearchQuery(e.target.value);
+                                updateOrder({ customerName: e.target.value, customerId: null });
+                            }}
+                            placeholder="Wprowadź nazwę klienta"
+                            className="w-full p-3 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            autoComplete="off"
+                        />
+                        {isContactLoading && <div className="absolute right-3 top-3"><div className="w-5 h-5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div></div>}
+                        {contactSuggestions.length > 0 && (
+                            <ul className="absolute z-20 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-xl max-h-60 overflow-y-auto">
+                                {contactSuggestions.map(contact => (
+                                    <li
+                                        key={contact._id}
+                                        onClick={() => handleSelectContact(contact)}
+                                        className="p-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700"
+                                    >
+                                        <p className="font-semibold">{contact.name}</p>
+                                        {contact.company && <p className="text-sm text-gray-500">{contact.company}</p>}
+                                        {contact.address && <p className="text-xs text-gray-400">{contact.address}</p>}
+                                    </li>
+                                ))}
+                            </ul>
+                        )}
+                    </div>
                     {order._id && (
                         <label className="flex items-center gap-2 cursor-pointer p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
-                            <input 
+                            <input
                                 type="checkbox"
                                 className="h-5 w-5 rounded text-indigo-600 focus:ring-indigo-500"
                                 checked={order.status === 'Zakończono'}
@@ -1126,36 +1329,63 @@ const handlePrint = () => {
                 </div>
                 <div ref={printRef} className="flex-grow bg-gray-50 dark:bg-gray-900 p-2 sm:p-4 rounded-lg shadow-inner mt-6">
                     <div className="print-header hidden p-4"><h2 className="text-2xl font-bold">Zamówienie dla: {order.customerName}</h2><p>Data: {new Date().toLocaleDateString()}</p></div>
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left text-sm">
-                            <thead>
-                                <tr className="border-b border-gray-200 dark:border-gray-700">
-                                    <th className="p-2 cursor-pointer" onClick={() => requestSort('name')}><div className="flex items-center">Nazwa {getSortIcon('name')}</div></th>
-                                    <th className="hidden md:table-cell p-2 cursor-pointer" onClick={() => requestSort('product_code')}><div className="flex items-center">Kod produktu {getSortIcon('product_code')}</div></th>
-                                    <th className="p-2 text-right cursor-pointer" onClick={() => requestSort('price')}><div className="flex items-center justify-end">Cena {getSortIcon('price')}</div></th>
-                                    <th className="p-2 text-center cursor-pointer" onClick={() => requestSort('quantity')}><div className="flex items-center justify-center">Ilość {getSortIcon('quantity')}</div></th>
-                                    <th className="p-2 text-right">Wartość</th>
-                                    <th className="p-2 text-center">Akcje</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {sortedItems.map((item, index) => (
-                                    <tr key={item._id || index} className={`border-b border-gray-200 dark:border-gray-700 last:border-0 ${item.isCustom ? 'text-yellow-500' : ''}`}>
-                                        <td className="p-2 font-medium"><span className="truncate block max-w-[15ch] sm:max-w-none">{item.name}</span>{item.note && <p className="text-xs text-gray-400 mt-1">Notatka: {item.note}</p>}</td>
-                                        <td className="hidden md:table-cell p-2">{item.product_code}</td>
-                                        <td className="p-2 text-right">{item.price.toFixed(2)}</td>
-                                        <td className="p-2 text-center">
-                                            <input type="number" value={item.quantity || ''} onChange={(e) => updateQuantity(index, e.target.value)} onFocus={(e) => e.target.select()} className="w-16 text-center bg-transparent border rounded-md p-1 focus:ring-2 focus:ring-indigo-500 outline-none"/>
-                                        </td>
-                                        <td className="p-2 text-right font-semibold">{(item.price * (item.quantity || 0)).toFixed(2)}</td>
-                                        <td className="p-2 text-center whitespace-nowrap">
-                                            <button onClick={() => setNoteModal({ isOpen: true, itemIndex: index, text: item.note || '' })} className="p-2 text-gray-500 hover:text-blue-500"><MessageSquare className="w-5 h-5"/></button>
-                                            <button onClick={() => removeItemFromOrder(index)} className="p-2 text-gray-500 hover:text-red-500"><Trash2 className="w-5 h-5"/></button>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                    <div>
+                        {/* --- DESKTOP HEADERS --- */}
+                        <div className="hidden lg:grid lg:grid-cols-12 gap-4 items-center font-bold p-2 border-b border-gray-200 dark:border-gray-700">
+                            <div className="col-span-5 cursor-pointer" onClick={() => requestSort('name')}><div className="flex items-center">Nazwa {getSortIcon('name')}</div></div>
+                            <div className="col-span-2 cursor-pointer" onClick={() => requestSort('product_code')}><div className="flex items-center">Kod produktu {getSortIcon('product_code')}</div></div>
+                            <div className="col-span-1 text-right cursor-pointer" onClick={() => requestSort('price')}><div className="flex items-center justify-end">Cena {getSortIcon('price')}</div></div>
+                            <div className="col-span-1 text-center cursor-pointer" onClick={() => requestSort('quantity')}><div className="flex items-center justify-center">Ilość {getSortIcon('quantity')}</div></div>
+                            <div className="col-span-1 text-right">Wartość</div>
+                            <div className="col-span-2 text-center">Akcje</div>
+                        </div>
+                        <div className="lg:divide-y lg:divide-gray-200 lg:dark:divide-gray-700">
+                            {sortedItems.map((item, index) => (
+                                <div key={item._id || index} className={`block lg:grid lg:grid-cols-12 gap-4 items-center p-4 lg:p-2 ${item.isCustom ? 'bg-yellow-50 dark:bg-yellow-900/20' : 'bg-white dark:bg-gray-800'} lg:bg-transparent lg:dark:bg-transparent mb-4 lg:mb-0 rounded-lg shadow-md lg:shadow-none`}>
+
+                                    {/* Desktop view */}
+                                    <div className="hidden lg:block lg:col-span-5 font-medium">
+                                        <span className="truncate block">{item.name}</span>
+                                        {item.note && <p className="text-xs text-gray-400 mt-1">Notatka: {item.note}</p>}
+                                    </div>
+                                    <div className="hidden lg:block lg:col-span-2">{item.product_code}</div>
+                                    <div className="hidden lg:block lg:col-span-1 text-right">{item.price.toFixed(2)}</div>
+                                    <div className="hidden lg:block lg:col-span-1 text-center">
+                                        <input type="number" value={item.quantity || ''} onChange={(e) => updateQuantity(index, e.target.value)} onFocus={(e) => e.target.select()} className="w-16 text-center bg-transparent border rounded-md p-1 focus:ring-2 focus:ring-indigo-500 outline-none"/>
+                                    </div>
+                                    <div className="hidden lg:block lg:col-span-1 text-right font-semibold">{(item.price * (item.quantity || 0)).toFixed(2)}</div>
+
+                                    {/* Mobile card view */}
+                                    <div className="w-full lg:hidden">
+                                        <div className="flex justify-between items-start mb-2">
+                                            <div>
+                                                <p className="font-bold text-lg">{item.name}</p>
+                                                <p className="text-sm text-gray-500">{item.product_code}</p>
+                                                {item.note && <p className="text-xs text-gray-400 mt-1">Notatka: {item.note}</p>}
+                                            </div>
+                                            <p className="font-bold text-lg whitespace-nowrap pl-2">{(item.price * (item.quantity || 0)).toFixed(2)} PLN</p>
+                                        </div>
+                                        <div className="flex justify-between items-center mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-sm text-gray-500">Ilość:</span>
+                                                <input type="number" value={item.quantity || ''} onChange={(e) => updateQuantity(index, e.target.value)} onFocus={(e) => e.target.select()} className="w-20 text-center bg-gray-100 dark:bg-gray-700 border rounded-md p-1 focus:ring-2 focus:ring-indigo-500 outline-none"/>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                 <span className="text-sm text-gray-500">Cena:</span>
+                                                 <span className="font-semibold">{item.price.toFixed(2)}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Actions */}
+                                    <div className="lg:col-span-2 flex justify-end lg:justify-center items-center mt-2 lg:mt-0">
+                                        <button onClick={() => setEditModal({ isOpen: true, itemData: { ...item, originalIndex: index } })} className="p-2 text-gray-500 hover:text-yellow-500"><Edit className="w-5 h-5"/></button>
+                                        <button onClick={() => setNoteModal({ isOpen: true, itemIndex: index, text: item.note || '' })} className="p-2 text-gray-500 hover:text-blue-500"><MessageSquare className="w-5 h-5"/></button>
+                                        <button onClick={() => removeItemFromOrder(index)} className="p-2 text-gray-500 hover:text-red-500"><Trash2 className="w-5 h-5"/></button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
                     </div>
                     {(!order.items || order.items.length === 0) && <p className="text-center text-gray-500 py-8">Brak pozycji na zamówieniu.</p>}
                     <div ref={listEndRef} />
@@ -1172,6 +1402,23 @@ const handlePrint = () => {
                 <textarea value={noteModal.text} onChange={(e) => setNoteModal({...noteModal, text: e.target.value})} className="w-full p-2 border rounded-md min-h-[100px] bg-white dark:bg-gray-700"></textarea>
                 <div className="flex justify-end gap-4 mt-4"><button onClick={() => setNoteModal({ isOpen: false, itemIndex: null, text: '' })} className="px-4 py-2 bg-gray-200 dark:bg-gray-600 rounded-lg">Anuluj</button><button onClick={handleNoteSave} className="px-4 py-2 bg-blue-600 text-white rounded-lg">Zapisz notatkę</button></div>
             </Modal>
+
+            <EditProductModal
+                isOpen={editModal.isOpen}
+                onClose={() => setEditModal({ isOpen: false, itemData: null })}
+                itemData={editModal.itemData}
+                onSave={(editedItem) => {
+                    const newItems = [...order.items];
+                    const originalItem = sortedItems[editedItem.originalIndex];
+                    const targetIndex = newItems.findIndex(item => item._id === originalItem._id);
+                    if (targetIndex !== -1) {
+                        newItems[targetIndex] = { ...newItems[targetIndex], ...editedItem };
+                        delete newItems[targetIndex].originalIndex; // Clean up temp property
+                        updateOrder({ items: newItems });
+                    }
+                    setEditModal({ isOpen: false, itemData: null });
+                }}
+            />
         </div>
     );
 };
@@ -1266,39 +1513,52 @@ const OrdersListView = ({ onEdit }) => {
     }, [orders]);
 
     const renderOrderTable = (orderList, isArchivedView = false) => (
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-x-auto">
-            <table className="w-full text-left text-sm">
-                <thead className="bg-gray-50 dark:bg-gray-700">
-                    <tr>
-                        <th className="p-3">Klient</th>
-                        <th className="p-3 hidden md:table-cell">Autor</th>
-                        <th className="p-3 hidden sm:table-cell">Data</th>
-                        <th className="p-3 text-right">Wartość</th>
-                        <th className="p-3 text-center">Akcje</th>
-                    </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                    {orderList.map(order => (
-                        <tr key={order._id}>
-                            <td className="p-3 font-medium">{order.customerName}</td>
-                            <td className="p-3 hidden md:table-cell">{order.author}</td>
-                            <td className="p-3 hidden sm:table-cell">{new Date(order.date).toLocaleDateString()}</td>
-                            <td className="p-3 text-right font-semibold">{(order.total || 0).toFixed(2)}</td>
-                            <td className="p-3 text-center whitespace-nowrap">
-                                {!isArchivedView && (
-                                    <Tooltip text="Edytuj/Pokaż"><button onClick={() => onEdit(order._id)} className="p-2 text-blue-500 hover:text-blue-700"><Edit className="w-5 h-5"/></button></Tooltip>
-                                )}
-                                <Tooltip text={isArchivedView ? "Przywróć" : "Archiwizuj"}>
-                                    <button onClick={() => handleArchiveToggle(order._id, order.isArchived)} className={`p-2 ${isArchivedView ? 'text-green-500 hover:text-green-700' : 'text-gray-500 hover:text-gray-700'}`}>
-                                        {isArchivedView ? <RotateCcw className="w-5 h-5"/> : <Archive className="w-5 h-5"/>}
-                                    </button>
-                                </Tooltip>
-                                <Tooltip text="Usuń"><button onClick={() => setModalState({ isOpen: true, orderId: order._id, type: 'delete' })} className="p-2 text-red-500 hover:text-red-700"><Trash2 className="w-5 h-5"/></button></Tooltip>
-                            </td>
-                        </tr>
-                    ))}
-                </tbody>
-            </table>
+        <div className="space-y-4 lg:space-y-0 lg:bg-white lg:dark:bg-gray-800 lg:rounded-lg lg:shadow">
+            {/* Desktop Table Headers */}
+            <div className="hidden lg:grid grid-cols-12 gap-4 font-bold p-3 bg-gray-50 dark:bg-gray-700 rounded-t-lg">
+                <div className="col-span-4">Klient</div>
+                <div className="col-span-2">Autor</div>
+                <div className="col-span-2">Data</div>
+                <div className="col-span-2 text-right">Wartość</div>
+                <div className="col-span-2 text-center">Akcje</div>
+            </div>
+            {/* Orders List / Cards */}
+            <div className="lg:divide-y lg:divide-gray-200 lg:dark:divide-gray-700">
+                {orderList.map(order => (
+                    <div key={order._id} className="bg-white dark:bg-gray-800 rounded-lg shadow lg:shadow-none lg:grid lg:grid-cols-12 lg:gap-4 lg:items-center p-4 lg:p-3">
+                        {/* Mobile Card Content */}
+                        <div className="lg:hidden">
+                             <div className="flex justify-between items-start">
+                                <h3 className="font-bold text-lg text-indigo-600 dark:text-indigo-400">{order.customerName}</h3>
+                                <p className="font-bold text-lg">{(order.total || 0).toFixed(2)} PLN</p>
+                            </div>
+                            <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                                <p>Autor: {order.author}</p>
+                                <p>Data: {new Date(order.date).toLocaleDateString()}</p>
+                            </div>
+                        </div>
+
+                        {/* Desktop Table Content */}
+                        <div className="hidden lg:block col-span-4 font-medium">{order.customerName}</div>
+                        <div className="hidden lg:block col-span-2">{order.author}</div>
+                        <div className="hidden lg:block col-span-2">{new Date(order.date).toLocaleDateString()}</div>
+                        <div className="hidden lg:block col-span-2 text-right font-semibold">{(order.total || 0).toFixed(2)}</div>
+
+                        {/* Actions (visible on both) */}
+                        <div className="flex justify-end lg:justify-center items-center mt-3 lg:mt-0 lg:col-span-2 border-t lg:border-t-0 pt-3 lg:pt-0">
+                             {!isArchivedView && (
+                                <Tooltip text="Edytuj/Pokaż"><button onClick={() => onEdit(order._id)} className="p-2 text-blue-500 hover:text-blue-700"><Edit className="w-5 h-5"/></button></Tooltip>
+                            )}
+                            <Tooltip text={isArchivedView ? "Przywróć" : "Archiwizuj"}>
+                                <button onClick={() => handleArchiveToggle(order._id, order.isArchived)} className={`p-2 ${isArchivedView ? 'text-green-500 hover:text-green-700' : 'text-gray-500 hover:text-gray-700'}`}>
+                                    {isArchivedView ? <RotateCcw className="w-5 h-5"/> : <Archive className="w-5 h-5"/>}
+                                </button>
+                            </Tooltip>
+                            <Tooltip text="Usuń"><button onClick={() => setModalState({ isOpen: true, orderId: order._id, type: 'delete' })} className="p-2 text-red-500 hover:text-red-700"><Trash2 className="w-5 h-5"/></button></Tooltip>
+                        </div>
+                    </div>
+                ))}
+            </div>
         </div>
     );
 
@@ -2040,41 +2300,43 @@ const AdminUsersView = ({ user }) => {
     return (
         <div className="p-4 md:p-8">
             <h2 className="text-2xl font-semibold mb-4">Zarządzanie Użytkownikami</h2>
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-x-auto">
-                <table className="w-full text-left">
-                    <thead className="bg-gray-50 dark:bg-gray-700"><tr><th className="p-4 font-semibold">Użytkownik</th><th className="p-4 font-semibold">Rola</th><th className="p-4 font-semibold">Dostępne moduły</th><th className="p-4 font-semibold text-right">Akcje</th></tr></thead>
-                    <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                        {users.map(u => (
-                            <tr key={u._id}>
-                                <td className="p-4 font-medium">{u.username}<br/><span className={`text-xs font-semibold rounded-full capitalize ${u.status === 'oczekujący' ? 'text-yellow-500' : 'text-green-500'}`}>{u.status}</span></td>
-                                <td className="p-4">
-                                    <select value={u.role} onChange={(e) => handleRoleChange(u._id, e.target.value)} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-600 dark:border-gray-500 dark:placeholder-gray-400 dark:text-white" disabled={user.id === u._id}><option value="user">Użytkownik</option><option value="administrator">Administrator</option></select>
-                                </td>
-                                <td className="p-4">
-                                    <div className="flex flex-wrap gap-2">
-                                        {allModules.map(module => (
-                                            <label key={module.id} className="flex items-center text-sm">
-                                                <input
-                                                    type="checkbox"
-                                                    className="form-checkbox h-4 w-4 text-indigo-600 rounded"
-                                                    checked={u.visibleModules?.includes(module.id) || false}
-                                                    onChange={(e) => handleModuleChange(u._id, module.id, e.target.checked)}
-                                                    disabled={u.role === 'administrator'}
-                                                />
-                                                <span className="ml-2">{module.label}</span>
-                                            </label>
-                                        ))}
-                                    </div>
-                                </td>
-                                <td className="p-4 text-right whitespace-nowrap">
-                                    {u.status === 'oczekujący' && (<button onClick={() => handleApproveUser(u._id)} className="px-3 py-1 bg-green-500 text-white text-sm font-semibold rounded-lg hover:bg-green-600 mr-2">Akceptuj</button>)}
-                                    <Tooltip text="Zmień hasło"><button onClick={() => setModalState({ isOpen: true, user: u, type: 'password' })} className="p-2 text-gray-500 hover:text-blue-500"><KeyRound className="w-5 h-5" /></button></Tooltip>
-                                    {user.id !== u._id && (<Tooltip text="Usuń użytkownika"><button onClick={() => setModalState({ isOpen: true, user: u, type: 'delete' })} className="p-2 text-gray-500 hover:text-red-500"><Trash2 className="w-5 h-5" /></button></Tooltip>)}
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
+            <div className="space-y-4 lg:space-y-0 lg:bg-white lg:dark:bg-gray-800 lg:rounded-lg lg:shadow">
+                 <div className="hidden lg:grid grid-cols-10 gap-4 font-bold p-3 bg-gray-50 dark:bg-gray-700 rounded-t-lg">
+                    <div className="col-span-2">Użytkownik</div>
+                    <div className="col-span-2">Rola</div>
+                    <div className="col-span-4">Dostępne moduły</div>
+                    <div className="col-span-2 text-center">Akcje</div>
+                </div>
+                <div className="lg:divide-y lg:divide-gray-200 lg:dark:divide-gray-700">
+                    {users.map(u => (
+                        <div key={u._id} className="bg-white dark:bg-gray-800 rounded-lg shadow lg:shadow-none lg:grid lg:grid-cols-10 lg:gap-4 lg:items-center p-4 lg:p-3">
+                            <div className="lg:col-span-2 font-medium">
+                                <p>{u.username}</p>
+                                <span className={`text-xs font-semibold rounded-full capitalize ${u.status === 'oczekujący' ? 'text-yellow-500' : 'text-green-500'}`}>{u.status}</span>
+                            </div>
+                            <div className="mt-2 lg:mt-0 lg:col-span-2">
+                                <label className="lg:hidden font-bold text-sm">Rola</label>
+                                <select value={u.role} onChange={(e) => handleRoleChange(u._id, e.target.value)} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-600 dark:border-gray-500 dark:placeholder-gray-400 dark:text-white" disabled={user.id === u._id}><option value="user">Użytkownik</option><option value="administrator">Administrator</option></select>
+                            </div>
+                            <div className="mt-4 lg:mt-0 lg:col-span-4">
+                                 <label className="lg:hidden font-bold text-sm mb-2 block">Dostępne moduły</label>
+                                <div className="flex flex-wrap gap-x-4 gap-y-2">
+                                    {allModules.map(module => (
+                                        <label key={module.id} className="flex items-center text-sm">
+                                            <input type="checkbox" className="form-checkbox h-4 w-4 text-indigo-600 rounded" checked={u.visibleModules?.includes(module.id) || false} onChange={(e) => handleModuleChange(u._id, module.id, e.target.checked)} disabled={u.role === 'administrator'}/>
+                                            <span className="ml-2">{module.label}</span>
+                                        </label>
+                                    ))}
+                                </div>
+                            </div>
+                            <div className="mt-4 lg:mt-0 lg:col-span-2 text-right lg:text-center whitespace-nowrap border-t lg:border-0 pt-3 lg:pt-0">
+                                {u.status === 'oczekujący' && (<button onClick={() => handleApproveUser(u._id)} className="px-3 py-1 bg-green-500 text-white text-sm font-semibold rounded-lg hover:bg-green-600 mr-2">Akceptuj</button>)}
+                                <Tooltip text="Zmień hasło"><button onClick={() => setModalState({ isOpen: true, user: u, type: 'password' })} className="p-2 text-gray-500 hover:text-blue-500"><KeyRound className="w-5 h-5" /></button></Tooltip>
+                                {user.id !== u._id && (<Tooltip text="Usuń użytkownika"><button onClick={() => setModalState({ isOpen: true, user: u, type: 'delete' })} className="p-2 text-gray-500 hover:text-red-500"><Trash2 className="w-5 h-5" /></button></Tooltip>)}
+                            </div>
+                        </div>
+                    ))}
+                </div>
             </div>
             <Modal isOpen={modalState.isOpen && modalState.type === 'delete'} onClose={() => setModalState({isOpen: false, user: null, type: ''})} title="Potwierdź usunięcie"><p>Czy na pewno chcesz usunąć użytkownika <strong>{modalState.user?.username}</strong>? Tej operacji nie można cofnąć.</p><div className="flex justify-end gap-4 mt-6"><button onClick={() => setModalState({isOpen: false, user: null, type: ''})} className="px-4 py-2 bg-gray-200 dark:bg-gray-600 rounded-lg">Anuluj</button><button onClick={() => handleDeleteUser(modalState.user._id)} className="px-4 py-2 bg-red-600 text-white rounded-lg">Usuń</button></div></Modal>
             <Modal isOpen={modalState.isOpen && modalState.type === 'password'} onClose={() => setModalState({isOpen: false, user: null, type: ''})} title={`Zmień hasło dla ${modalState.user?.username}`}><div><label className="block mb-2 text-sm font-medium">Nowe hasło</label><input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="w-full p-3 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg"/></div><div className="flex justify-end gap-4 mt-6"><button onClick={() => setModalState({isOpen: false, user: null, type: ''})} className="px-4 py-2 bg-gray-200 dark:bg-gray-600 rounded-lg">Anuluj</button><button onClick={handleChangePassword} className="px-4 py-2 bg-blue-600 text-white rounded-lg">Zmień hasło</button></div></Modal>
@@ -2172,22 +2434,35 @@ const AdminProductsView = () => {
 
             <h3 className="text-xl font-semibold mb-4">Wszystkie produkty w bazie ({totalProducts})</h3>
             <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Filtruj produkty..." className="w-full max-w-lg p-3 mb-6 bg-white dark:bg-gray-700 border rounded-lg"/>
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-x-auto">
-                <table className="w-full text-left min-w-[800px]">
-                    <thead className="bg-gray-50 dark:bg-gray-700"><tr><th className="p-4">Nazwa</th><th className="p-4">Kod produktu</th><th className="p-4">Kody EAN</th><th className="p-4">Ilość</th><th className="p-4">Cena</th></tr></thead>
-                    <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                        {isLoading ? <tr><td colSpan="5" className="text-center p-8">Ładowanie...</td></tr> :
-                        products.map(p => (
-                            <tr key={p._id} className="border-b dark:border-gray-700">
-                                <td className="p-4">{p.name}</td>
-                                <td className="p-4">{p.product_code}</td>
-                                <td className="p-4 text-sm text-gray-500 max-w-xs truncate">{p.barcodes.join(', ')}</td>
-                                <td className="p-4">{p.quantity}</td>
-                                <td className="p-4">{p.price?.toFixed(2)} PLN</td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
+            <div className="space-y-4 lg:space-y-0 lg:bg-white lg:dark:bg-gray-800 lg:rounded-lg lg:shadow">
+                <div className="hidden lg:grid grid-cols-12 gap-4 font-bold p-3 bg-gray-50 dark:bg-gray-700 rounded-t-lg">
+                    <div className="col-span-4">Nazwa</div>
+                    <div className="col-span-3">Kod produktu</div>
+                    <div className="col-span-3">Kody EAN</div>
+                    <div className="col-span-1 text-center">Ilość</div>
+                    <div className="col-span-1 text-right">Cena</div>
+                </div>
+                <div className="lg:divide-y lg:divide-gray-200 lg:dark:divide-gray-700">
+                    {isLoading ? <div className="text-center p-8">Ładowanie...</div> :
+                    products.map(p => (
+                        <div key={p._id} className="bg-white dark:bg-gray-800 rounded-lg shadow lg:shadow-none lg:grid lg:grid-cols-12 lg:gap-4 lg:items-center p-4 lg:p-3">
+                            <div className="lg:hidden">
+                                <h3 className="font-bold text-lg">{p.name}</h3>
+                                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{p.product_code}</p>
+                                <div className="flex justify-between items-center mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
+                                    <div><span className="font-bold text-lg">{p.price?.toFixed(2)} PLN</span></div>
+                                    <div><span className="text-sm">Ilość: </span><span className="font-bold">{p.quantity}</span></div>
+                                </div>
+                                <p className="text-xs text-gray-500 mt-2 truncate">EAN: {p.barcodes.join(', ')}</p>
+                            </div>
+                            <div className="hidden lg:block col-span-4">{p.name}</div>
+                            <div className="hidden lg:block col-span-3">{p.product_code}</div>
+                            <div className="hidden lg:block col-span-3 text-sm text-gray-500 truncate">{p.barcodes.join(', ')}</div>
+                            <div className="hidden lg:block col-span-1 text-center">{p.quantity}</div>
+                            <div className="hidden lg:block col-span-1 text-right">{p.price?.toFixed(2)} PLN</div>
+                        </div>
+                    ))}
+                </div>
             </div>
             <div className="flex justify-between items-center mt-4">
                 <button onClick={() => setPage(p => p - 1)} disabled={page <= 1} className="px-4 py-2 bg-gray-300 dark:bg-gray-600 rounded-lg disabled:opacity-50">Poprzednia</button>
@@ -4209,14 +4484,15 @@ function App() {
         <>
             <div className="flex h-screen bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-sans">
                 {user && <Sidebar user={user} onLogout={handleLogout} onOpenPasswordModal={() => setIsPasswordModalOpen(true)} onNewOrder={handleNewOrder} isNavOpen={isNavOpen} setIsNavOpen={setIsNavOpen} />}
-                <main className="flex-1 flex flex-col overflow-y-auto">
+                {user && isNavOpen && <div onClick={() => setIsNavOpen(false)} className="lg:hidden fixed inset-0 bg-black bg-opacity-50 z-30"></div>}
+                <main className="flex-1 flex flex-col">
                     {user && (
                         <div className="lg:hidden p-2 bg-white dark:bg-gray-800 border-b dark:border-gray-700 flex justify-between items-center sticky top-0 z-30">
                             <button onClick={() => setIsNavOpen(!isNavOpen)} className="p-2 rounded-md"><Menu className="w-6 h-6" /></button>
                             <span className="font-semibold">{/* Można dodać tytuł widoku */}</span>
                         </div>
                     )}
-                    <div className="flex-1 overflow-y-auto">
+                    <div className={`flex-1 ${isNavOpen ? 'overflow-hidden' : 'overflow-y-auto'}`}>
                         <Routes>
                             {!user ? (
                                 <>
