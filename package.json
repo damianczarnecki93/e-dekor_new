@@ -4,16 +4,17 @@
   "private": true,
   "scripts": {
     "start": "react-scripts start",
-    "build": "react-scripts build",
+    "build": "GENERATE_SOURCEMAP=false react-scripts build",
     "test": "react-scripts test"
   },
+  "proxy": "http://localhost:3001",
   "dependencies": {
     "@react-google-maps/api": "^2.19.3",
     "axios": "^1.7.2",
     "bcryptjs": "^2.4.3",
+    "cookie-parser": "^1.4.6",
     "cors": "^2.8.5",
     "csv-parser": "^3.0.0",
-    "cookie-parser": "^1.4.6",
     "date-fns": "^2.30.0",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",

@@ -21,5 +21,23 @@
   <body>
     <noscript>Musisz włączyć JavaScript, aby uruchomić tę aplikację.</noscript>
     <div id="root"></div>
+    <script>
+      // Agresywny skrypt do wyrejestrowania wszystkich service workerów
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(function(registrations) {
+          if (registrations.length > 0) {
+            console.log('Znaleziono aktywne service workery. Próba wyrejestrowania...');
+            for (let registration of registrations) {
+              registration.unregister();
+              console.log('Service worker wyrejestrowany:', registration);
+            }
+            // Odśwież stronę, aby upewnić się, że zmiany weszły w życie
+            window.location.reload();
+          }
+        }).catch(function(err) {
+          console.error('Błąd podczas wyrejestrowywania service workera:', err);
+        });
+      }
+    </script>
   </body>
 </html>
