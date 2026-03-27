@@ -66,6 +66,7 @@ const Product = mongoose.models.Product || mongoose.model('Product', productSche
 const orderSchema = new mongoose.Schema({
     id: { type: String, required: true, unique: true },
     customerName: String,
+    customerId: { type: mongoose.Schema.Types.ObjectId, ref: 'Contact' },
     author: String,
     items: Array,
     total: Number,
@@ -363,6 +364,27 @@ app.get('/api/crm/contacts', authMiddleware, async (req, res) => {
         res.json(contacts);
     } catch (error) {
         res.status(500).json({ message: 'Błąd podczas pobierania kontaktów.' });
+    }
+});
+
+// Wyszukiwanie kontaktów na potrzeby sugestii
+app.get('/api/crm/search', authMiddleware, async (req, res) => {
+    try {
+        const { term } = req.query;
+        if (!term) {
+            return res.json([]);
+        }
+        const searchRegex = new RegExp(term, 'i');
+        const contacts = await Contact.find({
+            ownerId: req.user.userId,
+            $or: [
+                { name: searchRegex },
+                { company: searchRegex }
+            ]
+        }).limit(10); // Ograniczamy do 10 sugestii
+        res.json(contacts);
+    } catch (error) {
+        res.status(500).json({ message: 'Błąd podczas wyszukiwania kontaktów.' });
     }
 });
 
