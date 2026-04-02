@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { PlusCircle, FileText, FileDown, FileUp, CheckCircle2 } from 'lucide-react';
+import { PlusCircle, FileText, FileDown, FileUp, CheckCircle2, Camera, X } from 'lucide-react';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { api } from '../../api';
@@ -15,6 +15,7 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
     const [order, setOrder] = useState(currentOrder);
     const [noteModal, setNoteModal] = useState({ isOpen: false, itemIndex: null, text: '' });
     const [editModal, setEditModal] = useState({ isOpen: false, itemData: null });
+    const photoInputRef = useRef(null);
     const [isSaving, setIsSaving] = useState(false);
     const listEndRef = useRef(null);
     const printRef = useRef(null);
@@ -63,9 +64,13 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
 
     useEffect(() => {
         setOrder(currentOrder);
-        setDirty(currentOrder.isDirty || false);
         setContactSearchQuery(currentOrder.customerName || '');
-    }, [currentOrder, setDirty]);
+    }, [currentOrder]);
+
+    useEffect(() => {
+        setCurrentOrder(order);
+        setDirty(order.isDirty || false);
+    }, [order, setCurrentOrder, setDirty]);
 
     useEffect(() => {
         if (order.customerId && order.customerName === contactSearchQuery) {
@@ -116,10 +121,7 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
     }, [order, handleAutoSave]);
 
     const updateOrder = (updates, isDirtyFlag = true) => {
-        const newOrder = { ...order, ...updates, isDirty: isDirtyFlag };
-        setOrder(newOrder);
-        setCurrentOrder(newOrder);
-        setDirty(isDirtyFlag);
+        setOrder(prevOrder => ({ ...prevOrder, ...updates, isDirty: isDirtyFlag }));
     };
 
     const handleSelectContact = (contact) => {
@@ -220,6 +222,37 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
             return;
         }
         await handleAutoSave(order);
+    };
+
+    const handlePhotoAdd = (event) => {
+        const files = Array.from(event.target.files);
+        if (!files.length) return;
+
+        files.forEach(file => {
+            if (file.size > 5 * 1024 * 1024) {
+                showNotification(`Plik ${file.name} jest za duży (max 5MB).`, 'error');
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                const base64String = reader.result;
+                setOrder(prevOrder => {
+                    const updatedImages = [...(prevOrder.images || []), base64String];
+                    return { ...prevOrder, images: updatedImages, isDirty: true };
+                });
+            };
+            reader.readAsDataURL(file);
+        });
+        event.target.value = null;
+    };
+
+    const handlePhotoRemove = (index) => {
+        setOrder(prevOrder => {
+            const updatedImages = [...(prevOrder.images || [])];
+            updatedImages.splice(index, 1);
+            return { ...prevOrder, images: updatedImages, isDirty: true };
+        });
     };
 
     const handleFileImport = async (event) => {
@@ -356,6 +389,23 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
                             </ul>
                         )}
                     </div>
+                    <div className="flex items-center gap-2">
+                        <input
+                            type="file"
+                            ref={photoInputRef}
+                            onChange={handlePhotoAdd}
+                            className="hidden"
+                            accept="image/*"
+                            multiple
+                        />
+                        <button
+                            onClick={() => photoInputRef.current.click()}
+                            className="flex items-center gap-2 px-4 py-2.5 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+                        >
+                            <Camera className="w-5 h-5" />
+                            <span className="hidden sm:inline">Dodaj zdjęcie</span>
+                        </button>
+                    </div>
                     {order._id && (
                         <label className="flex items-center gap-2 cursor-pointer p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
                             <input
@@ -372,6 +422,24 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
                     )}
                 </div>
                 <div ref={printRef} className="flex-grow bg-gray-50 dark:bg-gray-900 p-2 sm:p-4 rounded-lg shadow-inner mt-6">
+                    {(order.images && order.images.length > 0) && (
+                        <div className="mb-6 print:hidden">
+                            <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-2">Załączone zdjęcia</h3>
+                            <div className="flex flex-wrap gap-4">
+                                {order.images.map((img, idx) => (
+                                    <div key={idx} className="relative group w-24 h-24 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 shadow-sm">
+                                        <img src={img} alt={`Załącznik ${idx + 1}`} className="w-full h-full object-cover" />
+                                        <button
+                                            onClick={() => handlePhotoRemove(idx)}
+                                            className="absolute top-1 right-1 p-1 bg-red-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                                        >
+                                            <X className="w-3 h-3" />
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
                     <div className="print-header hidden p-4"><h2 className="text-2xl font-bold">Zamówienie dla: {order.customerName}</h2><p>Data: {new Date().toLocaleDateString()}</p></div>
                     <div>
                         <div className="hidden lg:grid lg:grid-cols-12 gap-4 items-center font-bold p-2 border-b border-gray-200 dark:border-gray-700">
