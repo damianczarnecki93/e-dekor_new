@@ -13,8 +13,9 @@ import { ChevronsUpDown, ChevronUp, ChevronDown, Edit, MessageSquare, Trash2 } f
 
 const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }) => {
     const [order, setOrder] = useState(currentOrder);
-    const [noteModal, setNoteModal] = useState({ isOpen: false, itemIndex: null, text: '', isDisplay: false, displayQty: 1 });
+    const [noteModal, setNoteModal] = useState({ isOpen: false, itemIndex: null, text: '', isDisplay: false, displayQty: 1, itemDiscount: 0 });
     const [editModal, setEditModal] = useState({ isOpen: false, itemData: null });
+    const [previewImage, setPreviewImage] = useState(null);
     const photoInputRef = useRef(null);
     const [isSaving, setIsSaving] = useState(false);
     const listEndRef = useRef(null);
@@ -219,9 +220,11 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
         }
 
         newItems[noteModal.itemIndex].note = finalNote;
+        newItems[noteModal.itemIndex].itemDiscount = parseFloat(noteModal.itemDiscount) || 0;
+
         const updatedOrder = { ...order, items: newItems, isDirty: true };
         updateOrder(updatedOrder, true);
-        setNoteModal({ isOpen: false, itemIndex: null, text: '', isDisplay: false, displayQty: 1 });
+        setNoteModal({ isOpen: false, itemIndex: null, text: '', isDisplay: false, displayQty: 1, itemDiscount: 0 });
     };
 
     const handleDiscountChange = (e) => {
@@ -233,9 +236,14 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
     const totalValue = useMemo(() => (order.items || []).reduce((sum, item) => sum + item.price * (item.quantity || 0), 0), [order.items]);
 
     const totalValueWithDiscount = useMemo(() => {
-        const discountValue = parseFloat(order.discount) || 0;
-        return totalValue * (1 - discountValue / 100);
-    }, [totalValue, order.discount]);
+        const orderDiscount = parseFloat(order.discount) || 0;
+        return (order.items || []).reduce((sum, item) => {
+            const itemBaseValue = item.price * (item.quantity || 0);
+            const itemDiscount = parseFloat(item.itemDiscount) || 0;
+            const combinedDiscount = itemDiscount + orderDiscount;
+            return sum + (itemBaseValue * (1 - Math.min(100, combinedDiscount) / 100));
+        }, 0);
+    }, [order.items, order.discount]);
 
     const handleSaveOrder = async () => {
         if (!order.customerName) {
@@ -353,8 +361,8 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
 };
 
     return (
-        <div className="h-full flex flex-col">
-            <div className="flex-grow p-4 md:p-8 pb-32">
+        <div className="h-full flex flex-col relative overflow-hidden">
+            <div className="flex-grow p-4 md:p-8 pb-48 overflow-y-auto">
                 <div className="flex flex-wrap gap-2 justify-between items-center mb-4">
                     <h1 className="text-2xl md:text-3xl font-bold text-gray-800 dark:text-white">{order._id ? `Edycja Zamówienia` : 'Nowe Zamówienie'}</h1>
                     <div className="flex gap-2">
@@ -374,58 +382,60 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
                     </div>
                 </div>
 					<div className="flex flex-wrap items-center gap-4 mb-6">
-                    <div className="relative w-full max-w-lg">
-                        <input
-                            type="text"
-                            value={contactSearchQuery}
-                            onChange={(e) => {
-                                const newName = e.target.value;
-                                setContactSearchQuery(newName);
-                                const updatedOrder = {
-                                    ...order,
-                                    customerName: newName,
-                                    customerId: null,
-                                    items: order.items.map(item => ({...item, isSaved: false}))
-                                };
-                                updateOrder(updatedOrder, true);
-                            }}
-                            placeholder="Wprowadź nazwę klienta"
-                            className="w-full p-3 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                            autoComplete="off"
-                        />
-                        {isContactLoading && <div className="absolute right-3 top-3"><div className="w-5 h-5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div></div>}
-                        {contactSuggestions.length > 0 && (
-                            <ul className="absolute z-20 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-xl max-h-60 overflow-y-auto">
-                                {contactSuggestions.map(contact => (
-                                    <li
-                                        key={contact._id}
-                                        onClick={() => handleSelectContact(contact)}
-                                        className="p-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700"
-                                    >
-                                        <p className="font-semibold">{contact.name}</p>
-                                        {contact.company && <p className="text-sm text-gray-500">{contact.company}</p>}
-                                        {contact.address && <p className="text-xs text-gray-400">{contact.address}</p>}
-                                    </li>
-                                ))}
-                            </ul>
-                        )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <input
-                            type="file"
-                            ref={photoInputRef}
-                            onChange={handlePhotoAdd}
-                            className="hidden"
-                            accept="image/*"
-                            multiple
-                        />
-                        <button
-                            onClick={() => photoInputRef.current.click()}
-                            className="flex items-center gap-2 px-4 py-2.5 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
-                        >
-                            <Camera className="w-5 h-5" />
-                            <span className="hidden sm:inline">Dodaj zdjęcie</span>
-                        </button>
+                    <div className="flex items-center gap-2 w-full max-w-lg">
+                        <div className="relative flex-grow">
+                            <input
+                                type="text"
+                                value={contactSearchQuery}
+                                onChange={(e) => {
+                                    const newName = e.target.value;
+                                    setContactSearchQuery(newName);
+                                    const updatedOrder = {
+                                        ...order,
+                                        customerName: newName,
+                                        customerId: null,
+                                        items: order.items.map(item => ({...item, isSaved: false}))
+                                    };
+                                    updateOrder(updatedOrder, true);
+                                }}
+                                placeholder="Wprowadź nazwę klienta"
+                                className="w-full p-3 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                autoComplete="off"
+                            />
+                            {isContactLoading && <div className="absolute right-3 top-3"><div className="w-5 h-5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div></div>}
+                            {contactSuggestions.length > 0 && (
+                                <ul className="absolute z-20 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-xl max-h-60 overflow-y-auto">
+                                    {contactSuggestions.map(contact => (
+                                        <li
+                                            key={contact._id}
+                                            onClick={() => handleSelectContact(contact)}
+                                            className="p-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700"
+                                        >
+                                            <p className="font-semibold">{contact.name}</p>
+                                            {contact.company && <p className="text-sm text-gray-500">{contact.company}</p>}
+                                            {contact.address && <p className="text-xs text-gray-400">{contact.address}</p>}
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                        </div>
+                        <div className="flex-shrink-0">
+                            <input
+                                type="file"
+                                ref={photoInputRef}
+                                onChange={handlePhotoAdd}
+                                className="hidden"
+                                accept="image/*"
+                                multiple
+                            />
+                            <button
+                                onClick={() => photoInputRef.current.click()}
+                                className="flex items-center justify-center p-3 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors h-[48px] w-[48px] sm:w-auto sm:px-4"
+                            >
+                                <Camera className="w-5 h-5" />
+                                <span className="hidden sm:inline ml-2">Dodaj zdjęcie</span>
+                            </button>
+                        </div>
                     </div>
                     {order._id && (
                         <label className="flex items-center gap-2 cursor-pointer p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
@@ -448,7 +458,7 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
                             <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-2">Załączone zdjęcia</h3>
                             <div className="flex flex-wrap gap-4">
                                 {order.images.map((img, idx) => (
-                                    <div key={idx} className="relative group w-24 h-24 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 shadow-sm">
+                                    <div key={idx} className="relative group w-24 h-24 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 shadow-sm cursor-pointer" onClick={() => setPreviewImage(img)}>
                                         <img src={img} alt={`Załącznik ${idx + 1}`} className="w-full h-full object-cover" />
                                         <button
                                             onClick={() => handlePhotoRemove(idx)}
@@ -507,7 +517,7 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
                                     </div>
                                     <div className="lg:col-span-2 flex justify-end lg:justify-center items-center mt-2 lg:mt-0">
                                         <button onClick={() => setEditModal({ isOpen: true, itemData: { ...item, originalIndex: index } })} className="p-2 text-gray-500 hover:text-yellow-500"><Edit className="w-5 h-5"/></button>
-                                        <button onClick={() => setNoteModal({ isOpen: true, itemIndex: index, text: item.note || '' })} className="p-2 text-gray-500 hover:text-blue-500"><MessageSquare className="w-5 h-5"/></button>
+                                        <button onClick={() => setNoteModal({ isOpen: true, itemIndex: index, text: item.note || '', isDisplay: (item.note || '').includes('[DISPLAY]'), displayQty: item.quantity, itemDiscount: item.itemDiscount || 0 })} className="p-2 text-gray-500 hover:text-blue-500"><MessageSquare className="w-5 h-5"/></button>
                                         <button onClick={() => removeItemFromOrder(index)} className="p-2 text-gray-500 hover:text-red-500"><Trash2 className="w-5 h-5"/></button>
                                     </div>
                                 </div>
@@ -574,7 +584,21 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
                         )}
                     </div>
 
-                    <div className="flex justify-end gap-4">
+                    <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg border border-blue-100 dark:border-blue-800">
+                        <label className="block text-sm font-medium text-blue-800 dark:text-blue-300 mb-2">Dodatkowy rabat na tę pozycję (%)</label>
+                        <div className="flex items-center gap-3">
+                            <input
+                                type="number"
+                                value={noteModal.itemDiscount}
+                                onChange={(e) => setNoteModal({...noteModal, itemDiscount: e.target.value})}
+                                placeholder="0"
+                                className="w-24 p-2 bg-white dark:bg-gray-800 border border-blue-200 dark:border-blue-700 rounded-md focus:ring-2 focus:ring-blue-500 outline-none"
+                            />
+                            <span className="text-blue-600 dark:text-blue-400 font-semibold">%</span>
+                        </div>
+                    </div>
+
+                    <div className="flex justify-end gap-4 pt-2">
                         <button
                             onClick={() => setNoteModal({ isOpen: false, itemIndex: null, text: '', isDisplay: false, displayQty: 1 })}
                             className="px-4 py-2 bg-gray-200 dark:bg-gray-600 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500 transition-colors"
@@ -590,6 +614,20 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
                     </div>
                 </div>
             </Modal>
+
+            {previewImage && (
+                <div className="fixed inset-0 z-[60] bg-black/90 flex items-center justify-center p-4 md:p-8 overflow-auto" onClick={() => setPreviewImage(null)}>
+                    <div className="relative max-w-5xl w-full h-full flex items-center justify-center">
+                        <img src={previewImage} alt="Podgląd" className="max-w-full max-h-full object-contain" />
+                        <button
+                            onClick={() => setPreviewImage(null)}
+                            className="absolute top-0 right-0 m-4 p-2 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors"
+                        >
+                            <X className="w-8 h-8" />
+                        </button>
+                    </div>
+                </div>
+            )}
 
             <EditProductModal
                 isOpen={editModal.isOpen}
