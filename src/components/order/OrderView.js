@@ -368,7 +368,7 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
 };
 
     return (
-        <div className="h-full flex flex-col relative overflow-hidden bg-white dark:bg-gray-800">
+        <div className="h-full flex flex-col overflow-hidden bg-white dark:bg-gray-900">
             <div className="flex-grow p-4 md:p-8 overflow-y-auto">
                 <div className="flex flex-wrap gap-2 justify-between items-center mb-4">
                     <h1 className="text-2xl md:text-3xl font-bold text-gray-800 dark:text-white">{order._id ? `Edycja Zamówienia` : 'Nowe Zamówienie'}</h1>
