@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { PlusCircle, FileText, FileDown, FileUp, CheckCircle2 } from 'lucide-react';
+import { PlusCircle, FileText, FileDown, FileUp, CheckCircle2, Camera, X } from 'lucide-react';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { api } from '../../api';
@@ -13,8 +13,10 @@ import { ChevronsUpDown, ChevronUp, ChevronDown, Edit, MessageSquare, Trash2 } f
 
 const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }) => {
     const [order, setOrder] = useState(currentOrder);
-    const [noteModal, setNoteModal] = useState({ isOpen: false, itemIndex: null, text: '' });
+    const [noteModal, setNoteModal] = useState({ isOpen: false, itemIndex: null, text: '', isDisplay: false, displayQty: 1, itemDiscount: 0 });
     const [editModal, setEditModal] = useState({ isOpen: false, itemData: null });
+    const [previewImage, setPreviewImage] = useState(null);
+    const photoInputRef = useRef(null);
     const [isSaving, setIsSaving] = useState(false);
     const listEndRef = useRef(null);
     const printRef = useRef(null);
@@ -61,11 +63,28 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
         return sortConfig.direction === 'ascending' ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />;
     };
 
+    // Inicjalizacja stanu tylko przy zmianie ID zamówienia (lub przejście na nowe puste)
+    const prevOrderId = useRef(currentOrder._id);
     useEffect(() => {
-        setOrder(currentOrder);
-        setDirty(currentOrder.isDirty || false);
-        setContactSearchQuery(currentOrder.customerName || '');
-    }, [currentOrder, setDirty]);
+        if (currentOrder._id !== prevOrderId.current) {
+            setOrder(currentOrder);
+            setContactSearchQuery(currentOrder.customerName || '');
+            prevOrderId.current = currentOrder._id;
+        } else if (!currentOrder._id && !order.customerName && currentOrder.customerName) {
+            // Obsługa inicjalizacji nazwy klienta dla nowego zamówienia, jeśli przyszło z zewnątrz
+            setOrder(currentOrder);
+            setContactSearchQuery(currentOrder.customerName || '');
+        }
+    }, [currentOrder._id]); // Reagujemy tylko na zmianę ID
+
+    // Synchronizuj do rodzica tylko gdy order faktycznie się zmienił lokalnie
+    useEffect(() => {
+        const handler = setTimeout(() => {
+             setCurrentOrder(order);
+             setDirty(order.isDirty || false);
+        }, 100);
+        return () => clearTimeout(handler);
+    }, [order, setCurrentOrder, setDirty]);
 
     useEffect(() => {
         if (order.customerId && order.customerName === contactSearchQuery) {
@@ -86,7 +105,7 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
             } finally {
                 setIsContactLoading(false);
             }
-        }, 3000);
+        }, 300);
         return () => clearTimeout(handler);
     }, [contactSearchQuery, order.customerId, order.customerName, showNotification]);
 
@@ -116,10 +135,7 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
     }, [order, handleAutoSave]);
 
     const updateOrder = (updates, isDirtyFlag = true) => {
-        const newOrder = { ...order, ...updates, isDirty: isDirtyFlag };
-        setOrder(newOrder);
-        setCurrentOrder(newOrder);
-        setDirty(isDirtyFlag);
+        setOrder(prevOrder => ({ ...prevOrder, ...updates, isDirty: isDirtyFlag }));
     };
 
     const handleSelectContact = (contact) => {
@@ -195,10 +211,27 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
 
     const handleNoteSave = () => {
         const newItems = [...order.items].map(item => ({...item, isSaved: false}));
-        newItems[noteModal.itemIndex].note = noteModal.text;
+        let finalNote = noteModal.text;
+
+        // Usuwamy stare tagi przed dodaniem nowych, aby uniknąć duplikatów
+        finalNote = finalNote.replace(/ ?\[DISPLAY\]/g, '').replace(/ ?\[RABAT \d+(\.\d+)?%\]/g, '');
+
+        if (noteModal.isDisplay) {
+             finalNote = finalNote ? `${finalNote} [DISPLAY]` : '[DISPLAY]';
+             newItems[noteModal.itemIndex].quantity = parseInt(noteModal.displayQty, 10) || newItems[noteModal.itemIndex].quantity;
+        }
+
+        const discountValue = parseFloat(noteModal.itemDiscount) || 0;
+        if (discountValue > 0) {
+            finalNote = finalNote ? `${finalNote} [RABAT ${discountValue}%]` : `[RABAT ${discountValue}%]`;
+        }
+
+        newItems[noteModal.itemIndex].note = finalNote;
+        newItems[noteModal.itemIndex].itemDiscount = discountValue;
+
         const updatedOrder = { ...order, items: newItems, isDirty: true };
         updateOrder(updatedOrder, true);
-        setNoteModal({ isOpen: false, itemIndex: null, text: '' });
+        setNoteModal({ isOpen: false, itemIndex: null, text: '', isDisplay: false, displayQty: 1, itemDiscount: 0 });
     };
 
     const handleDiscountChange = (e) => {
@@ -210,9 +243,14 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
     const totalValue = useMemo(() => (order.items || []).reduce((sum, item) => sum + item.price * (item.quantity || 0), 0), [order.items]);
 
     const totalValueWithDiscount = useMemo(() => {
-        const discountValue = parseFloat(order.discount) || 0;
-        return totalValue * (1 - discountValue / 100);
-    }, [totalValue, order.discount]);
+        const orderDiscount = parseFloat(order.discount) || 0;
+        return (order.items || []).reduce((sum, item) => {
+            const itemBaseValue = item.price * (item.quantity || 0);
+            const itemDiscount = parseFloat(item.itemDiscount) || 0;
+            const combinedDiscount = itemDiscount + orderDiscount;
+            return sum + (itemBaseValue * (1 - Math.min(100, combinedDiscount) / 100));
+        }, 0);
+    }, [order.items, order.discount]);
 
     const handleSaveOrder = async () => {
         if (!order.customerName) {
@@ -220,6 +258,37 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
             return;
         }
         await handleAutoSave(order);
+    };
+
+    const handlePhotoAdd = (event) => {
+        const files = Array.from(event.target.files);
+        if (!files.length) return;
+
+        files.forEach(file => {
+            if (file.size > 5 * 1024 * 1024) {
+                showNotification(`Plik ${file.name} jest za duży (max 5MB).`, 'error');
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                const base64String = reader.result;
+                setOrder(prevOrder => {
+                    const updatedImages = [...(prevOrder.images || []), base64String];
+                    return { ...prevOrder, images: updatedImages, isDirty: true };
+                });
+            };
+            reader.readAsDataURL(file);
+        });
+        event.target.value = null;
+    };
+
+    const handlePhotoRemove = (index) => {
+        setOrder(prevOrder => {
+            const updatedImages = [...(prevOrder.images || [])];
+            updatedImages.splice(index, 1);
+            return { ...prevOrder, images: updatedImages, isDirty: true };
+        });
     };
 
     const handleFileImport = async (event) => {
@@ -299,8 +368,8 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
 };
 
     return (
-        <div className="h-full flex flex-col">
-            <div className="flex-grow p-4 md:p-8 pb-32">
+        <div className="h-full flex flex-col overflow-hidden bg-white dark:bg-gray-900">
+            <div className="flex-grow p-4 md:p-8 overflow-y-auto">
                 <div className="flex flex-wrap gap-2 justify-between items-center mb-4">
                     <h1 className="text-2xl md:text-3xl font-bold text-gray-800 dark:text-white">{order._id ? `Edycja Zamówienia` : 'Nowe Zamówienie'}</h1>
                     <div className="flex gap-2">
@@ -320,41 +389,60 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
                     </div>
                 </div>
 					<div className="flex flex-wrap items-center gap-4 mb-6">
-                    <div className="relative w-full max-w-lg">
-                        <input
-                            type="text"
-                            value={contactSearchQuery}
-                            onChange={(e) => {
-                                const newName = e.target.value;
-                                setContactSearchQuery(newName);
-                                const updatedOrder = {
-                                    ...order,
-                                    customerName: newName,
-                                    customerId: null,
-                                    items: order.items.map(item => ({...item, isSaved: false}))
-                                };
-                                updateOrder(updatedOrder, true);
-                            }}
-                            placeholder="Wprowadź nazwę klienta"
-                            className="w-full p-3 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                            autoComplete="off"
-                        />
-                        {isContactLoading && <div className="absolute right-3 top-3"><div className="w-5 h-5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div></div>}
-                        {contactSuggestions.length > 0 && (
-                            <ul className="absolute z-20 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-xl max-h-60 overflow-y-auto">
-                                {contactSuggestions.map(contact => (
-                                    <li
-                                        key={contact._id}
-                                        onClick={() => handleSelectContact(contact)}
-                                        className="p-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700"
-                                    >
-                                        <p className="font-semibold">{contact.name}</p>
-                                        {contact.company && <p className="text-sm text-gray-500">{contact.company}</p>}
-                                        {contact.address && <p className="text-xs text-gray-400">{contact.address}</p>}
-                                    </li>
-                                ))}
-                            </ul>
-                        )}
+                    <div className="flex items-center gap-2 w-full max-w-lg">
+                        <div className="relative flex-grow">
+                            <input
+                                type="text"
+                                value={contactSearchQuery}
+                                onChange={(e) => {
+                                    const newName = e.target.value;
+                                    setContactSearchQuery(newName);
+                                    const updatedOrder = {
+                                        ...order,
+                                        customerName: newName,
+                                        customerId: null,
+                                        items: order.items.map(item => ({...item, isSaved: false}))
+                                    };
+                                    updateOrder(updatedOrder, true);
+                                }}
+                                placeholder="Wprowadź nazwę klienta"
+                                className="w-full p-3 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                autoComplete="off"
+                            />
+                            {isContactLoading && <div className="absolute right-3 top-3"><div className="w-5 h-5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div></div>}
+                            {contactSuggestions.length > 0 && (
+                                <ul className="absolute z-20 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-xl max-h-60 overflow-y-auto">
+                                    {contactSuggestions.map(contact => (
+                                        <li
+                                            key={contact._id}
+                                            onClick={() => handleSelectContact(contact)}
+                                            className="p-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700"
+                                        >
+                                            <p className="font-semibold">{contact.name}</p>
+                                            {contact.company && <p className="text-sm text-gray-500">{contact.company}</p>}
+                                            {contact.address && <p className="text-xs text-gray-400">{contact.address}</p>}
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                        </div>
+                        <div className="flex-shrink-0">
+                            <input
+                                type="file"
+                                ref={photoInputRef}
+                                onChange={handlePhotoAdd}
+                                className="hidden"
+                                accept="image/*"
+                                multiple
+                            />
+                            <button
+                                onClick={() => photoInputRef.current.click()}
+                                className="flex items-center justify-center p-3 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors h-[48px] w-[48px] sm:w-auto sm:px-4"
+                            >
+                                <Camera className="w-5 h-5" />
+                                <span className="hidden sm:inline ml-2">Dodaj zdjęcie</span>
+                            </button>
+                        </div>
                     </div>
                     {order._id && (
                         <label className="flex items-center gap-2 cursor-pointer p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
@@ -372,6 +460,24 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
                     )}
                 </div>
                 <div ref={printRef} className="flex-grow bg-gray-50 dark:bg-gray-900 p-2 sm:p-4 rounded-lg shadow-inner mt-6">
+                    {(order.images && order.images.length > 0) && (
+                        <div className="mb-6 print:hidden">
+                            <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-2">Załączone zdjęcia</h3>
+                            <div className="flex flex-wrap gap-4">
+                                {order.images.map((img, idx) => (
+                                    <div key={idx} className="relative group w-24 h-24 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 shadow-sm cursor-pointer" onClick={() => setPreviewImage(img)}>
+                                        <img src={img} alt={`Załącznik ${idx + 1}`} className="w-full h-full object-cover" />
+                                        <button
+                                            onClick={() => handlePhotoRemove(idx)}
+                                            className="absolute top-1 right-1 p-1 bg-red-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                                        >
+                                            <X className="w-3 h-3" />
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
                     <div className="print-header hidden p-4"><h2 className="text-2xl font-bold">Zamówienie dla: {order.customerName}</h2><p>Data: {new Date().toLocaleDateString()}</p></div>
                     <div>
                         <div className="hidden lg:grid lg:grid-cols-12 gap-4 items-center font-bold p-2 border-b border-gray-200 dark:border-gray-700">
@@ -418,7 +524,7 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
                                     </div>
                                     <div className="lg:col-span-2 flex justify-end lg:justify-center items-center mt-2 lg:mt-0">
                                         <button onClick={() => setEditModal({ isOpen: true, itemData: { ...item, originalIndex: index } })} className="p-2 text-gray-500 hover:text-yellow-500"><Edit className="w-5 h-5"/></button>
-                                        <button onClick={() => setNoteModal({ isOpen: true, itemIndex: index, text: item.note || '' })} className="p-2 text-gray-500 hover:text-blue-500"><MessageSquare className="w-5 h-5"/></button>
+                                        <button onClick={() => setNoteModal({ isOpen: true, itemIndex: index, text: item.note || '', isDisplay: (item.note || '').includes('[DISPLAY]'), displayQty: item.quantity, itemDiscount: item.itemDiscount || 0 })} className="p-2 text-gray-500 hover:text-blue-500"><MessageSquare className="w-5 h-5"/></button>
                                         <button onClick={() => removeItemFromOrder(index)} className="p-2 text-gray-500 hover:text-red-500"><Trash2 className="w-5 h-5"/></button>
                                     </div>
                                 </div>
@@ -428,7 +534,7 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
                     {(!order.items || order.items.length === 0) && <p className="text-center text-gray-500 py-8">Brak pozycji na zamówieniu.</p>}
                     <div ref={listEndRef} />
                 </div>
-                <div className="flex flex-wrap justify-end items-center gap-4 mt-4">
+                <div className="flex flex-wrap justify-end items-center gap-4 mt-4 mb-4">
                     <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-right">
                         <span className="text-md font-medium text-gray-600 dark:text-gray-400">Kwota bez rabatu:</span>
                         <span className="text-md font-semibold text-gray-800 dark:text-gray-200">{totalValue.toFixed(2)} PLN</span>
@@ -452,10 +558,83 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
 
             <PinnedInputBar onProductAdd={addProductToOrder} onSave={handleSaveOrder} isDirty={order.isDirty} currentItems={order.items || []} />
 
-            <Modal isOpen={noteModal.isOpen} onClose={() => setNoteModal({ isOpen: false, itemIndex: null, text: '' })} title="Dodaj notatkę do pozycji">
-                <textarea value={noteModal.text} onChange={(e) => setNoteModal({...noteModal, text: e.target.value})} className="w-full p-2 border rounded-md min-h-[100px] bg-white dark:bg-gray-700"></textarea>
-                <div className="flex justify-end gap-4 mt-4"><button onClick={() => setNoteModal({ isOpen: false, itemIndex: null, text: '' })} className="px-4 py-2 bg-gray-200 dark:bg-gray-600 rounded-lg">Anuluj</button><button onClick={handleNoteSave} className="px-4 py-2 bg-blue-600 text-white rounded-lg">Zapisz notatkę</button></div>
+            <Modal isOpen={noteModal.isOpen} onClose={() => setNoteModal({ isOpen: false, itemIndex: null, text: '', isDisplay: false, displayQty: 1 })} title="Dodaj notatkę do pozycji">
+                <div className="space-y-4">
+                    <textarea
+                        value={noteModal.text}
+                        onChange={(e) => setNoteModal({...noteModal, text: e.target.value})}
+                        placeholder="Wpisz treść notatki..."
+                        className="w-full p-2 border rounded-md min-h-[100px] bg-white dark:bg-gray-700 focus:ring-2 focus:ring-indigo-500 outline-none"
+                    ></textarea>
+
+                    <div className="bg-gray-50 dark:bg-gray-900/50 p-3 rounded-lg border dark:border-gray-700">
+                        <label className="flex items-center gap-3 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                checked={noteModal.isDisplay}
+                                onChange={(e) => setNoteModal({...noteModal, isDisplay: e.target.checked})}
+                                className="h-5 w-5 rounded text-indigo-600 focus:ring-indigo-500"
+                            />
+                            <span className="font-medium">To jest DISPLAY</span>
+                        </label>
+
+                        {noteModal.isDisplay && (
+                            <div className="mt-3 flex items-center gap-3 animate-in fade-in slide-in-from-top-2">
+                                <span className="text-sm text-gray-500">Ile sztuk w tym displayu?</span>
+                                <input
+                                    type="number"
+                                    value={noteModal.displayQty}
+                                    onChange={(e) => setNoteModal({...noteModal, displayQty: e.target.value})}
+                                    className="w-20 p-2 bg-white dark:bg-gray-800 border rounded-md focus:ring-2 focus:ring-indigo-500 outline-none"
+                                />
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg border border-blue-100 dark:border-blue-800">
+                        <label className="block text-sm font-medium text-blue-800 dark:text-blue-300 mb-2">Dodatkowy rabat na tę pozycję (%)</label>
+                        <div className="flex items-center gap-3">
+                            <input
+                                type="number"
+                                value={noteModal.itemDiscount}
+                                onChange={(e) => setNoteModal({...noteModal, itemDiscount: e.target.value})}
+                                placeholder="0"
+                                className="w-24 p-2 bg-white dark:bg-gray-800 border border-blue-200 dark:border-blue-700 rounded-md focus:ring-2 focus:ring-blue-500 outline-none"
+                            />
+                            <span className="text-blue-600 dark:text-blue-400 font-semibold">%</span>
+                        </div>
+                    </div>
+
+                    <div className="flex justify-end gap-4 pt-2">
+                        <button
+                            onClick={() => setNoteModal({ isOpen: false, itemIndex: null, text: '', isDisplay: false, displayQty: 1 })}
+                            className="px-4 py-2 bg-gray-200 dark:bg-gray-600 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500 transition-colors"
+                        >
+                            Anuluj
+                        </button>
+                        <button
+                            onClick={handleNoteSave}
+                            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
+                        >
+                            Zapisz notatkę
+                        </button>
+                    </div>
+                </div>
             </Modal>
+
+            {previewImage && (
+                <div className="fixed inset-0 z-[60] bg-black/90 flex items-center justify-center p-4 md:p-8 overflow-auto" onClick={() => setPreviewImage(null)}>
+                    <div className="relative max-w-5xl w-full h-full flex items-center justify-center">
+                        <img src={previewImage} alt="Podgląd" className="max-w-full max-h-full object-contain" />
+                        <button
+                            onClick={() => setPreviewImage(null)}
+                            className="absolute top-0 right-0 m-4 p-2 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors"
+                        >
+                            <X className="w-8 h-8" />
+                        </button>
+                    </div>
+                </div>
+            )}
 
             <EditProductModal
                 isOpen={editModal.isOpen}
