@@ -13,7 +13,7 @@ import { ChevronsUpDown, ChevronUp, ChevronDown, Edit, MessageSquare, Trash2 } f
 
 const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }) => {
     const [order, setOrder] = useState(currentOrder);
-    const [noteModal, setNoteModal] = useState({ isOpen: false, itemIndex: null, text: '' });
+    const [noteModal, setNoteModal] = useState({ isOpen: false, itemIndex: null, text: '', isDisplay: false, displayQty: 1 });
     const [editModal, setEditModal] = useState({ isOpen: false, itemData: null });
     const photoInputRef = useRef(null);
     const [isSaving, setIsSaving] = useState(false);
@@ -62,14 +62,27 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
         return sortConfig.direction === 'ascending' ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />;
     };
 
+    // Inicjalizacja stanu tylko przy zmianie ID zamówienia (lub przejście na nowe puste)
+    const prevOrderId = useRef(currentOrder._id);
     useEffect(() => {
-        setOrder(currentOrder);
-        setContactSearchQuery(currentOrder.customerName || '');
-    }, [currentOrder]);
+        if (currentOrder._id !== prevOrderId.current) {
+            setOrder(currentOrder);
+            setContactSearchQuery(currentOrder.customerName || '');
+            prevOrderId.current = currentOrder._id;
+        } else if (!currentOrder._id && !order.customerName && currentOrder.customerName) {
+            // Obsługa inicjalizacji nazwy klienta dla nowego zamówienia, jeśli przyszło z zewnątrz
+            setOrder(currentOrder);
+            setContactSearchQuery(currentOrder.customerName || '');
+        }
+    }, [currentOrder._id]); // Reagujemy tylko na zmianę ID
 
+    // Synchronizuj do rodzica tylko gdy order faktycznie się zmienił lokalnie
     useEffect(() => {
-        setCurrentOrder(order);
-        setDirty(order.isDirty || false);
+        const handler = setTimeout(() => {
+             setCurrentOrder(order);
+             setDirty(order.isDirty || false);
+        }, 100);
+        return () => clearTimeout(handler);
     }, [order, setCurrentOrder, setDirty]);
 
     useEffect(() => {
@@ -91,7 +104,7 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
             } finally {
                 setIsContactLoading(false);
             }
-        }, 3000);
+        }, 300);
         return () => clearTimeout(handler);
     }, [contactSearchQuery, order.customerId, order.customerName, showNotification]);
 
@@ -197,10 +210,18 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
 
     const handleNoteSave = () => {
         const newItems = [...order.items].map(item => ({...item, isSaved: false}));
-        newItems[noteModal.itemIndex].note = noteModal.text;
+        let finalNote = noteModal.text;
+        if (noteModal.isDisplay) {
+             if (!finalNote.includes('[DISPLAY]')) {
+                 finalNote = finalNote ? `${finalNote} [DISPLAY]` : '[DISPLAY]';
+             }
+             newItems[noteModal.itemIndex].quantity = parseInt(noteModal.displayQty, 10) || newItems[noteModal.itemIndex].quantity;
+        }
+
+        newItems[noteModal.itemIndex].note = finalNote;
         const updatedOrder = { ...order, items: newItems, isDirty: true };
         updateOrder(updatedOrder, true);
-        setNoteModal({ isOpen: false, itemIndex: null, text: '' });
+        setNoteModal({ isOpen: false, itemIndex: null, text: '', isDisplay: false, displayQty: 1 });
     };
 
     const handleDiscountChange = (e) => {
@@ -520,9 +541,54 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
 
             <PinnedInputBar onProductAdd={addProductToOrder} onSave={handleSaveOrder} isDirty={order.isDirty} currentItems={order.items || []} />
 
-            <Modal isOpen={noteModal.isOpen} onClose={() => setNoteModal({ isOpen: false, itemIndex: null, text: '' })} title="Dodaj notatkę do pozycji">
-                <textarea value={noteModal.text} onChange={(e) => setNoteModal({...noteModal, text: e.target.value})} className="w-full p-2 border rounded-md min-h-[100px] bg-white dark:bg-gray-700"></textarea>
-                <div className="flex justify-end gap-4 mt-4"><button onClick={() => setNoteModal({ isOpen: false, itemIndex: null, text: '' })} className="px-4 py-2 bg-gray-200 dark:bg-gray-600 rounded-lg">Anuluj</button><button onClick={handleNoteSave} className="px-4 py-2 bg-blue-600 text-white rounded-lg">Zapisz notatkę</button></div>
+            <Modal isOpen={noteModal.isOpen} onClose={() => setNoteModal({ isOpen: false, itemIndex: null, text: '', isDisplay: false, displayQty: 1 })} title="Dodaj notatkę do pozycji">
+                <div className="space-y-4">
+                    <textarea
+                        value={noteModal.text}
+                        onChange={(e) => setNoteModal({...noteModal, text: e.target.value})}
+                        placeholder="Wpisz treść notatki..."
+                        className="w-full p-2 border rounded-md min-h-[100px] bg-white dark:bg-gray-700 focus:ring-2 focus:ring-indigo-500 outline-none"
+                    ></textarea>
+
+                    <div className="bg-gray-50 dark:bg-gray-900/50 p-3 rounded-lg border dark:border-gray-700">
+                        <label className="flex items-center gap-3 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                checked={noteModal.isDisplay}
+                                onChange={(e) => setNoteModal({...noteModal, isDisplay: e.target.checked})}
+                                className="h-5 w-5 rounded text-indigo-600 focus:ring-indigo-500"
+                            />
+                            <span className="font-medium">To jest DISPLAY</span>
+                        </label>
+
+                        {noteModal.isDisplay && (
+                            <div className="mt-3 flex items-center gap-3 animate-in fade-in slide-in-from-top-2">
+                                <span className="text-sm text-gray-500">Ile sztuk w tym displayu?</span>
+                                <input
+                                    type="number"
+                                    value={noteModal.displayQty}
+                                    onChange={(e) => setNoteModal({...noteModal, displayQty: e.target.value})}
+                                    className="w-20 p-2 bg-white dark:bg-gray-800 border rounded-md focus:ring-2 focus:ring-indigo-500 outline-none"
+                                />
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="flex justify-end gap-4">
+                        <button
+                            onClick={() => setNoteModal({ isOpen: false, itemIndex: null, text: '', isDisplay: false, displayQty: 1 })}
+                            className="px-4 py-2 bg-gray-200 dark:bg-gray-600 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500 transition-colors"
+                        >
+                            Anuluj
+                        </button>
+                        <button
+                            onClick={handleNoteSave}
+                            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
+                        >
+                            Zapisz notatkę
+                        </button>
+                    </div>
+                </div>
             </Modal>
 
             <EditProductModal
