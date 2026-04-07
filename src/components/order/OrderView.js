@@ -368,8 +368,8 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
 };
 
     return (
-        <div className="h-full flex flex-col relative overflow-hidden">
-            <div className="flex-grow p-4 md:p-8 pb-72 overflow-y-auto">
+        <div className="h-full flex flex-col relative overflow-hidden bg-white dark:bg-gray-800">
+            <div className="flex-grow p-4 md:p-8 overflow-y-auto">
                 <div className="flex flex-wrap gap-2 justify-between items-center mb-4">
                     <h1 className="text-2xl md:text-3xl font-bold text-gray-800 dark:text-white">{order._id ? `Edycja Zamówienia` : 'Nowe Zamówienie'}</h1>
                     <div className="flex gap-2">
@@ -534,7 +534,7 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
                     {(!order.items || order.items.length === 0) && <p className="text-center text-gray-500 py-8">Brak pozycji na zamówieniu.</p>}
                     <div ref={listEndRef} />
                 </div>
-                <div className="flex flex-wrap justify-end items-center gap-4 mt-4 mb-8">
+                <div className="flex flex-wrap justify-end items-center gap-4 mt-4 mb-4">
                     <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-right">
                         <span className="text-md font-medium text-gray-600 dark:text-gray-400">Kwota bez rabatu:</span>
                         <span className="text-md font-semibold text-gray-800 dark:text-gray-200">{totalValue.toFixed(2)} PLN</span>
