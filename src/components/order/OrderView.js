@@ -212,15 +212,22 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
     const handleNoteSave = () => {
         const newItems = [...order.items].map(item => ({...item, isSaved: false}));
         let finalNote = noteModal.text;
+
+        // Usuwamy stare tagi przed dodaniem nowych, aby uniknąć duplikatów
+        finalNote = finalNote.replace(/ ?\[DISPLAY\]/g, '').replace(/ ?\[RABAT \d+(\.\d+)?%\]/g, '');
+
         if (noteModal.isDisplay) {
-             if (!finalNote.includes('[DISPLAY]')) {
-                 finalNote = finalNote ? `${finalNote} [DISPLAY]` : '[DISPLAY]';
-             }
+             finalNote = finalNote ? `${finalNote} [DISPLAY]` : '[DISPLAY]';
              newItems[noteModal.itemIndex].quantity = parseInt(noteModal.displayQty, 10) || newItems[noteModal.itemIndex].quantity;
         }
 
+        const discountValue = parseFloat(noteModal.itemDiscount) || 0;
+        if (discountValue > 0) {
+            finalNote = finalNote ? `${finalNote} [RABAT ${discountValue}%]` : `[RABAT ${discountValue}%]`;
+        }
+
         newItems[noteModal.itemIndex].note = finalNote;
-        newItems[noteModal.itemIndex].itemDiscount = parseFloat(noteModal.itemDiscount) || 0;
+        newItems[noteModal.itemIndex].itemDiscount = discountValue;
 
         const updatedOrder = { ...order, items: newItems, isDirty: true };
         updateOrder(updatedOrder, true);
@@ -362,7 +369,7 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
 
     return (
         <div className="h-full flex flex-col relative overflow-hidden">
-            <div className="flex-grow p-4 md:p-8 pb-48 overflow-y-auto">
+            <div className="flex-grow p-4 md:p-8 pb-72 overflow-y-auto">
                 <div className="flex flex-wrap gap-2 justify-between items-center mb-4">
                     <h1 className="text-2xl md:text-3xl font-bold text-gray-800 dark:text-white">{order._id ? `Edycja Zamówienia` : 'Nowe Zamówienie'}</h1>
                     <div className="flex gap-2">
@@ -527,7 +534,7 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
                     {(!order.items || order.items.length === 0) && <p className="text-center text-gray-500 py-8">Brak pozycji na zamówieniu.</p>}
                     <div ref={listEndRef} />
                 </div>
-                <div className="flex flex-wrap justify-end items-center gap-4 mt-4">
+                <div className="flex flex-wrap justify-end items-center gap-4 mt-4 mb-8">
                     <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-right">
                         <span className="text-md font-medium text-gray-600 dark:text-gray-400">Kwota bez rabatu:</span>
                         <span className="text-md font-semibold text-gray-800 dark:text-gray-200">{totalValue.toFixed(2)} PLN</span>
