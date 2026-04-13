@@ -170,11 +170,16 @@ function App() {
     
     useEffect(() => {
         const checkLocalData = async () => {
-            const productsCount = await db.products.count();
-            const contactsCount = await db.contacts.count();
-            if (productsCount === 0 || contactsCount === 0) {
-                console.log("Brak danych lokalnych, uruchamiam synchronizację...");
-                triggerSync();
+            try {
+                const productsCount = await db.products.count();
+                const contactsCount = await db.contacts.count();
+                if (productsCount === 0 || contactsCount === 0) {
+                    console.log("Brak danych lokalnych, uruchamiam synchronizację...");
+                    triggerSync();
+                }
+            } catch (error) {
+                console.error("Błąd sprawdzania lub migracji bazy danych IndexedDB:", error);
+                showNotification("Wykryto problem z lokalną bazą danych. Spróbuj odświeżyć stronę lub wyczyścić dane przeglądarki.", "error");
             }
         };
 

@@ -71,17 +71,21 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
     };
 
     useEffect(() => {
-        // Inicjalizuj stan zamówienia tylko jeśli currentOrder się zmienił (np. załadowano inne zamówienie)
-        // Unikaj resetowania lokalnego stanu 'order' przy każdym renderze, jeśli currentOrder jest aktualizowany przez handleAutoSave
+        // Inicjalizuj stan zamówienia tylko jeśli currentOrder faktycznie się zmienił
+        // Sprawdzamy ID lub _id, aby uniknąć resetowania lokalnego stanu przy drobnych aktualizacjach
+        const orderId = currentOrder._id || currentOrder.id;
+
         setOrder(prev => {
-            if (prev.id !== currentOrder.id && (!prev._id || prev._id !== currentOrder._id)) {
+            const prevId = prev._id || prev.id;
+            if (prevId !== orderId) {
+                console.log("Ładowanie nowego zamówienia do widoku:", orderId);
                 setContactSearchQuery(currentOrder.customerName || '');
                 return currentOrder;
             }
             return prev;
         });
         setDirty(currentOrder.isDirty || false);
-    }, [currentOrder, setDirty]);
+    }, [currentOrder._id, currentOrder.id, currentOrder.customerName, currentOrder.isDirty, setDirty]);
 
     useEffect(() => {
         if (order.customerId && order.customerName === contactSearchQuery) {
@@ -134,9 +138,14 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
     const updateOrder = useCallback((updates, isDirtyFlag = true) => {
         setOrder(prev => {
             const newOrder = { ...prev, ...updates, isDirty: isDirtyFlag };
-            // Synchronizacja z nadrzędnym stanem i localStorage powinna być efektem bocznym lub kontrolowana
-            setCurrentOrder(newOrder);
-            localStorage.setItem('draftOrder', JSON.stringify(newOrder));
+
+            // Synchronizacja z nadrzędnym stanem i localStorage (efekt uboczny)
+            // Używamy setTimeout, aby uniknąć błędów Reacta o aktualizacji stanu podczas renderu
+            setTimeout(() => {
+                setCurrentOrder(newOrder);
+                localStorage.setItem('draftOrder', JSON.stringify(newOrder));
+            }, 0);
+
             return newOrder;
         });
         setDirty(isDirtyFlag);
