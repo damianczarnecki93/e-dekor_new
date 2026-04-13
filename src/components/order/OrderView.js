@@ -34,9 +34,18 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
 
             const finalOrder = {
                 ...savedOrder,
-                items: savedOrder.items.map(item => ({ ...item, isSaved: true })),
+                items: (savedOrder.items || []).map(item => ({ ...item, isSaved: true })),
                 isDirty: savedOrder.statusSync === 'pending_sync'
             };
+
+            // Aktualizuj lokalny stan TYLKO jeśli _id lub id się zgadza,
+            // aby uniknąć nadpisania nowszych zmian, które mogły zajść w międzyczasie
+            setOrder(prev => {
+                if (prev.id === finalOrder.id || (prev._id && prev._id === finalOrder._id)) {
+                    return { ...prev, ...finalOrder, isDirty: finalOrder.isDirty };
+                }
+                return prev;
+            });
 
             setCurrentOrder(finalOrder);
             localStorage.setItem('draftOrder', JSON.stringify(finalOrder));
@@ -62,9 +71,16 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
     };
 
     useEffect(() => {
-        setOrder(currentOrder);
+        // Inicjalizuj stan zamówienia tylko jeśli currentOrder się zmienił (np. załadowano inne zamówienie)
+        // Unikaj resetowania lokalnego stanu 'order' przy każdym renderze, jeśli currentOrder jest aktualizowany przez handleAutoSave
+        setOrder(prev => {
+            if (prev.id !== currentOrder.id && (!prev._id || prev._id !== currentOrder._id)) {
+                setContactSearchQuery(currentOrder.customerName || '');
+                return currentOrder;
+            }
+            return prev;
+        });
         setDirty(currentOrder.isDirty || false);
-        setContactSearchQuery(currentOrder.customerName || '');
     }, [currentOrder, setDirty]);
 
     useEffect(() => {
@@ -115,21 +131,24 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
         };
     }, [order, handleAutoSave]);
 
-    const updateOrder = (updates, isDirtyFlag = true) => {
-        const newOrder = { ...order, ...updates, isDirty: isDirtyFlag };
-        setOrder(newOrder);
-        setCurrentOrder(newOrder);
+    const updateOrder = useCallback((updates, isDirtyFlag = true) => {
+        setOrder(prev => {
+            const newOrder = { ...prev, ...updates, isDirty: isDirtyFlag };
+            // Synchronizacja z nadrzędnym stanem i localStorage powinna być efektem bocznym lub kontrolowana
+            setCurrentOrder(newOrder);
+            localStorage.setItem('draftOrder', JSON.stringify(newOrder));
+            return newOrder;
+        });
         setDirty(isDirtyFlag);
-    };
+    }, [setCurrentOrder, setDirty]);
 
     const handleSelectContact = (contact) => {
-        const updatedOrder = {
-            ...order,
+        const updates = {
             customerName: contact.name,
             customerId: contact._id,
-            items: order.items.map(item => ({...item, isSaved: false}))
+            items: (order.items || []).map(item => ({...item, isSaved: false}))
         };
-        updateOrder(updatedOrder, true);
+        updateOrder(updates, true);
         setContactSearchQuery(contact.name);
         setContactSuggestions([]);
     };

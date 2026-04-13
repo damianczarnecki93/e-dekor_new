@@ -43,7 +43,12 @@ const getInitialOrder = () => {
         console.error("Błąd odczytu roboczego zamówienia z localStorage:", error);
         localStorage.removeItem('draftOrder');
     }
-    return { customerName: '', items: [], isDirty: false };
+    return {
+        id: `ZAM-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        customerName: '',
+        items: [],
+        isDirty: false
+    };
 };
 
 function App() {
@@ -128,7 +133,12 @@ function App() {
                 return;
             }
         }
-        const newBlankOrder = { customerName: '', items: [], isDirty: false };
+        const newBlankOrder = {
+            id: `ZAM-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            customerName: '',
+            items: [],
+            isDirty: false
+        };
         localStorage.setItem('draftOrder', JSON.stringify(newBlankOrder));
         setCurrentOrder(newBlankOrder);
         setIsDirty(false);

@@ -1332,8 +1332,30 @@ app.post('/api/orders', authMiddleware, async (req, res) => {
     const subtotal = (orderData.items || []).reduce((sum, item) => sum + (item.price * item.quantity), 0);
     const discount = orderData.discount || 0;
     const total = subtotal * (1 - discount / 100);
-    const newOrder = new Order({ id: `ZAM-${Date.now()}`, ...orderData, total: total, author: req.user.username, status: 'Zapisane', isDirty: false });
+
     try {
+        // Sprawdź, czy zamówienie o takim ID już istnieje (zapobieganie duplikatom)
+        if (orderData.id) {
+            const existingOrder = await Order.findOne({ id: orderData.id });
+            if (existingOrder) {
+                // Jeśli istnieje, zaktualizuj je zamiast tworzyć nowe
+                const updatedOrder = await Order.findOneAndUpdate(
+                    { id: orderData.id },
+                    { ...orderData, total: total, isDirty: false },
+                    { new: true }
+                );
+                return res.status(200).json({ message: 'Zamówienie zaktualizowane!', order: updatedOrder });
+            }
+        }
+
+        const newOrder = new Order({
+            id: orderData.id || `ZAM-${Date.now()}`,
+            ...orderData,
+            total: total,
+            author: req.user.username,
+            status: 'Zapisane',
+            isDirty: false
+        });
         const savedOrder = await newOrder.save();
 
         // Wyślij powiadomienie do administratorów
