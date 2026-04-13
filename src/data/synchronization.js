@@ -7,17 +7,17 @@ import { api } from '../api';
  * @param {function} onProgress - Callback do raportowania postępu (np. (statusObject) => {}).
  */
 export async function synchronizeData(onProgress) {
+  if (!navigator.onLine) {
+    console.warn('Synchronizacja pominięta - brak połączenia internetowego.');
+    return false;
+  }
+
   console.log('Rozpoczęcie synchronizacji danych...');
   onProgress({ status: 'starting_all' });
 
   try {
-    // Wyczyść tabele przed synchronizacją, aby uniknąć duplikatów
-    console.log('Czyszczenie lokalnych tabel...');
-    await Promise.all([
-      db.products.clear(),
-      db.contacts.clear()
-    ]);
-    console.log('Lokalne tabele wyczyszczone.');
+    // Nie czyścimy tabel przed synchronizacją, aby dane były dostępne nawet przy błędzie.
+    // bulkPut() w synchronizeTable zajmie się aktualizacją/dodaniem rekordów.
 
     // Synchronizacja produktów
     await synchronizeTable('products', api.getProductsCount, api.getProductsPage, onProgress);

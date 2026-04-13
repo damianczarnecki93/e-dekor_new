@@ -63,7 +63,13 @@ registerRoute(
 // Caching strategy for API GET requests: Stale While Revalidate.
 // This is the crucial part for offline functionality.
 registerRoute(
-  ({ url, request }) => url.pathname.startsWith('/api/') && request.method === 'GET',
+  ({ url, request }) => {
+    // Cache specific GET API endpoints. Avoid caching sync count or batch endpoints
+    // to prevent showing stale counts during synchronization.
+    const isApiGet = url.pathname.startsWith('/api/') && request.method === 'GET';
+    const isSyncInfo = url.pathname.includes('/sync/') || url.pathname.includes('/search');
+    return isApiGet && !isSyncInfo;
+  },
   new StaleWhileRevalidate({
     cacheName: 'api-cache',
     plugins: [
