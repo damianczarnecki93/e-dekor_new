@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Save } from 'lucide-react';
+import { api } from '../../api';
 import { searchProducts } from '../../data/repository';
 import { useNotification } from '../../contexts/NotificationContext';
 import Modal from '../common/Modal';

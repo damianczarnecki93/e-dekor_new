@@ -1,8 +1,9 @@
 import { db } from '../db';
 import { api } from '../api';
 
-// ... (searchProducts i searchContacts bez zmian)
-
+/**
+ * Wyszukuje produkty lokalnie, a jeśli nic nie znajdzie - w API.
+ */
 export async function searchProducts(searchTerm, filterByQuantity = false) {
     let results = [];
     try {
@@ -32,7 +33,7 @@ export async function searchProducts(searchTerm, filterByQuantity = false) {
                 console.log("Nie znaleziono lokalnie, próba przez API...");
                 return await api.searchProducts(searchTerm, filterByQuantity);
             } catch (apiError) {
-                console.warn("Błąd API podczas wyszukiwania produktów, zwracam puste wyniki.", apiError);
+                console.warn("Błąd API podczas wyszukiwania produktów.", apiError.message);
                 return [];
             }
         }
@@ -45,7 +46,7 @@ export async function searchProducts(searchTerm, filterByQuantity = false) {
             try {
                 return await api.searchProducts(searchTerm, filterByQuantity);
             } catch (apiError) {
-                console.warn("Błąd API po błędzie repozytorium, zwracam puste wyniki.", apiError);
+                console.warn("Błąd API po błędzie repozytorium.", apiError.message);
                 return [];
             }
         }
@@ -68,7 +69,7 @@ export async function searchContacts(term) {
                 console.log("Nie znaleziono lokalnie, próba przez API...");
                 return await api.searchContacts(term);
             } catch (apiError) {
-                console.warn("Błąd API podczas wyszukiwania kontaktów, zwracam puste wyniki.", apiError);
+                console.warn("Błąd API podczas wyszukiwania kontaktów.", apiError.message);
                 return [];
             }
         }
@@ -80,7 +81,7 @@ export async function searchContacts(term) {
             try {
                 return await api.searchContacts(term);
             } catch (apiError) {
-                console.warn("Błąd API po błędzie repozytorium, zwracam puste wyniki.", apiError);
+                console.warn("Błąd API po błędzie repozytorium.", apiError.message);
                 return [];
             }
         }
