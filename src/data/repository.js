@@ -96,7 +96,9 @@ export async function saveOrderOfflineFirst(order, user) {
         ...order,
         author: order.author || user.username,
         statusSync: 'pending_sync',
-        updatedAt: new Date()
+        updatedAt: new Date(),
+        // Upewnij się, że pole id zawsze istnieje
+        id: order.id || `ZAM-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
     };
 
     // Usuwamy _id jeśli jest puste lub nieprawidłowe, aby uniknąć problemów z MongoDB/Dexie
@@ -104,10 +106,19 @@ export async function saveOrderOfflineFirst(order, user) {
         delete orderToSave._id;
     }
 
-    // Zawsze zapisuj/aktualizuj w lokalnej bazie (IndexedDB)
-    // Dexie użyje 'id' jako klucza unikalnego jeśli jest zdefiniowany w schemacie,
-    // lub localId jako auto-increment.
-    const localId = await db.orders.put(orderToSave);
+    // Szukamy istniejącego rekordu, aby uniknąć duplikatów przy braku localId w obiekcie order
+    let localId = order.localId;
+    if (!localId) {
+        const existing = await db.orders.where('id').equals(orderToSave.id).first();
+        if (existing) {
+            localId = existing.localId;
+            orderToSave.localId = localId;
+        }
+    }
+
+    // Zapisz/aktualizuj w IndexedDB
+    const savedLocalId = await db.orders.put(orderToSave);
+    localId = savedLocalId;
     orderToSave.localId = localId;
 
     // Jeśli jesteśmy online, od razu spróbuj wysłać na serwer
@@ -115,22 +126,21 @@ export async function saveOrderOfflineFirst(order, user) {
         try {
             const { order: savedOrder } = await api.saveOrder(orderToSave);
 
-            // Po udanym zapisie na serwerze, aktualizujemy lokalny rekord o MongoDB _id
+            // Po udanym zapisie na serwerze, aktualizujemy lokalny rekord o MongoDB _id i status
             await db.orders.update(localId, {
                 _id: savedOrder._id,
                 statusSync: 'synced',
                 items: savedOrder.items,
-                id: savedOrder.id // Upewnij się, że ID klienta jest zsynchronizowane
+                id: savedOrder.id,
+                status: savedOrder.status
             });
-            return { ...savedOrder, localId };
+            return { ...savedOrder, localId, statusSync: 'synced' };
         } catch (error) {
             console.warn('Nie udało się zapisać zamówienia na serwerze, zostanie zsynchronizowane później.', error.message);
-            // Zwracamy wersję lokalną, synchronizacja nastąpi później przez syncPendingOrders
             return orderToSave;
         }
     }
 
-    // Jeśli jesteśmy offline, po prostu zwróć wersję lokalną
     return orderToSave;
 }
 

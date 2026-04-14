@@ -47,7 +47,12 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
                 return prev;
             });
 
-            setCurrentOrder(finalOrder);
+            setCurrentOrder(prev => {
+                 if (prev.id === finalOrder.id || (prev._id && prev._id === finalOrder._id)) {
+                    return { ...prev, ...finalOrder, isDirty: finalOrder.isDirty };
+                }
+                return prev;
+            });
             localStorage.setItem('draftOrder', JSON.stringify(finalOrder));
             setDirty(finalOrder.isDirty);
 
@@ -140,7 +145,6 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
             const newOrder = { ...prev, ...updates, isDirty: isDirtyFlag };
 
             // Synchronizacja z nadrzędnym stanem i localStorage (efekt uboczny)
-            // Używamy setTimeout, aby uniknąć błędów Reacta o aktualizacji stanu podczas renderu
             setTimeout(() => {
                 setCurrentOrder(newOrder);
                 localStorage.setItem('draftOrder', JSON.stringify(newOrder));
@@ -163,69 +167,106 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
     };
 
     const addProductToOrder = (product, quantity) => {
-        const newItems = [...(order.items || [])].map(item => ({ ...item, isSaved: false }));
-        const productBarcode = product.barcodes && product.barcodes.length > 0 ? product.barcodes[0] : null;
-        let existingItemIndex = -1;
+        setOrder(prev => {
+            const newItems = [...(prev.items || [])].map(item => ({ ...item, isSaved: false }));
+            const productBarcode = product.barcodes && product.barcodes.length > 0 ? product.barcodes[0] : null;
+            let existingItemIndex = -1;
 
-        if (productBarcode) {
-            existingItemIndex = newItems.findIndex(item => item.barcodes && item.barcodes.includes(productBarcode));
-        } else {
-            existingItemIndex = newItems.findIndex(item => item._id === product._id);
-        }
+            if (productBarcode) {
+                existingItemIndex = newItems.findIndex(item => item.barcodes && item.barcodes.includes(productBarcode));
+            } else {
+                existingItemIndex = newItems.findIndex(item => item._id === product._id);
+            }
 
-        if (existingItemIndex > -1) {
-            newItems[existingItemIndex].quantity += quantity;
-        } else {
-            newItems.push({ ...product, quantity: quantity, note: '', isSaved: false });
-        }
+            if (existingItemIndex > -1) {
+                newItems[existingItemIndex].quantity += quantity;
+            } else {
+                newItems.push({ ...product, quantity: quantity, note: '', isSaved: false });
+            }
 
-        const updatedOrder = { ...order, items: newItems, isDirty: true };
-        updateOrder(updatedOrder, true);
+            const newOrder = { ...prev, items: newItems, isDirty: true };
+            setTimeout(() => {
+                setCurrentOrder(newOrder);
+                localStorage.setItem('draftOrder', JSON.stringify(newOrder));
+            }, 0);
+            return newOrder;
+        });
+        setDirty(true);
     };
 
     const updateQuantity = (itemIndex, newQuantityStr) => {
-        const newItems = [...order.items].map(item => ({...item, isSaved: false}));
-        const newQuantity = parseInt(newQuantityStr, 10);
-        const originalItem = sortedItems[itemIndex];
-        const targetIndex = newItems.findIndex(item => item._id === originalItem._id);
+        setOrder(prev => {
+            const newItems = [...prev.items].map(item => ({...item, isSaved: false}));
+            const newQuantity = parseInt(newQuantityStr, 10);
+            const originalItem = sortedItems[itemIndex];
+            const targetIndex = newItems.findIndex(item => item._id === originalItem._id);
 
-        if (targetIndex !== -1) {
-            if (!isNaN(newQuantity) && newQuantity >= 0) {
-                newItems[targetIndex].quantity = newQuantity;
-            } else if (newQuantityStr === '') {
-                newItems[targetIndex].quantity = 0;
+            if (targetIndex !== -1) {
+                if (!isNaN(newQuantity) && newQuantity >= 0) {
+                    newItems[targetIndex].quantity = newQuantity;
+                } else if (newQuantityStr === '') {
+                    newItems[targetIndex].quantity = 0;
+                }
+                const newOrder = { ...prev, items: newItems, isDirty: true };
+                setTimeout(() => {
+                    setCurrentOrder(newOrder);
+                    localStorage.setItem('draftOrder', JSON.stringify(newOrder));
+                }, 0);
+                return newOrder;
             }
-            const updatedOrder = { ...order, items: newItems, isDirty: true };
-            updateOrder(updatedOrder, true);
-        }
+            return prev;
+        });
+        setDirty(true);
     };
 
     const handleStatusChange = async (newStatus) => {
-        try {
-            const { message, order: updatedOrder } = await api.updateOrderStatus(order._id, newStatus);
-            showNotification(message, 'success');
-            updateOrder(updatedOrder, false);
-        } catch (error) {
-            showNotification(error.message, 'error');
-            }
-        };
+        const updatedOrder = { ...order, status: newStatus, isDirty: true };
 
-    const removeItemFromOrder = (itemIndex) => {
-        const newItems = [...order.items].map(item => ({...item, isSaved: false}));
-        const originalItem = sortedItems[itemIndex];
-        const targetIndex = newItems.findIndex(item => item._id === originalItem._id);
-        if (targetIndex !== -1) {
-            newItems.splice(targetIndex, 1);
-            const updatedOrder = { ...order, items: newItems, isDirty: true };
-            updateOrder(updatedOrder, true);
+        // Aktualizacja lokalnego stanu natychmiast dla UI
+        setOrder(updatedOrder);
+        setCurrentOrder(updatedOrder);
+        setDirty(true);
+
+        // Zapis offline-first (obsłuży synchronizację statusu)
+        try {
+            await handleAutoSave(updatedOrder);
+            showNotification(`Status zmieniony na: ${newStatus}`, 'success');
+        } catch (error) {
+            showNotification('Błąd zmiany statusu.', 'error');
         }
     };
 
+    const removeItemFromOrder = (itemIndex) => {
+        setOrder(prev => {
+            const newItems = [...prev.items].map(item => ({...item, isSaved: false}));
+            const originalItem = sortedItems[itemIndex];
+            const targetIndex = newItems.findIndex(item => item._id === originalItem._id);
+            if (targetIndex !== -1) {
+                newItems.splice(targetIndex, 1);
+                const newOrder = { ...prev, items: newItems, isDirty: true };
+                setTimeout(() => {
+                    setCurrentOrder(newOrder);
+                    localStorage.setItem('draftOrder', JSON.stringify(newOrder));
+                }, 0);
+                return newOrder;
+            }
+            return prev;
+        });
+        setDirty(true);
+    };
+
     const handleNoteSave = () => {
-        const newItems = [...order.items].map(item => ({...item, isSaved: false}));
-        newItems[noteModal.itemIndex].note = noteModal.text;
-        const updatedOrder = { ...order, items: newItems, isDirty: true };
-        updateOrder(updatedOrder, true);
+        setOrder(prev => {
+            const newItems = [...prev.items].map(item => ({...item, isSaved: false}));
+            newItems[noteModal.itemIndex].note = noteModal.text;
+            const newOrder = { ...prev, items: newItems, isDirty: true };
+            setTimeout(() => {
+                setCurrentOrder(newOrder);
+                localStorage.setItem('draftOrder', JSON.stringify(newOrder));
+            }, 0);
+            return newOrder;
+        });
+        setDirty(true);
         setNoteModal({ isOpen: false, itemIndex: null, text: '' });
     };
 

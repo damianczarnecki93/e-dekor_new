@@ -1339,9 +1339,11 @@ app.post('/api/orders', authMiddleware, async (req, res) => {
             const existingOrder = await Order.findOne({ id: orderData.id });
             if (existingOrder) {
                 // Jeśli istnieje, zaktualizuj je zamiast tworzyć nowe
+                // Wykluczamy _id z danych aktualizacji, aby uniknąć błędów MongoDB (immutable field)
+                const { _id, ...updateData } = orderData;
                 const updatedOrder = await Order.findOneAndUpdate(
                     { id: orderData.id },
-                    { ...orderData, total: total, isDirty: false },
+                    { ...updateData, total: total, isDirty: false },
                     { new: true }
                 );
                 return res.status(200).json({ message: 'Zamówienie zaktualizowane!', order: updatedOrder });
@@ -1350,10 +1352,10 @@ app.post('/api/orders', authMiddleware, async (req, res) => {
 
         const newOrder = new Order({
             id: orderData.id || `ZAM-${Date.now()}`,
+            status: 'Zapisane',
+            author: req.user.username,
             ...orderData,
             total: total,
-            author: req.user.username,
-            status: 'Zapisane',
             isDirty: false
         });
         const savedOrder = await newOrder.save();
