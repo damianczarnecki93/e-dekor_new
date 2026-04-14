@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Save } from 'lucide-react';
-import { api } from '../../api';
+import { searchProducts } from '../../data/repository';
 import { useNotification } from '../../contexts/NotificationContext';
 import Modal from '../common/Modal';
 import CustomProductForm from './CustomProductForm';
@@ -22,7 +22,7 @@ const PinnedInputBar = ({ onProductAdd, onSave, isDirty, currentItems }) => {
         const handler = setTimeout(async () => {
             setIsLoading(true);
             try {
-                const results = await api.searchProducts(query);
+                const results = await searchProducts(query);
                 const isBarcode = /^\d{8,}$/.test(query.trim());
 
                 if (isBarcode) {
@@ -80,7 +80,7 @@ const PinnedInputBar = ({ onProductAdd, onSave, isDirty, currentItems }) => {
             setIsLoading(true);
             setSuggestions([]); // Hide suggestions while processing
             try {
-                const results = await api.searchProducts(query.trim());
+                const results = await searchProducts(query.trim());
                 if (results.length > 0) {
                     onProductAdd(results[0], 1); // Add first match with quantity 1
                     setQuery(''); // Clear input for next scan
