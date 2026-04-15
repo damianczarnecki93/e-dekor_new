@@ -41,8 +41,8 @@ export const api = {
 		if (!response.ok) throw new Error('Błąd pobierania raportu braków');
 		return await response.json();
 	},
-    searchProducts: async (searchTerm, filterByQuantity = false) => {
-        const response = await fetchWithAuth(`/api/products?search=${encodeURIComponent(searchTerm)}&filterByQuantity=${filterByQuantity}`);
+    searchProducts: async (searchTerm, filterByQuantity = false, categorized = false) => {
+        const response = await fetchWithAuth(`/api/products?search=${encodeURIComponent(searchTerm)}&filterByQuantity=${filterByQuantity}&categorized=${categorized}`);
         if (!response.ok) { const errorData = await response.json(); throw new Error(errorData.message || 'Błąd wyszukiwania produktów'); }
         return await response.json();
     },
