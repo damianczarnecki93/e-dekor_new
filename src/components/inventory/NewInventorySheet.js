@@ -138,8 +138,8 @@ const NewInventorySheet = ({ user, onSave, inventoryId = null, setDirty }) => {
     if (isLoading) { return <div className="p-8 text-center">Ładowanie...</div>; }
 
     return (
-        <div className="h-full flex flex-col">
-            <div className="flex-grow p-4 md:p-8 pb-32">
+        <div className="flex flex-col">
+            <div className="flex-grow p-4 md:p-8 pb-56">
                 <div className="flex justify-between items-center mb-4">
                     <h1 className="text-3xl font-bold">{inventoryId ? 'Edycja' : 'Nowa'} Inwentaryzacja</h1>
                     <div className="flex gap-2">
