@@ -276,11 +276,17 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
         updateOrder({ discount: discountValue });
     };
 
-    const totalValue = useMemo(() => (order.items || []).reduce((sum, item) => sum + item.price * (item.quantity || 0), 0), [order.items]);
+    const totalValue = useMemo(() => {
+        return (order.items || []).reduce((sum, item) => {
+            const itemDiscount = parseFloat(item.itemDiscount) || 0;
+            const priceAfterItemDiscount = item.price * (1 - itemDiscount / 100);
+            return sum + priceAfterItemDiscount * (item.quantity || 0);
+        }, 0);
+    }, [order.items]);
 
     const totalValueWithDiscount = useMemo(() => {
-        const discountValue = parseFloat(order.discount) || 0;
-        return totalValue * (1 - discountValue / 100);
+        const globalDiscount = parseFloat(order.discount) || 0;
+        return totalValue * (1 - globalDiscount / 100);
     }, [totalValue, order.discount]);
 
     const handleSaveOrder = async () => {
@@ -456,23 +462,42 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
                                 <div key={item._id || index} className={`block lg:grid lg:grid-cols-12 gap-4 items-center p-4 lg:p-2 ${item.isCustom ? 'bg-yellow-50 dark:bg-yellow-900/20' : 'bg-white dark:bg-gray-800'} lg:bg-transparent lg:dark:bg-transparent mb-4 lg:mb-0 rounded-lg shadow-md lg:shadow-none`}>
                                     <div className="hidden lg:flex lg:col-span-5 font-medium items-center">
                                         {item.isSaved && <CheckCircle2 className="w-5 h-5 text-green-500 mr-2" />}
-                                        <span className="truncate block">{item.name}</span>
-                                        {item.note && <p className="text-xs text-gray-400 mt-1">Notatka: {item.note}</p>}
+                                        <div className="flex flex-col truncate">
+                                            <div className="flex items-center gap-2">
+                                                <span className="truncate block">{item.name}</span>
+                                                {item.isDisplay && <span className="bg-orange-500 text-white text-[10px] px-1.5 py-0.5 rounded font-bold">DISPLAY</span>}
+                                            </div>
+                                            {item.note && <p className="text-xs text-gray-400 mt-1">Notatka: {item.note}</p>}
+                                        </div>
                                     </div>
                                     <div className="hidden lg:block lg:col-span-2">{item.product_code}</div>
-                                    <div className="hidden lg:block lg:col-span-1 text-right">{item.price.toFixed(2)}</div>
+                                    <div className="hidden lg:block lg:col-span-1 text-right">
+                                        {item.itemDiscount > 0 ? (
+                                            <div className="flex flex-col items-end">
+                                                <span className="text-xs line-through text-gray-400">{item.price.toFixed(2)}</span>
+                                                <span className="text-indigo-600">{(item.price * (1 - item.itemDiscount/100)).toFixed(2)}</span>
+                                            </div>
+                                        ) : item.price.toFixed(2)}
+                                    </div>
                                     <div className="hidden lg:block lg:col-span-1 text-center">
                                         <input type="number" value={item.quantity || ''} onChange={(e) => updateQuantity(index, e.target.value)} onFocus={(e) => e.target.select()} className="w-16 text-center bg-transparent border rounded-md p-1 focus:ring-2 focus:ring-indigo-500 outline-none"/>
                                     </div>
-                                    <div className="hidden lg:block lg:col-span-1 text-right font-semibold">{(item.price * (item.quantity || 0)).toFixed(2)}</div>
+                                    <div className="hidden lg:block lg:col-span-1 text-right font-semibold">
+                                        {((item.price * (1 - (item.itemDiscount || 0) / 100)) * (item.quantity || 0)).toFixed(2)}
+                                    </div>
                                     <div className="w-full lg:hidden">
                                         <div className="flex justify-between items-start mb-2">
                                             <div>
-                                                <p className="font-bold text-lg">{item.name}</p>
+                                                <div className="flex items-center gap-2">
+                                                    <p className="font-bold text-lg">{item.name}</p>
+                                                    {item.isDisplay && <span className="bg-orange-500 text-white text-[10px] px-1.5 py-0.5 rounded font-bold">DISPLAY</span>}
+                                                </div>
                                                 <p className="text-sm text-gray-500">{item.product_code}</p>
                                                 {item.note && <p className="text-xs text-gray-400 mt-1">Notatka: {item.note}</p>}
                                             </div>
-                                            <p className="font-bold text-lg whitespace-nowrap pl-2">{(item.price * (item.quantity || 0)).toFixed(2)} PLN</p>
+                                            <p className="font-bold text-lg whitespace-nowrap pl-2">
+                                                {((item.price * (1 - (item.itemDiscount || 0) / 100)) * (item.quantity || 0)).toFixed(2)} PLN
+                                            </p>
                                         </div>
                                         <div className="flex justify-between items-center mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
                                             <div className="flex items-center gap-2">

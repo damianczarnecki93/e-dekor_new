@@ -198,7 +198,10 @@ const TilesOrderView = ({ currentOrder, setCurrentOrder, user, setDirty }) => {
                     {cart.map(item => (
                         <div key={item._id} className="p-4 border-b dark:border-gray-700 text-sm">
                             <div className="flex justify-between mb-2">
-                                <span className="font-medium line-clamp-1">{item.polish_name || item.name}</span>
+                                <div className="flex flex-col">
+                                    <span className="font-medium line-clamp-1">{item.polish_name || item.name}</span>
+                                    {item.isDisplay && <span className="text-[10px] text-orange-500 font-bold">DISPLAY</span>}
+                                </div>
                                 <button onClick={() => removeFromCart(item._id)} className="text-red-500 hover:text-red-700"><Trash2 size={16}/></button>
                             </div>
                             <div className="flex justify-between items-center">
