@@ -14,16 +14,18 @@ const EditProductModal = ({ isOpen, onClose, itemData, onSave }) => {
     }, [itemData]);
 
     const handleChange = (e) => {
-        const { name, value } = e.target;
-        setEditedItem(prev => ({ ...prev, [name]: value }));
+        const { name, value, type, checked } = e.target;
+        setEditedItem(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
     };
 
     const handleSave = () => {
         const finalItem = {
             ...editedItem,
-            barcodes: editedItem.barcodes.split(',').map(b => b.trim()).filter(b => b),
+            barcodes: typeof editedItem.barcodes === 'string' ? editedItem.barcodes.split(',').map(b => b.trim()).filter(b => b) : editedItem.barcodes,
             price: parseFloat(editedItem.price) || 0,
-            quantity: parseInt(editedItem.quantity, 10) || 0
+            quantity: parseInt(editedItem.quantity, 10) || 0,
+            itemDiscount: parseFloat(editedItem.itemDiscount) || 0,
+            isDisplay: !!editedItem.isDisplay
         };
         onSave(finalItem);
         onClose();
@@ -54,6 +56,14 @@ const EditProductModal = ({ isOpen, onClose, itemData, onSave }) => {
                      <div>
                         <label className="block text-sm font-medium">Ilość</label>
                         <input type="number" name="quantity" value={editedItem.quantity} onChange={handleChange} className="w-full p-2 border rounded-md bg-white dark:bg-gray-700" />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium">Rabat na pozycję (%)</label>
+                        <input type="number" name="itemDiscount" value={editedItem.itemDiscount || 0} onChange={handleChange} className="w-full p-2 border rounded-md bg-white dark:bg-gray-700" />
+                    </div>
+                    <div className="flex items-center gap-2 h-full pt-6">
+                        <input type="checkbox" id="isDisplay" name="isDisplay" checked={editedItem.isDisplay || false} onChange={handleChange} className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500" />
+                        <label htmlFor="isDisplay" className="text-sm font-medium cursor-pointer">Oznacz jako DISPLAY</label>
                     </div>
                 </div>
                 <div className="flex justify-end gap-4 pt-4">

@@ -11,6 +11,7 @@ import Topbar from './components/layout/Topbar';
 import DashboardView from './components/dashboard/DashboardView';
 import MainSearchView from './components/product/MainSearchView';
 import OrderView from './components/order/OrderView';
+import TilesOrderView from './components/order/TilesOrderView';
 import OrdersListView from './components/order/OrdersListView';
 import PickingView from './components/picking/PickingView';
 import InventoryView from './components/inventory/InventoryView';
@@ -43,7 +44,12 @@ const getInitialOrder = () => {
         console.error("Błąd odczytu roboczego zamówienia z localStorage:", error);
         localStorage.removeItem('draftOrder');
     }
-    return { customerName: '', items: [], isDirty: false };
+    return {
+        id: `ZAM-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        customerName: '',
+        items: [],
+        isDirty: false
+    };
 };
 
 function App() {
@@ -128,7 +134,12 @@ function App() {
                 return;
             }
         }
-        const newBlankOrder = { customerName: '', items: [], isDirty: false };
+        const newBlankOrder = {
+            id: `ZAM-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            customerName: '',
+            items: [],
+            isDirty: false
+        };
         localStorage.setItem('draftOrder', JSON.stringify(newBlankOrder));
         setCurrentOrder(newBlankOrder);
         setIsDirty(false);
@@ -160,11 +171,16 @@ function App() {
     
     useEffect(() => {
         const checkLocalData = async () => {
-            const productsCount = await db.products.count();
-            const contactsCount = await db.contacts.count();
-            if (productsCount === 0 || contactsCount === 0) {
-                console.log("Brak danych lokalnych, uruchamiam synchronizację...");
-                triggerSync();
+            try {
+                const productsCount = await db.products.count();
+                const contactsCount = await db.contacts.count();
+                if (productsCount === 0 || contactsCount === 0) {
+                    console.log("Brak danych lokalnych, uruchamiam synchronizację...");
+                    triggerSync();
+                }
+            } catch (error) {
+                console.error("Błąd sprawdzania lub migracji bazy danych IndexedDB:", error);
+                showNotification("Wykryto problem z lokalną bazą danych. Spróbuj odświeżyć stronę lub wyczyścić dane przeglądarki.", "error");
             }
         };
 
@@ -224,6 +240,7 @@ function App() {
                                 <Route path="/dashboard" element={<DashboardView user={user} onNewOrder={handleNewOrder} />} />
                                 <Route path="/search" element={<MainSearchView />} />
                                 <Route path="/order" element={<OrderView currentOrder={currentOrder} setCurrentOrder={setCurrentOrder} user={user} setDirty={setIsDirty} onNewOrder={handleNewOrder} />} />
+                                <Route path="/order-tiles" element={<TilesOrderView currentOrder={currentOrder} setCurrentOrder={setCurrentOrder} user={user} setDirty={setIsDirty} />} />
                                 <Route path="/orders" element={<OrdersListView onEdit={loadOrderForEditing} />} />
                                 <Route path="/picking" element={<PickingView />} />
                                 <Route path="/inventory" element={<InventoryView user={user} onNavigate={navigate} isDirty={isDirty} setIsDirty={setIsDirty} />} />

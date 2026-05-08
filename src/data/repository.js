@@ -1,8 +1,9 @@
 import { db } from '../db';
 import { api } from '../api';
 
-// ... (searchProducts i searchContacts bez zmian)
-
+/**
+ * Wyszukuje produkty lokalnie, a jeśli nic nie znajdzie - w API.
+ */
 export async function searchProducts(searchTerm, filterByQuantity = false) {
     let results = [];
     try {
@@ -26,14 +27,13 @@ export async function searchProducts(searchTerm, filterByQuantity = false) {
             }).limit(20).toArray();
         }
 
-        // Jeśli lokalnie nic nie znaleziono, zawsze próbuj przez sieć.
-        // Service worker obsłuży to w trybie offline.
-        if (results.length === 0) {
+        // Jeśli lokalnie nic nie znaleziono, a jesteśmy online, próbuj przez sieć.
+        if (results.length === 0 && navigator.onLine) {
             try {
-                console.log("Nie znaleziono lokalnie, próba przez API/Service Worker...");
+                console.log("Nie znaleziono lokalnie, próba przez API...");
                 return await api.searchProducts(searchTerm, filterByQuantity);
             } catch (apiError) {
-                console.warn("Błąd API podczas wyszukiwania produktów, zwracam puste wyniki.", apiError);
+                console.warn("Błąd API podczas wyszukiwania produktów.", apiError.message);
                 return [];
             }
         }
@@ -41,13 +41,16 @@ export async function searchProducts(searchTerm, filterByQuantity = false) {
         return results;
     } catch (error) {
         console.error("Błąd wyszukiwania w repozytorium:", error);
-        // Po błędzie lokalnym, zawsze próbuj przez API/SW
-        try {
-            return await api.searchProducts(searchTerm, filterByQuantity);
-        } catch (apiError) {
-            console.warn("Błąd API po błędzie repozytorium, zwracam puste wyniki.", apiError);
-            return [];
+        // Po błędzie lokalnym, jeśli jesteśmy online, próbuj przez API
+        if (navigator.onLine) {
+            try {
+                return await api.searchProducts(searchTerm, filterByQuantity);
+            } catch (apiError) {
+                console.warn("Błąd API po błędzie repozytorium.", apiError.message);
+                return [];
+            }
         }
+        return [];
     }
 }
 
@@ -61,12 +64,12 @@ export async function searchContacts(term) {
             .limit(10)
             .toArray();
 
-        if (results.length === 0) {
+        if (results.length === 0 && navigator.onLine) {
             try {
-                console.log("Nie znaleziono lokalnie, próba przez API/Service Worker...");
+                console.log("Nie znaleziono lokalnie, próba przez API...");
                 return await api.searchContacts(term);
             } catch (apiError) {
-                console.warn("Błąd API podczas wyszukiwania kontaktów, zwracam puste wyniki.", apiError);
+                console.warn("Błąd API podczas wyszukiwania kontaktów.", apiError.message);
                 return [];
             }
         }
@@ -74,12 +77,15 @@ export async function searchContacts(term) {
         return results;
     } catch (error) {
         console.error("Błąd wyszukiwania kontaktów w repozytorium:", error);
-        try {
-            return await api.searchContacts(term);
-        } catch (apiError) {
-            console.warn("Błąd API po błędzie repozytorium, zwracam puste wyniki.", apiError);
-            return [];
+        if (navigator.onLine) {
+            try {
+                return await api.searchContacts(term);
+            } catch (apiError) {
+                console.warn("Błąd API po błędzie repozytorium.", apiError.message);
+                return [];
+            }
         }
+        return [];
     }
 }
 
@@ -89,33 +95,53 @@ export async function searchContacts(term) {
 export async function saveOrderOfflineFirst(order, user) {
     const orderToSave = {
         ...order,
-        author: user.username,
+        author: order.author || user.username,
         statusSync: 'pending_sync',
-        updatedAt: new Date()
+        updatedAt: new Date(),
+        // Upewnij się, że pole id zawsze istnieje
+        id: order.id || `ZAM-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
     };
 
-    // Zawsze zapisuj/aktualizuj w lokalnej bazie
-    const localId = await db.orders.put(orderToSave);
+    // Usuwamy _id jeśli jest puste lub nieprawidłowe, aby uniknąć problemów z MongoDB/Dexie
+    if (!orderToSave._id) {
+        delete orderToSave._id;
+    }
+
+    // Szukamy istniejącego rekordu, aby uniknąć duplikatów przy braku localId w obiekcie order
+    let localId = order.localId;
+    if (!localId) {
+        const existing = await db.orders.where('id').equals(orderToSave.id).first();
+        if (existing) {
+            localId = existing.localId;
+            orderToSave.localId = localId;
+        }
+    }
+
+    // Zapisz/aktualizuj w IndexedDB
+    const savedLocalId = await db.orders.put(orderToSave);
+    localId = savedLocalId;
     orderToSave.localId = localId;
 
-    // Jeśli jesteśmy online, od razu spróbuj wysłać
+    // Jeśli jesteśmy online, od razu spróbuj wysłać na serwer
     if (navigator.onLine) {
         try {
             const { order: savedOrder } = await api.saveOrder(orderToSave);
+
+            // Po udanym zapisie na serwerze, aktualizujemy lokalny rekord o MongoDB _id i status
             await db.orders.update(localId, {
                 _id: savedOrder._id,
                 statusSync: 'synced',
-                items: savedOrder.items
+                items: savedOrder.items,
+                id: savedOrder.id,
+                status: savedOrder.status
             });
-            return { ...savedOrder, localId };
+            return { ...savedOrder, localId, statusSync: 'synced' };
         } catch (error) {
             console.warn('Nie udało się zapisać zamówienia na serwerze, zostanie zsynchronizowane później.', error.message);
-            // Zwracamy wersję lokalną, synchronizacja nastąpi później
             return orderToSave;
         }
     }
 
-    // Jeśli jesteśmy offline, po prostu zwróć wersję lokalną
     return orderToSave;
 }
 
@@ -124,6 +150,7 @@ export async function saveOrderOfflineFirst(order, user) {
  * Synchronizuje wszystkie zamówienia oczekujące na wysłanie.
  */
 export async function syncPendingOrders() {
+    // Pobierz wszystkie zamówienia oczekujące na synchronizację
     const pendingOrders = await db.orders.where('statusSync').equals('pending_sync').toArray();
     if (pendingOrders.length === 0) {
         return;
@@ -133,16 +160,20 @@ export async function syncPendingOrders() {
 
     for (const order of pendingOrders) {
         try {
+            // Próba zapisu na serwerze. API obsłuży to jako POST (nowe) lub PUT (edycja),
+            // a dzięki unikalnemu 'id' serwer zapobiegnie duplikatom.
             const { order: savedOrder } = await api.saveOrder(order);
+
             await db.orders.update(order.localId, {
                 _id: savedOrder._id,
                 statusSync: 'synced',
-                items: savedOrder.items
+                items: savedOrder.items,
+                id: savedOrder.id
             });
-            console.log(`Zamówienie ${order.localId} zsynchronizowane.`);
+            console.log(`Zamówienie lokalne ${order.localId} (ID: ${order.id}) zsynchronizowane jako ${savedOrder._id}.`);
         } catch (error) {
             console.error(`Nie udało się zsynchronizować zamówienia ${order.localId}:`, error);
-            // Nie przerywamy pętli, próbujemy zsynchronizować kolejne
+            // Nie przerywamy pętli, próbujemy zsynchronizować kolejne zamówienia
         }
     }
 }

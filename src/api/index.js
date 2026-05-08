@@ -8,13 +8,20 @@ const fetchWithAuth = async (url, options = {}) => {
         headers['Content-Type'] = 'application/json';
     }
 
-    const response = await fetch(`${API_BASE_URL}${url}`, { ...options, headers });
+    try {
+        const response = await fetch(`${API_BASE_URL}${url}`, { ...options, headers });
 
-    if (response.status === 401) {
-        window.dispatchEvent(new Event('auth-error'));
-        throw new Error('Sesja wygasła. Proszę zalogować się ponownie.');
+        if (response.status === 401) {
+            window.dispatchEvent(new Event('auth-error'));
+            throw new Error('Sesja wygasła. Proszę zalogować się ponownie.');
+        }
+        return response;
+    } catch (error) {
+        if (error.name === 'TypeError' && error.message === 'Failed to fetch') {
+            throw new Error('Brak połączenia z serwerem. Sprawdź połączenie internetowe.');
+        }
+        throw error;
     }
-    return response;
 };
 
 export const api = {
@@ -34,8 +41,8 @@ export const api = {
 		if (!response.ok) throw new Error('Błąd pobierania raportu braków');
 		return await response.json();
 	},
-    searchProducts: async (searchTerm, filterByQuantity = false) => {
-        const response = await fetchWithAuth(`/api/products?search=${encodeURIComponent(searchTerm)}&filterByQuantity=${filterByQuantity}`);
+    searchProducts: async (searchTerm, filterByQuantity = false, categorized = false) => {
+        const response = await fetchWithAuth(`/api/products?search=${encodeURIComponent(searchTerm)}&filterByQuantity=${filterByQuantity}&categorized=${categorized}`);
         if (!response.ok) { const errorData = await response.json(); throw new Error(errorData.message || 'Błąd wyszukiwania produktów'); }
         return await response.json();
     },

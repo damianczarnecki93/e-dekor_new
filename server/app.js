@@ -94,6 +94,8 @@ const PushSubscription = mongoose.models.PushSubscription || mongoose.model('Pus
 
 const productSchema = new mongoose.Schema({
     name: String,
+    polish_name: String,
+    category: { type: String, index: true },
     product_code: { type: String, index: true },
     barcodes: { type: [String], index: true },
     price: Number,
@@ -1017,6 +1019,28 @@ app.post('/api/admin/merge-products', authMiddleware, adminMiddleware, async (re
     }
 });
 
+app.post('/api/admin/enrich-products', authMiddleware, adminMiddleware, async (req, res) => {
+    try {
+        const { mapping } = req.body; // { "product_code": { category, polish_name } }
+        if (!mapping) return res.status(400).json({ message: 'Brak mapowania danych.' });
+
+        const bulkOps = Object.entries(mapping).map(([code, data]) => ({
+            updateOne: {
+                filter: { product_code: code },
+                update: { $set: { category: data.category, polish_name: data.polish_name } }
+            }
+        }));
+
+        if (bulkOps.length > 0) {
+            await Product.bulkWrite(bulkOps);
+        }
+
+        res.json({ message: `Zaktualizowano ${bulkOps.length} produktów.` });
+    } catch (error) {
+        res.status(500).json({ message: 'Błąd wzbogacania produktów.', error: error.message });
+    }
+});
+
 app.get('/api/admin/all-products', authMiddleware, adminMiddleware, async (req, res) => {
     try {
         const { page = 1, limit = 20, search = '' } = req.query;
@@ -1231,15 +1255,32 @@ app.get('/api/sync/contacts', authMiddleware, async (req, res) => {
 // --- API Endpoints - Produkty i Zamówienia ---
 app.get('/api/products', authMiddleware, async (req, res) => {
     try {
-        const { search, filterByQuantity } = req.query;
+        const { search, filterByQuantity, categorized } = req.query;
         let query = {};
         if (search) {
-            query = { $or: [{ name: { $regex: search, $options: 'i' } }, { product_code: { $regex: search, $options: 'i' } }, { barcodes: { $regex: search, $options: 'i' } }] };
+            query = { $or: [
+                { name: { $regex: search, $options: 'i' } },
+                { polish_name: { $regex: search, $options: 'i' } },
+                { product_code: { $regex: search, $options: 'i' } },
+                { barcodes: { $regex: search, $options: 'i' } }
+            ] };
         }
         if (filterByQuantity === 'true') {
             query.quantity = { $gt: 0 };
         }
-        const products = await Product.find(query).limit(20);
+
+        if (categorized === 'true') {
+            const products = await Product.find(query).lean();
+            const categories = {};
+            products.forEach(p => {
+                const cat = p.category || 'Inne';
+                if (!categories[cat]) categories[cat] = [];
+                categories[cat].push(p);
+            });
+            return res.json(categories);
+        }
+
+        const products = await Product.find(query).limit(50);
         res.status(200).json(products);
     } catch (error) {
         res.status(500).json({ message: 'Błąd pobierania produktów', error: error.message });
@@ -1332,8 +1373,32 @@ app.post('/api/orders', authMiddleware, async (req, res) => {
     const subtotal = (orderData.items || []).reduce((sum, item) => sum + (item.price * item.quantity), 0);
     const discount = orderData.discount || 0;
     const total = subtotal * (1 - discount / 100);
-    const newOrder = new Order({ id: `ZAM-${Date.now()}`, ...orderData, total: total, author: req.user.username, status: 'Zapisane', isDirty: false });
+
     try {
+        // Sprawdź, czy zamówienie o takim ID już istnieje (zapobieganie duplikatom)
+        if (orderData.id) {
+            const existingOrder = await Order.findOne({ id: orderData.id });
+            if (existingOrder) {
+                // Jeśli istnieje, zaktualizuj je zamiast tworzyć nowe
+                // Wykluczamy _id z danych aktualizacji, aby uniknąć błędów MongoDB (immutable field)
+                const { _id, ...updateData } = orderData;
+                const updatedOrder = await Order.findOneAndUpdate(
+                    { id: orderData.id },
+                    { ...updateData, total: total, isDirty: false },
+                    { new: true }
+                );
+                return res.status(200).json({ message: 'Zamówienie zaktualizowane!', order: updatedOrder });
+            }
+        }
+
+        const newOrder = new Order({
+            id: orderData.id || `ZAM-${Date.now()}`,
+            status: 'Zapisane',
+            author: req.user.username,
+            ...orderData,
+            total: total,
+            isDirty: false
+        });
         const savedOrder = await newOrder.save();
 
         // Wyślij powiadomienie do administratorów

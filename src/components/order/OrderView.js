@@ -34,11 +34,25 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
 
             const finalOrder = {
                 ...savedOrder,
-                items: savedOrder.items.map(item => ({ ...item, isSaved: true })),
+                items: (savedOrder.items || []).map(item => ({ ...item, isSaved: true })),
                 isDirty: savedOrder.statusSync === 'pending_sync'
             };
 
-            setCurrentOrder(finalOrder);
+            // Aktualizuj lokalny stan TYLKO jeśli _id lub id się zgadza,
+            // aby uniknąć nadpisania nowszych zmian, które mogły zajść w międzyczasie
+            setOrder(prev => {
+                if (prev.id === finalOrder.id || (prev._id && prev._id === finalOrder._id)) {
+                    return { ...prev, ...finalOrder, isDirty: finalOrder.isDirty };
+                }
+                return prev;
+            });
+
+            setCurrentOrder(prev => {
+                 if (prev.id === finalOrder.id || (prev._id && prev._id === finalOrder._id)) {
+                    return { ...prev, ...finalOrder, isDirty: finalOrder.isDirty };
+                }
+                return prev;
+            });
             localStorage.setItem('draftOrder', JSON.stringify(finalOrder));
             setDirty(finalOrder.isDirty);
 
@@ -62,10 +76,21 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
     };
 
     useEffect(() => {
-        setOrder(currentOrder);
+        // Inicjalizuj stan zamówienia tylko jeśli currentOrder faktycznie się zmienił
+        // Sprawdzamy ID lub _id, aby uniknąć resetowania lokalnego stanu przy drobnych aktualizacjach
+        const orderId = currentOrder._id || currentOrder.id;
+
+        setOrder(prev => {
+            const prevId = prev._id || prev.id;
+            if (prevId !== orderId) {
+                console.log("Ładowanie nowego zamówienia do widoku:", orderId);
+                setContactSearchQuery(currentOrder.customerName || '');
+                return currentOrder;
+            }
+            return prev;
+        });
         setDirty(currentOrder.isDirty || false);
-        setContactSearchQuery(currentOrder.customerName || '');
-    }, [currentOrder, setDirty]);
+    }, [currentOrder._id, currentOrder.id, currentOrder.customerName, currentOrder.isDirty, setDirty]);
 
     useEffect(() => {
         if (order.customerId && order.customerName === contactSearchQuery) {
@@ -115,89 +140,133 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
         };
     }, [order, handleAutoSave]);
 
-    const updateOrder = (updates, isDirtyFlag = true) => {
-        const newOrder = { ...order, ...updates, isDirty: isDirtyFlag };
-        setOrder(newOrder);
-        setCurrentOrder(newOrder);
+    const updateOrder = useCallback((updates, isDirtyFlag = true) => {
+        setOrder(prev => {
+            const newOrder = { ...prev, ...updates, isDirty: isDirtyFlag };
+
+            // Synchronizacja z nadrzędnym stanem i localStorage (efekt uboczny)
+            setTimeout(() => {
+                setCurrentOrder(newOrder);
+                localStorage.setItem('draftOrder', JSON.stringify(newOrder));
+            }, 0);
+
+            return newOrder;
+        });
         setDirty(isDirtyFlag);
-    };
+    }, [setCurrentOrder, setDirty]);
 
     const handleSelectContact = (contact) => {
-        const updatedOrder = {
-            ...order,
+        const updates = {
             customerName: contact.name,
             customerId: contact._id,
-            items: order.items.map(item => ({...item, isSaved: false}))
+            items: (order.items || []).map(item => ({...item, isSaved: false}))
         };
-        updateOrder(updatedOrder, true);
+        updateOrder(updates, true);
         setContactSearchQuery(contact.name);
         setContactSuggestions([]);
     };
 
     const addProductToOrder = (product, quantity) => {
-        const newItems = [...(order.items || [])].map(item => ({ ...item, isSaved: false }));
-        const productBarcode = product.barcodes && product.barcodes.length > 0 ? product.barcodes[0] : null;
-        let existingItemIndex = -1;
+        setOrder(prev => {
+            const newItems = [...(prev.items || [])].map(item => ({ ...item, isSaved: false }));
+            const productBarcode = product.barcodes && product.barcodes.length > 0 ? product.barcodes[0] : null;
+            let existingItemIndex = -1;
 
-        if (productBarcode) {
-            existingItemIndex = newItems.findIndex(item => item.barcodes && item.barcodes.includes(productBarcode));
-        } else {
-            existingItemIndex = newItems.findIndex(item => item._id === product._id);
-        }
+            if (productBarcode) {
+                existingItemIndex = newItems.findIndex(item => item.barcodes && item.barcodes.includes(productBarcode));
+            } else {
+                existingItemIndex = newItems.findIndex(item => item._id === product._id);
+            }
 
-        if (existingItemIndex > -1) {
-            newItems[existingItemIndex].quantity += quantity;
-        } else {
-            newItems.push({ ...product, quantity: quantity, note: '', isSaved: false });
-        }
+            if (existingItemIndex > -1) {
+                newItems[existingItemIndex].quantity += quantity;
+            } else {
+                newItems.push({ ...product, quantity: quantity, note: '', isSaved: false });
+            }
 
-        const updatedOrder = { ...order, items: newItems, isDirty: true };
-        updateOrder(updatedOrder, true);
+            const newOrder = { ...prev, items: newItems, isDirty: true };
+            setTimeout(() => {
+                setCurrentOrder(newOrder);
+                localStorage.setItem('draftOrder', JSON.stringify(newOrder));
+            }, 0);
+            return newOrder;
+        });
+        setDirty(true);
     };
 
     const updateQuantity = (itemIndex, newQuantityStr) => {
-        const newItems = [...order.items].map(item => ({...item, isSaved: false}));
-        const newQuantity = parseInt(newQuantityStr, 10);
-        const originalItem = sortedItems[itemIndex];
-        const targetIndex = newItems.findIndex(item => item._id === originalItem._id);
+        setOrder(prev => {
+            const newItems = [...prev.items].map(item => ({...item, isSaved: false}));
+            const newQuantity = parseInt(newQuantityStr, 10);
+            const originalItem = sortedItems[itemIndex];
+            const targetIndex = newItems.findIndex(item => item._id === originalItem._id);
 
-        if (targetIndex !== -1) {
-            if (!isNaN(newQuantity) && newQuantity >= 0) {
-                newItems[targetIndex].quantity = newQuantity;
-            } else if (newQuantityStr === '') {
-                newItems[targetIndex].quantity = 0;
+            if (targetIndex !== -1) {
+                if (!isNaN(newQuantity) && newQuantity >= 0) {
+                    newItems[targetIndex].quantity = newQuantity;
+                } else if (newQuantityStr === '') {
+                    newItems[targetIndex].quantity = 0;
+                }
+                const newOrder = { ...prev, items: newItems, isDirty: true };
+                setTimeout(() => {
+                    setCurrentOrder(newOrder);
+                    localStorage.setItem('draftOrder', JSON.stringify(newOrder));
+                }, 0);
+                return newOrder;
             }
-            const updatedOrder = { ...order, items: newItems, isDirty: true };
-            updateOrder(updatedOrder, true);
-        }
+            return prev;
+        });
+        setDirty(true);
     };
 
     const handleStatusChange = async (newStatus) => {
-        try {
-            const { message, order: updatedOrder } = await api.updateOrderStatus(order._id, newStatus);
-            showNotification(message, 'success');
-            updateOrder(updatedOrder, false);
-        } catch (error) {
-            showNotification(error.message, 'error');
-            }
-        };
+        const updatedOrder = { ...order, status: newStatus, isDirty: true };
 
-    const removeItemFromOrder = (itemIndex) => {
-        const newItems = [...order.items].map(item => ({...item, isSaved: false}));
-        const originalItem = sortedItems[itemIndex];
-        const targetIndex = newItems.findIndex(item => item._id === originalItem._id);
-        if (targetIndex !== -1) {
-            newItems.splice(targetIndex, 1);
-            const updatedOrder = { ...order, items: newItems, isDirty: true };
-            updateOrder(updatedOrder, true);
+        // Aktualizacja lokalnego stanu natychmiast dla UI
+        setOrder(updatedOrder);
+        setCurrentOrder(updatedOrder);
+        setDirty(true);
+
+        // Zapis offline-first (obsłuży synchronizację statusu)
+        try {
+            await handleAutoSave(updatedOrder);
+            showNotification(`Status zmieniony na: ${newStatus}`, 'success');
+        } catch (error) {
+            showNotification('Błąd zmiany statusu.', 'error');
         }
     };
 
+    const removeItemFromOrder = (itemIndex) => {
+        setOrder(prev => {
+            const newItems = [...prev.items].map(item => ({...item, isSaved: false}));
+            const originalItem = sortedItems[itemIndex];
+            const targetIndex = newItems.findIndex(item => item._id === originalItem._id);
+            if (targetIndex !== -1) {
+                newItems.splice(targetIndex, 1);
+                const newOrder = { ...prev, items: newItems, isDirty: true };
+                setTimeout(() => {
+                    setCurrentOrder(newOrder);
+                    localStorage.setItem('draftOrder', JSON.stringify(newOrder));
+                }, 0);
+                return newOrder;
+            }
+            return prev;
+        });
+        setDirty(true);
+    };
+
     const handleNoteSave = () => {
-        const newItems = [...order.items].map(item => ({...item, isSaved: false}));
-        newItems[noteModal.itemIndex].note = noteModal.text;
-        const updatedOrder = { ...order, items: newItems, isDirty: true };
-        updateOrder(updatedOrder, true);
+        setOrder(prev => {
+            const newItems = [...prev.items].map(item => ({...item, isSaved: false}));
+            newItems[noteModal.itemIndex].note = noteModal.text;
+            const newOrder = { ...prev, items: newItems, isDirty: true };
+            setTimeout(() => {
+                setCurrentOrder(newOrder);
+                localStorage.setItem('draftOrder', JSON.stringify(newOrder));
+            }, 0);
+            return newOrder;
+        });
+        setDirty(true);
         setNoteModal({ isOpen: false, itemIndex: null, text: '' });
     };
 
@@ -207,11 +276,17 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
         updateOrder({ discount: discountValue });
     };
 
-    const totalValue = useMemo(() => (order.items || []).reduce((sum, item) => sum + item.price * (item.quantity || 0), 0), [order.items]);
+    const totalValue = useMemo(() => {
+        return (order.items || []).reduce((sum, item) => {
+            const itemDiscount = parseFloat(item.itemDiscount) || 0;
+            const priceAfterItemDiscount = item.price * (1 - itemDiscount / 100);
+            return sum + priceAfterItemDiscount * (item.quantity || 0);
+        }, 0);
+    }, [order.items]);
 
     const totalValueWithDiscount = useMemo(() => {
-        const discountValue = parseFloat(order.discount) || 0;
-        return totalValue * (1 - discountValue / 100);
+        const globalDiscount = parseFloat(order.discount) || 0;
+        return totalValue * (1 - globalDiscount / 100);
     }, [totalValue, order.discount]);
 
     const handleSaveOrder = async () => {
@@ -299,8 +374,8 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
 };
 
     return (
-        <div className="h-full flex flex-col">
-            <div className="flex-grow p-4 md:p-8 pb-32">
+        <div className="flex flex-col">
+            <div className="flex-grow p-4 md:p-8 pb-56">
                 <div className="flex flex-wrap gap-2 justify-between items-center mb-4">
                     <h1 className="text-2xl md:text-3xl font-bold text-gray-800 dark:text-white">{order._id ? `Edycja Zamówienia` : 'Nowe Zamówienie'}</h1>
                     <div className="flex gap-2">
@@ -387,23 +462,42 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
                                 <div key={item._id || index} className={`block lg:grid lg:grid-cols-12 gap-4 items-center p-4 lg:p-2 ${item.isCustom ? 'bg-yellow-50 dark:bg-yellow-900/20' : 'bg-white dark:bg-gray-800'} lg:bg-transparent lg:dark:bg-transparent mb-4 lg:mb-0 rounded-lg shadow-md lg:shadow-none`}>
                                     <div className="hidden lg:flex lg:col-span-5 font-medium items-center">
                                         {item.isSaved && <CheckCircle2 className="w-5 h-5 text-green-500 mr-2" />}
-                                        <span className="truncate block">{item.name}</span>
-                                        {item.note && <p className="text-xs text-gray-400 mt-1">Notatka: {item.note}</p>}
+                                        <div className="flex flex-col truncate">
+                                            <div className="flex items-center gap-2">
+                                                <span className="truncate block">{item.name}</span>
+                                                {item.isDisplay && <span className="bg-orange-500 text-white text-[10px] px-1.5 py-0.5 rounded font-bold">DISPLAY</span>}
+                                            </div>
+                                            {item.note && <p className="text-xs text-gray-400 mt-1">Notatka: {item.note}</p>}
+                                        </div>
                                     </div>
                                     <div className="hidden lg:block lg:col-span-2">{item.product_code}</div>
-                                    <div className="hidden lg:block lg:col-span-1 text-right">{item.price.toFixed(2)}</div>
+                                    <div className="hidden lg:block lg:col-span-1 text-right">
+                                        {item.itemDiscount > 0 ? (
+                                            <div className="flex flex-col items-end">
+                                                <span className="text-xs line-through text-gray-400">{item.price.toFixed(2)}</span>
+                                                <span className="text-indigo-600">{(item.price * (1 - item.itemDiscount/100)).toFixed(2)}</span>
+                                            </div>
+                                        ) : item.price.toFixed(2)}
+                                    </div>
                                     <div className="hidden lg:block lg:col-span-1 text-center">
                                         <input type="number" value={item.quantity || ''} onChange={(e) => updateQuantity(index, e.target.value)} onFocus={(e) => e.target.select()} className="w-16 text-center bg-transparent border rounded-md p-1 focus:ring-2 focus:ring-indigo-500 outline-none"/>
                                     </div>
-                                    <div className="hidden lg:block lg:col-span-1 text-right font-semibold">{(item.price * (item.quantity || 0)).toFixed(2)}</div>
+                                    <div className="hidden lg:block lg:col-span-1 text-right font-semibold">
+                                        {((item.price * (1 - (item.itemDiscount || 0) / 100)) * (item.quantity || 0)).toFixed(2)}
+                                    </div>
                                     <div className="w-full lg:hidden">
                                         <div className="flex justify-between items-start mb-2">
                                             <div>
-                                                <p className="font-bold text-lg">{item.name}</p>
+                                                <div className="flex items-center gap-2">
+                                                    <p className="font-bold text-lg">{item.name}</p>
+                                                    {item.isDisplay && <span className="bg-orange-500 text-white text-[10px] px-1.5 py-0.5 rounded font-bold">DISPLAY</span>}
+                                                </div>
                                                 <p className="text-sm text-gray-500">{item.product_code}</p>
                                                 {item.note && <p className="text-xs text-gray-400 mt-1">Notatka: {item.note}</p>}
                                             </div>
-                                            <p className="font-bold text-lg whitespace-nowrap pl-2">{(item.price * (item.quantity || 0)).toFixed(2)} PLN</p>
+                                            <p className="font-bold text-lg whitespace-nowrap pl-2">
+                                                {((item.price * (1 - (item.itemDiscount || 0) / 100)) * (item.quantity || 0)).toFixed(2)} PLN
+                                            </p>
                                         </div>
                                         <div className="flex justify-between items-center mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
                                             <div className="flex items-center gap-2">
