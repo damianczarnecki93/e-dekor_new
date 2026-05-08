@@ -1,4 +1,4 @@
-const API_BASE_URL = '';
+const API_BASE_URL = process.env.REACT_APP_API_URL || '';
 
 const fetchWithAuth = async (url, options = {}) => {
     const token = localStorage.getItem('userToken');

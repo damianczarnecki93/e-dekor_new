@@ -15,8 +15,13 @@ const axios = require('axios');
 const webpush = require('web-push');
 
 const app = express();
+
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',')
+  : '*';
+
 const corsOptions = {
-  origin: '*', // Pozwala na żądania z dowolnego źródła
+  origin: allowedOrigins,
   methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
   credentials: true,
   optionsSuccessStatus: 204
