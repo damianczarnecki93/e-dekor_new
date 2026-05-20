@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Search, ChevronRight, ChevronLeft, Plus, Minus, ShoppingCart, Trash2, Save } from 'lucide-react';
+import { Search, ChevronLeft, Plus, Minus, ShoppingCart, Trash2, Save } from 'lucide-react';
 import { api } from '../../api';
 import { saveOrderOfflineFirst } from '../../data/repository';
 import { useNotification } from '../../contexts/NotificationContext';
@@ -49,6 +49,15 @@ const TilesOrderView = ({ currentOrder, setCurrentOrder, user, setDirty }) => {
         setSearchQuery(query);
     };
 
+    const updateParentState = useCallback((newItems) => {
+        const updatedOrder = { ...currentOrder, items: newItems, customerName, isDirty: true };
+        setTimeout(() => {
+            setCurrentOrder(updatedOrder);
+            localStorage.setItem('draftOrder', JSON.stringify(updatedOrder));
+            setDirty(true);
+        }, 0);
+    }, [currentOrder, customerName, setCurrentOrder, setDirty]);
+
     const addToCart = (product) => {
         setCart(prev => {
             const existing = prev.find(item => item._id === product._id);
@@ -83,15 +92,6 @@ const TilesOrderView = ({ currentOrder, setCurrentOrder, user, setDirty }) => {
             updateParentState(newCart);
             return newCart;
         });
-    };
-
-    const updateParentState = (newItems) => {
-        const updatedOrder = { ...currentOrder, items: newItems, customerName, isDirty: true };
-        setTimeout(() => {
-            setCurrentOrder(updatedOrder);
-            localStorage.setItem('draftOrder', JSON.stringify(updatedOrder));
-            setDirty(true);
-        }, 0);
     };
 
     const handleSaveOrder = async () => {

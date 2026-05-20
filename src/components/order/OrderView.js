@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { PlusCircle, FileText, FileDown, FileUp, CheckCircle2, Camera, X } from 'lucide-react';
+import { PlusCircle, FileText, FileDown, FileUp, CheckCircle2, Camera, X, ChevronsUpDown, ChevronUp, ChevronDown, Edit, MessageSquare, Trash2 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { api } from '../../api';
@@ -9,7 +9,6 @@ import { useSortableData } from '../../hooks/useSortableData';
 import Modal from '../common/Modal';
 import EditProductModal from '../modals/EditProductModal';
 import PinnedInputBar from './PinnedInputBar';
-import { ChevronsUpDown, ChevronUp, ChevronDown, Edit, MessageSquare, Trash2 } from 'lucide-react';
 
 const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }) => {
     const [order, setOrder] = useState(currentOrder);
@@ -27,6 +26,21 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
     const [isContactLoading, setIsContactLoading] = useState(false);
     const [lightbox, setLightbox] = useState({ isOpen: false, image: null });
     const fileInputRef = useRef(null);
+
+    const updateOrder = useCallback((updates, isDirtyFlag = true) => {
+        setOrder(prev => {
+            const newOrder = { ...prev, ...updates, isDirty: isDirtyFlag };
+
+            // Synchronizacja z nadrzędnym stanem i localStorage (efekt uboczny)
+            setTimeout(() => {
+                setCurrentOrder(newOrder);
+                localStorage.setItem('draftOrder', JSON.stringify(newOrder));
+            }, 0);
+
+            return newOrder;
+        });
+        setDirty(isDirtyFlag);
+    }, [setCurrentOrder, setDirty]);
 
     const handleAutoSave = useCallback(async (updatedOrder) => {
         if (isSaving || !updatedOrder.customerName) return;
@@ -158,21 +172,6 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
             clearTimeout(autoSaveTimer.current);
         };
     }, [order, handleAutoSave]);
-
-    const updateOrder = useCallback((updates, isDirtyFlag = true) => {
-        setOrder(prev => {
-            const newOrder = { ...prev, ...updates, isDirty: isDirtyFlag };
-
-            // Synchronizacja z nadrzędnym stanem i localStorage (efekt uboczny)
-            setTimeout(() => {
-                setCurrentOrder(newOrder);
-                localStorage.setItem('draftOrder', JSON.stringify(newOrder));
-            }, 0);
-
-            return newOrder;
-        });
-        setDirty(isDirtyFlag);
-    }, [setCurrentOrder, setDirty]);
 
     const handleSelectContact = (contact) => {
         const updates = {
