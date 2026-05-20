@@ -12,7 +12,7 @@ import PinnedInputBar from './PinnedInputBar';
 
 const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }) => {
     const [order, setOrder] = useState(currentOrder);
-    const [noteModal, setNoteModal] = useState({ isOpen: false, itemIndex: null, text: '', discount: 0, isDisplay: false });
+    const [noteModal, setNoteModal] = useState({ isOpen: false, itemIndex: null, text: '', discount: 0, isDisplay: false, displayQuantity: 0 });
     const [editModal, setEditModal] = useState({ isOpen: false, itemData: null });
     const [isSaving, setIsSaving] = useState(false);
     const listEndRef = useRef(null);
@@ -312,6 +312,10 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
             newItems[noteModal.itemIndex].itemDiscount = noteModal.discount;
             newItems[noteModal.itemIndex].isDisplay = noteModal.isDisplay;
 
+            if (noteModal.isDisplay && noteModal.displayQuantity > 0) {
+                newItems[noteModal.itemIndex].quantity = noteModal.displayQuantity;
+            }
+
             const newOrder = { ...prev, items: newItems, isDirty: true };
             setTimeout(() => {
                 setCurrentOrder(newOrder);
@@ -320,7 +324,7 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
             return newOrder;
         });
         setDirty(true);
-        setNoteModal({ isOpen: false, itemIndex: null, text: '', discount: 0, isDisplay: false });
+        setNoteModal({ isOpen: false, itemIndex: null, text: '', discount: 0, isDisplay: false, displayQuantity: 0 });
     };
 
     const openNoteModal = (index, item) => {
@@ -335,7 +339,8 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
             itemIndex: index,
             text: cleanNote,
             discount: discount,
-            isDisplay: isDisplay
+            isDisplay: isDisplay,
+            displayQuantity: item.quantity || 0
         });
     };
 
@@ -605,7 +610,14 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
                                             </div>
                                             <div className="flex items-center gap-2">
                                                  <span className="text-sm text-gray-500">Cena:</span>
-                                                 <span className="font-semibold">{item.price.toFixed(2)}</span>
+                                                 {item.itemDiscount > 0 ? (
+                                                     <div className="flex items-center gap-1.5">
+                                                         <span className="text-sm line-through text-gray-400">{item.price.toFixed(2)}</span>
+                                                         <span className="font-bold text-indigo-600">{(item.price * (1 - item.itemDiscount/100)).toFixed(2)}</span>
+                                                     </div>
+                                                 ) : (
+                                                     <span className="font-semibold">{item.price.toFixed(2)}</span>
+                                                 )}
                                             </div>
                                         </div>
                                     </div>
@@ -645,7 +657,7 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
 
             <PinnedInputBar onProductAdd={addProductToOrder} onSave={handleSaveOrder} isDirty={order.isDirty} currentItems={order.items || []} />
 
-            <Modal isOpen={noteModal.isOpen} onClose={() => setNoteModal({ isOpen: false, itemIndex: null, text: '', discount: 0, isDisplay: false })} title="Dodaj notatkę i rabat do pozycji">
+            <Modal isOpen={noteModal.isOpen} onClose={() => setNoteModal({ isOpen: false, itemIndex: null, text: '', discount: 0, isDisplay: false, displayQuantity: 0 })} title="Dodaj notatkę i rabat do pozycji">
                 <div className="space-y-4">
                     <div>
                         <label className="block text-sm font-medium mb-1">Notatka</label>
@@ -677,10 +689,22 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
                             <label htmlFor="noteIsDisplay" className="text-sm font-medium cursor-pointer">DISPLAY</label>
                         </div>
                     </div>
+                    {noteModal.isDisplay && (
+                        <div className="animate-fade-in">
+                             <label className="block text-sm font-medium mb-1 text-orange-600 dark:text-orange-400">Ile sztuk w displayu? (zaktualizuje ilość pozycji)</label>
+                             <input
+                                 type="number"
+                                 value={noteModal.displayQuantity}
+                                 onChange={(e) => setNoteModal({...noteModal, displayQuantity: parseInt(e.target.value, 10) || 0})}
+                                 className="w-full p-2 border-2 border-orange-500 rounded-md bg-white dark:bg-gray-700 focus:ring-orange-500 outline-none"
+                                 autoFocus
+                             />
+                        </div>
+                    )}
                     <p className="text-xs text-gray-500 italic">Informacja o rabacie i tagu DISPLAY zostanie automatycznie dopisana do notatki.</p>
                 </div>
                 <div className="flex justify-end gap-4 mt-6">
-                    <button onClick={() => setNoteModal({ isOpen: false, itemIndex: null, text: '', discount: 0, isDisplay: false })} className="px-4 py-2 bg-gray-200 dark:bg-gray-600 rounded-lg">Anuluj</button>
+                    <button onClick={() => setNoteModal({ isOpen: false, itemIndex: null, text: '', discount: 0, isDisplay: false, displayQuantity: 0 })} className="px-4 py-2 bg-gray-200 dark:bg-gray-600 rounded-lg">Anuluj</button>
                     <button onClick={handleNoteSave} className="px-4 py-2 bg-blue-600 text-white rounded-lg">Zapisz</button>
                 </div>
             </Modal>
