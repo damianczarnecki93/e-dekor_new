@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { PlusCircle, FileText, FileDown, FileUp, CheckCircle2 } from 'lucide-react';
+import { PlusCircle, FileText, FileDown, FileUp, CheckCircle2, Camera, X } from 'lucide-react';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { api } from '../../api';
@@ -13,7 +13,7 @@ import { ChevronsUpDown, ChevronUp, ChevronDown, Edit, MessageSquare, Trash2 } f
 
 const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }) => {
     const [order, setOrder] = useState(currentOrder);
-    const [noteModal, setNoteModal] = useState({ isOpen: false, itemIndex: null, text: '' });
+    const [noteModal, setNoteModal] = useState({ isOpen: false, itemIndex: null, text: '', discount: 0, isDisplay: false });
     const [editModal, setEditModal] = useState({ isOpen: false, itemData: null });
     const [isSaving, setIsSaving] = useState(false);
     const listEndRef = useRef(null);
@@ -25,6 +25,8 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
     const [contactSearchQuery, setContactSearchQuery] = useState(currentOrder.customerName || '');
     const [contactSuggestions, setContactSuggestions] = useState([]);
     const [isContactLoading, setIsContactLoading] = useState(false);
+    const [lightbox, setLightbox] = useState({ isOpen: false, image: null });
+    const fileInputRef = useRef(null);
 
     const handleAutoSave = useCallback(async (updatedOrder) => {
         if (isSaving || !updatedOrder.customerName) return;
@@ -75,6 +77,23 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
         return sortConfig.direction === 'ascending' ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />;
     };
 
+    // Debounce dla synchronizacji nazwy klienta z głównym stanem
+    useEffect(() => {
+        if (contactSearchQuery === order.customerName) return;
+
+        const handler = setTimeout(() => {
+            const updatedOrder = {
+                ...order,
+                customerName: contactSearchQuery,
+                customerId: null,
+                items: order.items.map(item => ({...item, isSaved: false}))
+            };
+            updateOrder(updatedOrder, true);
+        }, 500);
+
+        return () => clearTimeout(handler);
+    }, [contactSearchQuery, order.customerName, order.items, updateOrder]);
+
     useEffect(() => {
         // Inicjalizuj stan zamówienia tylko jeśli currentOrder faktycznie się zmienił
         // Sprawdzamy ID lub _id, aby uniknąć resetowania lokalnego stanu przy drobnych aktualizacjach
@@ -111,7 +130,7 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
             } finally {
                 setIsContactLoading(false);
             }
-        }, 3000);
+        }, 300); // Zredukowano do 300ms dla lepszej responsywności
         return () => clearTimeout(handler);
     }, [contactSearchQuery, order.customerId, order.customerName, showNotification]);
 
@@ -164,6 +183,26 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
         updateOrder(updates, true);
         setContactSearchQuery(contact.name);
         setContactSuggestions([]);
+    };
+
+    const handleCapturePhoto = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            const base64String = reader.result;
+            const updatedImages = [...(order.images || []), base64String];
+            updateOrder({ images: updatedImages });
+        };
+        reader.readAsDataURL(file);
+        e.target.value = null; // reset input
+    };
+
+    const removeImage = (index) => {
+        const updatedImages = [...(order.images || [])];
+        updatedImages.splice(index, 1);
+        updateOrder({ images: updatedImages });
     };
 
     const addProductToOrder = (product, quantity) => {
@@ -258,7 +297,22 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
     const handleNoteSave = () => {
         setOrder(prev => {
             const newItems = [...prev.items].map(item => ({...item, isSaved: false}));
-            newItems[noteModal.itemIndex].note = noteModal.text;
+            let noteText = noteModal.text;
+
+            // Czyszczenie starych tagów
+            noteText = noteText.replace(/\[RABAT \d+%\]/g, '').replace(/\[DISPLAY\]/g, '').trim();
+
+            if (noteModal.discount > 0) {
+                noteText = `[RABAT ${noteModal.discount}%] ${noteText}`.trim();
+            }
+            if (noteModal.isDisplay) {
+                noteText = `[DISPLAY] ${noteText}`.trim();
+            }
+
+            newItems[noteModal.itemIndex].note = noteText;
+            newItems[noteModal.itemIndex].itemDiscount = noteModal.discount;
+            newItems[noteModal.itemIndex].isDisplay = noteModal.isDisplay;
+
             const newOrder = { ...prev, items: newItems, isDirty: true };
             setTimeout(() => {
                 setCurrentOrder(newOrder);
@@ -267,7 +321,23 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
             return newOrder;
         });
         setDirty(true);
-        setNoteModal({ isOpen: false, itemIndex: null, text: '' });
+        setNoteModal({ isOpen: false, itemIndex: null, text: '', discount: 0, isDisplay: false });
+    };
+
+    const openNoteModal = (index, item) => {
+        // Ekstrakcja rabatu z notatki jeśli istnieje
+        const discountMatch = item.note ? item.note.match(/\[RABAT (\d+)%\]/) : null;
+        const discount = discountMatch ? parseInt(discountMatch[1], 10) : (item.itemDiscount || 0);
+        const isDisplay = item.note ? item.note.includes('[DISPLAY]') : (item.isDisplay || false);
+        const cleanNote = item.note ? item.note.replace(/\[RABAT \d+%\]/g, '').replace(/\[DISPLAY\]/g, '').trim() : '';
+
+        setNoteModal({
+            isOpen: true,
+            itemIndex: index,
+            text: cleanNote,
+            discount: discount,
+            isDisplay: isDisplay
+        });
     };
 
     const handleDiscountChange = (e) => {
@@ -394,43 +464,73 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
                         </button>
                     </div>
                 </div>
-					<div className="flex flex-wrap items-center gap-4 mb-6">
-                    <div className="relative w-full max-w-lg">
+					<div className="flex flex-col gap-4 mb-6">
+                    <div className="flex items-center gap-2">
+                        <div className="relative flex-grow max-w-lg">
+                            <input
+                                type="text"
+                                value={contactSearchQuery}
+                                onChange={(e) => {
+                                    const newName = e.target.value;
+                                    setContactSearchQuery(newName);
+                                }}
+                                placeholder="Wprowadź nazwę klienta"
+                                className="w-full p-3 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                autoComplete="off"
+                            />
+                            {isContactLoading && <div className="absolute right-3 top-3"><div className="w-5 h-5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div></div>}
+                            {contactSuggestions.length > 0 && (
+                                <ul className="absolute z-20 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-xl max-h-60 overflow-y-auto">
+                                    {contactSuggestions.map(contact => (
+                                        <li
+                                            key={contact._id}
+                                            onClick={() => handleSelectContact(contact)}
+                                            className="p-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700"
+                                        >
+                                            <p className="font-semibold">{contact.name}</p>
+                                            {contact.company && <p className="text-sm text-gray-500">{contact.company}</p>}
+                                            {contact.address && <p className="text-xs text-gray-400">{contact.address}</p>}
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                        </div>
+                        <button
+                            onClick={() => fileInputRef.current?.click()}
+                            className="p-3 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+                            title="Dodaj zdjęcie"
+                        >
+                            <Camera className="w-6 h-6" />
+                        </button>
                         <input
-                            type="text"
-                            value={contactSearchQuery}
-                            onChange={(e) => {
-                                const newName = e.target.value;
-                                setContactSearchQuery(newName);
-                                const updatedOrder = {
-                                    ...order,
-                                    customerName: newName,
-                                    customerId: null,
-                                    items: order.items.map(item => ({...item, isSaved: false}))
-                                };
-                                updateOrder(updatedOrder, true);
-                            }}
-                            placeholder="Wprowadź nazwę klienta"
-                            className="w-full p-3 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                            autoComplete="off"
+                            ref={fileInputRef}
+                            type="file"
+                            accept="image/*"
+                            capture="environment"
+                            onChange={handleCapturePhoto}
+                            className="hidden"
                         />
-                        {isContactLoading && <div className="absolute right-3 top-3"><div className="w-5 h-5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div></div>}
-                        {contactSuggestions.length > 0 && (
-                            <ul className="absolute z-20 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-xl max-h-60 overflow-y-auto">
-                                {contactSuggestions.map(contact => (
-                                    <li
-                                        key={contact._id}
-                                        onClick={() => handleSelectContact(contact)}
-                                        className="p-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700"
-                                    >
-                                        <p className="font-semibold">{contact.name}</p>
-                                        {contact.company && <p className="text-sm text-gray-500">{contact.company}</p>}
-                                        {contact.address && <p className="text-xs text-gray-400">{contact.address}</p>}
-                                    </li>
-                                ))}
-                            </ul>
-                        )}
                     </div>
+
+                    <div className="flex flex-wrap gap-2">
+                        {order.images && order.images.map((img, idx) => (
+                            <div key={idx} className="relative group">
+                                <img
+                                    src={img}
+                                    alt={`photo-${idx}`}
+                                    className="w-16 h-16 object-cover rounded-lg border dark:border-gray-600 cursor-pointer"
+                                    onClick={() => setLightbox({ isOpen: true, image: img })}
+                                />
+                                <button
+                                    onClick={() => removeImage(idx)}
+                                    className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
+                                >
+                                    <X className="w-4 h-4" />
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+
                     {order._id && (
                         <label className="flex items-center gap-2 cursor-pointer p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
                             <input
@@ -512,7 +612,7 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
                                     </div>
                                     <div className="lg:col-span-2 flex justify-end lg:justify-center items-center mt-2 lg:mt-0">
                                         <button onClick={() => setEditModal({ isOpen: true, itemData: { ...item, originalIndex: index } })} className="p-2 text-gray-500 hover:text-yellow-500"><Edit className="w-5 h-5"/></button>
-                                        <button onClick={() => setNoteModal({ isOpen: true, itemIndex: index, text: item.note || '' })} className="p-2 text-gray-500 hover:text-blue-500"><MessageSquare className="w-5 h-5"/></button>
+                                        <button onClick={() => openNoteModal(index, item)} className="p-2 text-gray-500 hover:text-blue-500"><MessageSquare className="w-5 h-5"/></button>
                                         <button onClick={() => removeItemFromOrder(index)} className="p-2 text-gray-500 hover:text-red-500"><Trash2 className="w-5 h-5"/></button>
                                     </div>
                                 </div>
@@ -546,9 +646,51 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
 
             <PinnedInputBar onProductAdd={addProductToOrder} onSave={handleSaveOrder} isDirty={order.isDirty} currentItems={order.items || []} />
 
-            <Modal isOpen={noteModal.isOpen} onClose={() => setNoteModal({ isOpen: false, itemIndex: null, text: '' })} title="Dodaj notatkę do pozycji">
-                <textarea value={noteModal.text} onChange={(e) => setNoteModal({...noteModal, text: e.target.value})} className="w-full p-2 border rounded-md min-h-[100px] bg-white dark:bg-gray-700"></textarea>
-                <div className="flex justify-end gap-4 mt-4"><button onClick={() => setNoteModal({ isOpen: false, itemIndex: null, text: '' })} className="px-4 py-2 bg-gray-200 dark:bg-gray-600 rounded-lg">Anuluj</button><button onClick={handleNoteSave} className="px-4 py-2 bg-blue-600 text-white rounded-lg">Zapisz notatkę</button></div>
+            <Modal isOpen={noteModal.isOpen} onClose={() => setNoteModal({ isOpen: false, itemIndex: null, text: '', discount: 0, isDisplay: false })} title="Dodaj notatkę i rabat do pozycji">
+                <div className="space-y-4">
+                    <div>
+                        <label className="block text-sm font-medium mb-1">Notatka</label>
+                        <textarea
+                            value={noteModal.text}
+                            onChange={(e) => setNoteModal({...noteModal, text: e.target.value})}
+                            className="w-full p-2 border rounded-md min-h-[100px] bg-white dark:bg-gray-700"
+                            placeholder="Wpisz treść notatki..."
+                        />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-sm font-medium mb-1">Rabat na tę pozycję (%)</label>
+                            <input
+                                type="number"
+                                value={noteModal.discount}
+                                onChange={(e) => setNoteModal({...noteModal, discount: parseInt(e.target.value, 10) || 0})}
+                                className="w-full p-2 border rounded-md bg-white dark:bg-gray-700"
+                            />
+                        </div>
+                        <div className="flex items-center gap-2 pt-6">
+                            <input
+                                type="checkbox"
+                                id="noteIsDisplay"
+                                checked={noteModal.isDisplay}
+                                onChange={(e) => setNoteModal({...noteModal, isDisplay: e.target.checked})}
+                                className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500"
+                            />
+                            <label htmlFor="noteIsDisplay" className="text-sm font-medium cursor-pointer">DISPLAY</label>
+                        </div>
+                    </div>
+                    <p className="text-xs text-gray-500 italic">Informacja o rabacie i tagu DISPLAY zostanie automatycznie dopisana do notatki.</p>
+                </div>
+                <div className="flex justify-end gap-4 mt-6">
+                    <button onClick={() => setNoteModal({ isOpen: false, itemIndex: null, text: '', discount: 0, isDisplay: false })} className="px-4 py-2 bg-gray-200 dark:bg-gray-600 rounded-lg">Anuluj</button>
+                    <button onClick={handleNoteSave} className="px-4 py-2 bg-blue-600 text-white rounded-lg">Zapisz</button>
+                </div>
+            </Modal>
+
+            {/* Lightbox */}
+            <Modal isOpen={lightbox.isOpen} onClose={() => setLightbox({ isOpen: false, image: null })} title="Podgląd zdjęcia" maxWidth="4xl">
+                <div className="flex justify-center">
+                    <img src={lightbox.image} alt="Full size" className="max-w-full max-h-[70vh] object-contain" />
+                </div>
             </Modal>
 
             <EditProductModal
