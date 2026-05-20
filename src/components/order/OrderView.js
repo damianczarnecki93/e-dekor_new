@@ -633,7 +633,7 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
                     {(!order.items || order.items.length === 0) && <p className="text-center text-gray-500 py-8">Brak pozycji na zamówieniu.</p>}
                     <div ref={listEndRef} />
                 </div>
-                <div className="flex flex-wrap justify-end items-center gap-4 mt-4">
+                <div className="flex flex-wrap justify-end items-center gap-4 mt-4 lg:hidden">
                     <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-right">
                         <span className="text-md font-medium text-gray-600 dark:text-gray-400">Kwota bez rabatu:</span>
                         <span className="text-md font-semibold text-gray-800 dark:text-gray-200">{totalValue.toFixed(2)} PLN</span>
@@ -655,7 +655,14 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
                 </div>
             </div>
 
-            <PinnedInputBar onProductAdd={addProductToOrder} onSave={handleSaveOrder} isDirty={order.isDirty} currentItems={order.items || []} />
+            <PinnedInputBar
+                onProductAdd={addProductToOrder}
+                onSave={handleSaveOrder}
+                isDirty={order.isDirty}
+                currentItems={order.items || []}
+                totalValue={totalValue}
+                totalValueWithDiscount={totalValueWithDiscount}
+            />
 
             <Modal isOpen={noteModal.isOpen} onClose={() => setNoteModal({ isOpen: false, itemIndex: null, text: '', discount: 0, isDisplay: false, displayQuantity: 0 })} title="Dodaj notatkę i rabat do pozycji">
                 <div className="space-y-4">

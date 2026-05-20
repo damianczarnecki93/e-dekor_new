@@ -6,7 +6,7 @@ import { useNotification } from '../../contexts/NotificationContext';
 import Modal from '../common/Modal';
 import CustomProductForm from './CustomProductForm';
 
-const PinnedInputBar = ({ onProductAdd, onSave, isDirty, currentItems }) => {
+const PinnedInputBar = ({ onProductAdd, onSave, isDirty, currentItems, totalValue, totalValueWithDiscount }) => {
     const [query, setQuery] = useState('');
     const [quantity, setQuantity] = useState(1);
     const [suggestions, setSuggestions] = useState([]);
@@ -163,10 +163,22 @@ const PinnedInputBar = ({ onProductAdd, onSave, isDirty, currentItems }) => {
                             className="w-16 sm:w-24 p-3 text-center bg-gray-100 dark:bg-gray-700 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
                         />
                         {onSave && (
-                            <button onClick={onSave} className="flex items-center justify-center px-3 sm:px-5 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-blue-400" disabled={!isDirty}>
-                                <Save className="w-5 h-5"/>
-                                <span className="hidden sm:inline ml-2">{isDirty ? 'Zapisz' : 'Zapisano'}</span>
-                            </button>
+                            <div className="flex items-center gap-4">
+                                <div className="hidden lg:flex flex-col items-end mr-4 min-w-[150px]">
+                                    {totalValue !== totalValueWithDiscount && (
+                                        <span className="text-xs text-gray-400 line-through leading-tight">
+                                            Suma: {totalValue?.toFixed(2)} PLN
+                                        </span>
+                                    )}
+                                    <span className="text-xl font-bold text-indigo-600 leading-tight">
+                                        {totalValueWithDiscount?.toFixed(2)} PLN
+                                    </span>
+                                </div>
+                                <button onClick={onSave} className="flex items-center justify-center px-3 sm:px-5 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-blue-400" disabled={!isDirty}>
+                                    <Save className="w-5 h-5"/>
+                                    <span className="hidden sm:inline ml-2">{isDirty ? 'Zapisz' : 'Zapisano'}</span>
+                                </button>
+                            </div>
                         )}
                     </div>
                 </div>
