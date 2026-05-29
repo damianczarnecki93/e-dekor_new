@@ -449,7 +449,7 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
 
     return (
         <div className="flex flex-col">
-            <div className="flex-grow p-4 md:p-8 pb-56">
+            <div className="flex-grow p-4 md:p-8 pb-72">
                 <div className="flex flex-wrap gap-2 justify-between items-center mb-4">
                     <h1 className="text-2xl md:text-3xl font-bold text-gray-800 dark:text-white">{order._id ? `Edycja Zamówienia` : 'Nowe Zamówienie'}</h1>
                     <div className="flex gap-2">
@@ -662,6 +662,8 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
                 currentItems={order.items || []}
                 totalValue={totalValue}
                 totalValueWithDiscount={totalValueWithDiscount}
+                discount={order.discount}
+                onDiscountChange={handleDiscountChange}
             />
 
             <Modal isOpen={noteModal.isOpen} onClose={() => setNoteModal({ isOpen: false, itemIndex: null, text: '', discount: 0, isDisplay: false, displayQuantity: 0 })} title="Dodaj notatkę i rabat do pozycji">
