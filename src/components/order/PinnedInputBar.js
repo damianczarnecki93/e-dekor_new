@@ -1,16 +1,18 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Save } from 'lucide-react';
 import { api } from '../../api';
 import { searchProducts } from '../../data/repository';
 import { useNotification } from '../../contexts/NotificationContext';
+import { useBarcodeScanner } from '../../hooks/useBarcodeScanner';
 import Modal from '../common/Modal';
 import CustomProductForm from './CustomProductForm';
 
-const PinnedInputBar = ({ onProductAdd, onSave, isDirty, currentItems, totalValue, totalValueWithDiscount, discount, onDiscountChange }) => {
+const PinnedInputBar = ({ onProductAdd, onSave, isDirty, currentItems, totalValue, totalValueWithDiscount, discount, onDiscountChange, onFlash }) => {
     const [query, setQuery] = useState('');
     const [quantity, setQuantity] = useState(1);
     const [suggestions, setSuggestions] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
+    const [inputMode, setInputMode] = useState('none');
     const { showNotification } = useNotification();
     const inputRef = useRef(null);
     const [customProductModal, setCustomProductModal] = useState({ isOpen: false, ean: '' });
@@ -57,18 +59,50 @@ const PinnedInputBar = ({ onProductAdd, onSave, isDirty, currentItems, totalValu
         return () => clearTimeout(handler);
     }, [query, showNotification, onProductAdd]);
 
-    const handleAdd = (product) => {
+    const handleAdd = useCallback((product) => {
         const qty = Number(quantity);
         if (isNaN(qty) || qty <= 0) {
             showNotification('Wprowadź poprawną ilość.', 'error');
+            onFlash?.('error');
             return;
         }
         onProductAdd(product, qty);
+        onFlash?.('success');
         setSuggestions([]);
         setQuery('');
         setQuantity(1);
         inputRef.current?.focus();
-    };
+    }, [quantity, onProductAdd, showNotification, onFlash]);
+
+    const handleGlobalScan = useCallback(async (code) => {
+        setIsLoading(true);
+        try {
+            const results = await searchProducts(code);
+            if (results.length > 0) {
+                onProductAdd(results[0], 1);
+                onFlash?.('success');
+                setQuery('');
+                setQuantity(1);
+                setSuggestions([]);
+            } else {
+                const existingCustomItem = currentItems.find(item => item.barcodes && item.barcodes.includes(code));
+                if (existingCustomItem) {
+                    onProductAdd(existingCustomItem, 1);
+                    onFlash?.('success');
+                } else {
+                    setCustomProductModal({ isOpen: true, ean: code });
+                    onFlash?.('error');
+                }
+            }
+        } catch (error) {
+            showNotification(error.message, 'error');
+            onFlash?.('error');
+        } finally {
+            setIsLoading(false);
+        }
+    }, [onProductAdd, currentItems, showNotification, onFlash]);
+
+    useBarcodeScanner(handleGlobalScan);
 
 	 const handleQueryChange = (e) => {
         const value = e.target.value;
@@ -84,15 +118,18 @@ const PinnedInputBar = ({ onProductAdd, onSave, isDirty, currentItems, totalValu
                 const results = await searchProducts(query.trim());
                 if (results.length > 0) {
                     onProductAdd(results[0], 1); // Add first match with quantity 1
+                    onFlash?.('success');
                     setQuery(''); // Clear input for next scan
                     setQuantity(1); // Reset quantity field
                     inputRef.current?.focus();
                 } else {
                     // No product found, open modal to add custom product
                     setCustomProductModal({ isOpen: true, ean: query.trim() });
+                    onFlash?.('error');
                 }
             } catch (error) {
                 showNotification(error.message, 'error');
+                onFlash?.('error');
                 setQuery(''); // Clear input on error
             } finally {
                 setIsLoading(false);
@@ -149,8 +186,11 @@ const PinnedInputBar = ({ onProductAdd, onSave, isDirty, currentItems, totalValu
                             ref={inputRef}
                             type="text"
                             value={query}
+                            inputMode={inputMode}
                             onChange={handleQueryChange}
                             onKeyDown={handleKeyDown}
+                            onDoubleClick={() => setInputMode('text')}
+                            onBlur={() => setInputMode('none')}
                             placeholder="Wyszukaj lub zeskanuj produkt..."
                             className="w-full p-3 bg-gray-100 dark:bg-gray-700 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
                         />

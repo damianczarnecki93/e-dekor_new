@@ -10,7 +10,7 @@ import Modal from '../common/Modal';
 import EditProductModal from '../modals/EditProductModal';
 import PinnedInputBar from './PinnedInputBar';
 
-const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }) => {
+const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder, onFlash }) => {
     const [order, setOrder] = useState(currentOrder);
     const [noteModal, setNoteModal] = useState({ isOpen: false, itemIndex: null, text: '', discount: 0, isDisplay: false, displayQuantity: 0 });
     const [generalNoteModal, setGeneralNoteModal] = useState(false);
@@ -682,6 +682,7 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
                 totalValueWithDiscount={totalValueWithDiscount}
                 discount={order.discount}
                 onDiscountChange={handleDiscountChange}
+                onFlash={onFlash}
             />
 
             <Modal isOpen={noteModal.isOpen} onClose={() => setNoteModal({ isOpen: false, itemIndex: null, text: '', discount: 0, isDisplay: false, displayQuantity: 0 })} title="Dodaj notatkę i rabat do pozycji">
