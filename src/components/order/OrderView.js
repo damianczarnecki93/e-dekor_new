@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { PlusCircle, FileText, FileDown, FileUp, CheckCircle2, Camera, X, ChevronsUpDown, ChevronUp, ChevronDown, Edit, MessageSquare, Trash2 } from 'lucide-react';
+import { PlusCircle, FileText, FileDown, FileUp, CheckCircle2, Camera, X, ChevronsUpDown, ChevronUp, ChevronDown, Edit, MessageSquare, Trash2, StickyNote } from 'lucide-react';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { api } from '../../api';
@@ -13,6 +13,7 @@ import PinnedInputBar from './PinnedInputBar';
 const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }) => {
     const [order, setOrder] = useState(currentOrder);
     const [noteModal, setNoteModal] = useState({ isOpen: false, itemIndex: null, text: '', discount: 0, isDisplay: false, displayQuantity: 0 });
+    const [generalNoteModal, setGeneralNoteModal] = useState(false);
     const [editModal, setEditModal] = useState({ isOpen: false, itemData: null });
     const [isSaving, setIsSaving] = useState(false);
     const listEndRef = useRef(null);
@@ -424,8 +425,16 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
         doc.text(`Zamówienie dla: ${order.customerName}`, 14, 15);
         doc.text(`Data: ${new Date().toLocaleDateString()}`, 14, 22);
 
+        let startY = 30;
+        if (order.generalNote) {
+            doc.setFontSize(10);
+            const splitNote = doc.splitTextToSize(`Notatka: ${order.generalNote}`, 180);
+            doc.text(splitNote, 14, startY);
+            startY += (splitNote.length * 5) + 5;
+        }
+
         doc.autoTable({
-        startY: 30,
+        startY: startY,
         head: [['Nazwa', 'Kod produktu', 'Notatka', 'Ilość', 'Cena', 'Wartość']],
         body: order.items.map(item => [
             item.name,
@@ -505,6 +514,13 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
                             title="Dodaj zdjęcie"
                         >
                             <Camera className="w-6 h-6" />
+                        </button>
+                        <button
+                            onClick={() => setGeneralNoteModal(true)}
+                            className={`p-3 rounded-lg transition-colors ${order.generalNote ? 'bg-indigo-600 text-white hover:bg-indigo-700' : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600'}`}
+                            title="Notatka ogólna"
+                        >
+                            <StickyNote className="w-6 h-6" />
                         </button>
                         <input
                             ref={fileInputRef}
@@ -653,6 +669,8 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
                         <span className="text-2xl font-bold text-indigo-600 dark:text-indigo-400 mt-2">{totalValueWithDiscount.toFixed(2)} PLN</span>
                     </div>
                 </div>
+                {/* Final spacer to ensure NOTHING is hidden behind PinnedInputBar */}
+                <div className="h-64 md:h-48 print:hidden" aria-hidden="true" />
             </div>
 
             <PinnedInputBar
@@ -722,6 +740,18 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
             <Modal isOpen={lightbox.isOpen} onClose={() => setLightbox({ isOpen: false, image: null })} title="Podgląd zdjęcia" maxWidth="4xl">
                 <div className="flex justify-center">
                     <img src={lightbox.image} alt="Full size" className="max-w-full max-h-[70vh] object-contain" />
+                </div>
+            </Modal>
+
+            <Modal isOpen={generalNoteModal} onClose={() => setGeneralNoteModal(false)} title="Notatka ogólna do zamówienia">
+                <textarea
+                    value={order.generalNote || ''}
+                    onChange={(e) => updateOrder({ generalNote: e.target.value })}
+                    className="w-full p-3 border rounded-md min-h-[150px] bg-white dark:bg-gray-700"
+                    placeholder="Wpisz treść notatki ogólnej..."
+                />
+                <div className="flex justify-end mt-4">
+                    <button onClick={() => setGeneralNoteModal(false)} className="px-6 py-2 bg-blue-600 text-white rounded-lg font-bold">Zamknij</button>
                 </div>
             </Modal>
 

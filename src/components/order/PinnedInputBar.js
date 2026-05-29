@@ -132,7 +132,7 @@ const PinnedInputBar = ({ onProductAdd, onSave, isDirty, currentItems, totalValu
 
     return (
         <>
-            <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t dark:border-gray-700 shadow-top z-20 p-4 px-6 md:px-12">
+            <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t dark:border-gray-700 shadow-[0_-4px_10px_rgba(0,0,0,0.1)] z-40 p-4 px-6 md:px-12">
                 <div className="w-full relative">
                     {suggestions.length > 0 && (
                         <ul className="absolute bottom-full mb-2 w-full md:max-w-xl bg-white dark:bg-gray-700 border rounded-lg shadow-xl max-h-60 overflow-y-auto z-30">
