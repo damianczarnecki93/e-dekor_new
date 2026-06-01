@@ -153,7 +153,8 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder, 
     useEffect(() => {
         const currentItemsLength = (order.items || []).length;
         if (currentItemsLength > prevItemsLength.current) {
-            listEndRef.current?.scrollIntoView({ behavior: "smooth" });
+            // Scroll to the new item, but don't overscroll to the bottom spacer
+            listEndRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
         }
         prevItemsLength.current = currentItemsLength;
     }, [order.items]);
@@ -457,8 +458,8 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder, 
 };
 
     return (
-        <div className="flex flex-col">
-            <div className="flex-grow p-4 md:p-8 pb-72">
+        <div className="flex flex-col h-full">
+            <div className="flex-grow p-2 sm:p-4 md:p-8">
                 <div className="flex flex-wrap gap-2 justify-between items-center mb-4">
                     <h1 className="text-2xl md:text-3xl font-bold text-gray-800 dark:text-white">{order._id ? `Edycja Zamówienia` : 'Nowe Zamówienie'}</h1>
                     <div className="flex gap-2">
@@ -670,7 +671,7 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder, 
                     </div>
                 </div>
                 {/* Final spacer to ensure NOTHING is hidden behind PinnedInputBar */}
-                <div className="h-64 md:h-48 print:hidden" aria-hidden="true" />
+                <div className="h-40 md:h-32 print:hidden" aria-hidden="true" />
             </div>
 
             <PinnedInputBar
