@@ -26,30 +26,7 @@ const PinnedInputBar = ({ onProductAdd, onSave, isDirty, currentItems, totalValu
             setIsLoading(true);
             try {
                 const results = await searchProducts(query);
-                const isBarcode = /^\d{8,}$/.test(query.trim());
-
-                if (isBarcode) {
-                    if (results.length > 0) {
-                        onProductAdd(results[0], 1);
-                        setQuery('');
-                        setQuantity(1);
-                        setSuggestions([]);
-                        inputRef.current?.focus();
-                    } else {
-                        const existingCustomItem = currentItems.find(item => item.barcodes && item.barcodes.includes(query.trim()));
-                        if (existingCustomItem) {
-                            onProductAdd(existingCustomItem, 1);
-                            setQuery('');
-                            setQuantity(1);
-                            inputRef.current?.focus();
-                        } else {
-                            setCustomProductModal({ isOpen: true, ean: query.trim() });
-                        }
-                        setSuggestions([]);
-                    }
-                } else {
-                    setSuggestions(results);
-                }
+                setSuggestions(results);
             } catch (error) {
                 showNotification(error.message, 'error');
             } finally {
