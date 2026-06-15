@@ -26,6 +26,8 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder, 
     const [contactSuggestions, setContactSuggestions] = useState([]);
     const [isContactLoading, setIsContactLoading] = useState(false);
     const [lightbox, setLightbox] = useState({ isOpen: false, image: null });
+    const [highlightedItemId, setHighlightedItemId] = useState(null);
+    const itemRefs = useRef({});
     const fileInputRef = useRef(null);
 
     const updateOrder = useCallback((updates, isDirtyFlag = true) => {
@@ -175,6 +177,17 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder, 
         };
     }, [order, handleAutoSave]);
 
+    useEffect(() => {
+        if (highlightedItemId) {
+            const element = itemRefs.current[highlightedItemId];
+            if (element) {
+                element.scrollIntoView({ behavior: "smooth", block: "center" });
+            }
+            const timer = setTimeout(() => setHighlightedItemId(null), 3000);
+            return () => clearTimeout(timer);
+        }
+    }, [highlightedItemId]);
+
     const handleSelectContact = (contact) => {
         const updates = {
             customerName: contact.name,
@@ -207,6 +220,7 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder, 
     };
 
     const addProductToOrder = (product, quantity) => {
+        let targetId = null;
         setOrder(prev => {
             const newItems = [...(prev.items || [])].map(item => ({ ...item, isSaved: false }));
             const productBarcode = product.barcodes && product.barcodes.length > 0 ? product.barcodes[0] : null;
@@ -220,14 +234,18 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder, 
 
             if (existingItemIndex > -1) {
                 newItems[existingItemIndex].quantity += quantity;
+                targetId = newItems[existingItemIndex]._id || newItems[existingItemIndex].product_code;
             } else {
-                newItems.push({ ...product, quantity: quantity, note: '', isSaved: false });
+                const newItem = { ...product, quantity: quantity, note: '', isSaved: false };
+                newItems.push(newItem);
+                targetId = newItem._id || newItem.product_code;
             }
 
             const newOrder = { ...prev, items: newItems, isDirty: true };
             setTimeout(() => {
                 setCurrentOrder(newOrder);
                 localStorage.setItem('draftOrder', JSON.stringify(newOrder));
+                if (targetId) setHighlightedItemId(targetId);
             }, 0);
             return newOrder;
         });
@@ -579,8 +597,15 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder, 
                             <div className="col-span-2 text-center">Akcje</div>
                         </div>
                         <div className="lg:divide-y lg:divide-gray-200 lg:dark:divide-gray-700">
-                            {sortedItems.map((item, index) => (
-                                <div key={item._id || index} className={`block lg:grid lg:grid-cols-12 gap-4 items-center p-4 lg:p-2 ${item.isCustom ? 'bg-yellow-50 dark:bg-yellow-900/20' : 'bg-white dark:bg-gray-800'} lg:bg-transparent lg:dark:bg-transparent mb-4 lg:mb-0 rounded-lg shadow-md lg:shadow-none`}>
+                            {sortedItems.map((item, index) => {
+                                const itemId = item._id || item.product_code;
+                                const isHighlighted = highlightedItemId === itemId;
+                                return (
+                                <div
+                                    key={item._id || index}
+                                    ref={el => itemRefs.current[itemId] = el}
+                                    className={`block lg:grid lg:grid-cols-12 gap-4 items-center p-4 lg:p-2 transition-colors duration-500 ${isHighlighted ? 'bg-green-100 dark:bg-green-900/40 ring-2 ring-green-500 shadow-lg scale-[1.02] lg:scale-100' : item.isCustom ? 'bg-yellow-50 dark:bg-yellow-900/20' : 'bg-white dark:bg-gray-800'} lg:bg-transparent lg:dark:bg-transparent mb-4 lg:mb-0 rounded-lg shadow-md lg:shadow-none`}
+                                >
                                     <div className="hidden lg:flex lg:col-span-5 font-medium items-center">
                                         {item.isSaved && <CheckCircle2 className="w-5 h-5 text-green-500 mr-2" />}
                                         <div className="flex flex-col truncate">
@@ -644,7 +669,7 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder, 
                                         <button onClick={() => removeItemFromOrder(index)} className="p-2 text-gray-500 hover:text-red-500"><Trash2 className="w-5 h-5"/></button>
                                     </div>
                                 </div>
-                            ))}
+                            )})}
                         </div>
                     </div>
                     {(!order.items || order.items.length === 0) && <p className="text-center text-gray-500 py-8">Brak pozycji na zamówieniu.</p>}
