@@ -65,6 +65,12 @@ function App() {
     const navigate = useNavigate();
     const { showNotification } = useNotification();
     const initialCheckDone = useRef(false);
+    const [flash, setFlash] = useState(null); // 'success' or 'error'
+
+    const triggerFlash = useCallback((type) => {
+        setFlash(type);
+        setTimeout(() => setFlash(null), 300);
+    }, []);
 
     const triggerSync = useCallback(async () => {
         const success = await synchronizeData(setSyncProgress);
@@ -211,6 +217,13 @@ function App() {
             <div className="print:hidden">
                 <SyncProgressModal syncProgress={syncProgress} />
             </div>
+            {flash && (
+                <div
+                    className={`fixed inset-0 z-[9999] pointer-events-none animate-flash-in ${
+                        flash === 'success' ? 'bg-green-500/30' : 'bg-red-500/30'
+                    }`}
+                />
+            )}
             <div className="flex flex-col h-screen bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-sans print:bg-white print:h-auto">
                 <div className="print:hidden">
                     <OfflineIndicator isOnline={isOnline} />
@@ -239,7 +252,7 @@ function App() {
                             <>
                                 <Route path="/dashboard" element={<DashboardView user={user} onNewOrder={handleNewOrder} />} />
                                 <Route path="/search" element={<MainSearchView />} />
-                                <Route path="/order" element={<OrderView currentOrder={currentOrder} setCurrentOrder={setCurrentOrder} user={user} setDirty={setIsDirty} onNewOrder={handleNewOrder} />} />
+                                <Route path="/order" element={<OrderView currentOrder={currentOrder} setCurrentOrder={setCurrentOrder} user={user} setDirty={setIsDirty} onNewOrder={handleNewOrder} onFlash={triggerFlash} />} />
                                 <Route path="/order-tiles" element={<TilesOrderView currentOrder={currentOrder} setCurrentOrder={setCurrentOrder} user={user} setDirty={setIsDirty} />} />
                                 <Route path="/orders" element={<OrdersListView onEdit={loadOrderForEditing} />} />
                                 <Route path="/picking" element={<PickingView />} />

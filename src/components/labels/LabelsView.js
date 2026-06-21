@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Printer, Trash2, Plus, Minus, XCircle } from 'lucide-react';
+import { Printer, Trash2, Plus, Minus, XCircle, Settings2 } from 'lucide-react';
+import Barcode from 'react-barcode';
 import SearchView from '../product/SearchView';
 import { useNotification } from '../../contexts/NotificationContext';
 
@@ -29,6 +30,13 @@ const HERMA_FORMATS = {
 const LabelsView = () => {
     const [selectedProducts, setSelectedProducts] = useState([]);
     const [format, setFormat] = useState('HERMA_11001');
+    const [printSettings, setPrintSettings] = useState({
+        showName: true,
+        showPriceNet: true,
+        showPriceGross: true,
+        showProductCode: true,
+        showBarcode: true
+    });
     const { showNotification } = useNotification();
 
     const addProduct = (product) => {
@@ -103,6 +111,29 @@ const LabelsView = () => {
                             >
                                 <XCircle className="h-6 w-6" />
                             </button>
+
+                            <div className="flex items-center gap-4 bg-gray-50 dark:bg-gray-700/50 p-2 rounded-lg border dark:border-gray-600">
+                                <Settings2 className="w-5 h-5 text-gray-400 ml-1" />
+                                <div className="flex flex-wrap gap-x-4 gap-y-1">
+                                    {[
+                                        { id: 'showName', label: 'Nazwa' },
+                                        { id: 'showPriceNet', label: 'Cena Netto' },
+                                        { id: 'showPriceGross', label: 'Cena Brutto' },
+                                        { id: 'showProductCode', label: 'Kod' },
+                                        { id: 'showBarcode', label: 'EAN (Kod)' },
+                                    ].map(setting => (
+                                        <label key={setting.id} className="flex items-center gap-1.5 cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                checked={printSettings[setting.id]}
+                                                onChange={(e) => setPrintSettings({ ...printSettings, [setting.id]: e.target.checked })}
+                                                className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500"
+                                            />
+                                            <span className="text-xs font-medium text-gray-600 dark:text-gray-300">{setting.label}</span>
+                                        </label>
+                                    ))}
+                                </div>
+                            </div>
 
                             <button
                                 onClick={handlePrint}
@@ -200,7 +231,7 @@ const LabelsView = () => {
 
             {/* Print Area */}
             <div className="hidden print:block print-page">
-                <LabelsPrintContent products={selectedProducts} formatConfig={HERMA_FORMATS[format]} />
+                <LabelsPrintContent products={selectedProducts} formatConfig={HERMA_FORMATS[format]} printSettings={printSettings} />
             </div>
 
             <style>{`
@@ -245,7 +276,7 @@ const LabelsView = () => {
     );
 };
 
-const LabelsPrintContent = ({ products, formatConfig }) => {
+const LabelsPrintContent = ({ products, formatConfig, printSettings }) => {
     // Rozwiń produkty do pojedynczych etykiet
     const allLabels = [];
     products.forEach(p => {
@@ -277,7 +308,6 @@ const LabelsPrintContent = ({ products, formatConfig }) => {
                     columnGap: 0,
                     rowGap: 0,
                     backgroundColor: 'white',
-                    // Force the container to be exactly A4 and not shrink
                     minWidth: '210mm',
                     minHeight: '297mm'
                 }}>
@@ -285,7 +315,7 @@ const LabelsPrintContent = ({ products, formatConfig }) => {
                         <div key={index} style={{
                             width: formatConfig.width,
                             height: formatConfig.height,
-                            padding: formatConfig.id === '10000' ? '0.5mm' : '1mm',
+                            padding: formatConfig.id === '10000' ? '0.2mm' : '0.8mm',
                             boxSizing: 'border-box',
                             overflow: 'hidden',
                             display: 'flex',
@@ -295,29 +325,46 @@ const LabelsPrintContent = ({ products, formatConfig }) => {
                             color: 'black',
                             fontFamily: 'sans-serif',
                             border: 'none',
-                            textAlign: 'center'
+                            textAlign: 'center',
+                            lineHeight: 1
                         }}>
                              {formatConfig.id === '10000' ? (
-                                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', lineHeight: '1.1' }}>
-                                    <div style={{ fontSize: '3.5pt', fontWeight: 'bold', whiteSpace: 'nowrap' }}>{p.product_code}</div>
-                                    <div style={{ fontSize: '3.2pt' }}>N: {(p.price || 0).toFixed(2)}</div>
-                                    <div style={{ fontSize: '5pt', fontWeight: '900' }}>{(p.price * 1.23).toFixed(2)} <span style={{ fontSize: '3pt' }}>PLN</span></div>
+                                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', width: '100%' }}>
+                                    {printSettings.showProductCode && <div style={{ fontSize: '3.5pt', fontWeight: 'bold', whiteSpace: 'nowrap' }}>{p.product_code}</div>}
+                                    {printSettings.showPriceNet && <div style={{ fontSize: '3pt' }}>N: {(p.price || 0).toFixed(2)}</div>}
+                                    {printSettings.showPriceGross && <div style={{ fontSize: '5pt', fontWeight: '900' }}>{(p.price * 1.23).toFixed(2)} <span style={{ fontSize: '3pt' }}>PLN</span></div>}
+                                    {printSettings.showBarcode && p.barcodes?.[0] && (
+                                        <div style={{ marginTop: '0.2mm', transform: 'scale(0.5)', transformOrigin: 'top center' }}>
+                                            <Barcode value={p.barcodes[0]} width={0.4} height={4} displayValue={false} margin={0} />
+                                        </div>
+                                    )}
                                  </div>
                              ) : (
-                                 <>
-                                    <div style={{ fontWeight: 'bold', fontSize: '7pt', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%' }}>
-                                        {p.name}
-                                    </div>
-                                    <div style={{ fontSize: '6pt' }}>
-                                        {p.product_code}
-                                    </div>
-                                    <div style={{ width: '100%', borderTop: '0.1mm solid #000', marginTop: '0.5mm', paddingTop: '0.5mm' }}>
-                                        <div style={{ fontSize: '5pt' }}>Net: {(p.price || 0).toFixed(2)}</div>
-                                        <div style={{ fontSize: '10pt', fontWeight: '900' }}>
-                                            {(p.price * 1.23).toFixed(2)} <span style={{ fontSize: '6pt' }}>PLN</span>
+                                 <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                                    {printSettings.showName && (
+                                        <div style={{ fontWeight: 'bold', fontSize: '7pt', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%' }}>
+                                            {p.name}
                                         </div>
+                                    )}
+
+                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1, justifyContent: 'center' }}>
+                                        {printSettings.showBarcode && p.barcodes?.[0] && (
+                                            <div style={{ margin: '0.5mm 0' }}>
+                                                <Barcode value={p.barcodes[0]} width={0.8} height={15} displayValue={false} margin={0} />
+                                            </div>
+                                        )}
+                                        {printSettings.showProductCode && <div style={{ fontSize: '6pt' }}>{p.product_code}</div>}
                                     </div>
-                                 </>
+
+                                    <div style={{ width: '100%', borderTop: (printSettings.showPriceNet || printSettings.showPriceGross) ? '0.1mm solid #000' : 'none', marginTop: '0.3mm', paddingTop: '0.3mm' }}>
+                                        {printSettings.showPriceNet && <div style={{ fontSize: '5.5pt' }}>Net: {(p.price || 0).toFixed(2)} PLN</div>}
+                                        {printSettings.showPriceGross && (
+                                            <div style={{ fontSize: '10pt', fontWeight: '900' }}>
+                                                {(p.price * 1.23).toFixed(2)} <span style={{ fontSize: '6pt' }}>PLN</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                 </div>
                              )}
                         </div>
                     ))}

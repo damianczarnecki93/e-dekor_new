@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { PlusCircle, FileText, FileDown, FileUp, CheckCircle2 } from 'lucide-react';
+import { PlusCircle, FileText, FileDown, FileUp, CheckCircle2, Camera, X, ChevronsUpDown, ChevronUp, ChevronDown, Edit, MessageSquare, Trash2, StickyNote } from 'lucide-react';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { api } from '../../api';
@@ -9,11 +9,11 @@ import { useSortableData } from '../../hooks/useSortableData';
 import Modal from '../common/Modal';
 import EditProductModal from '../modals/EditProductModal';
 import PinnedInputBar from './PinnedInputBar';
-import { ChevronsUpDown, ChevronUp, ChevronDown, Edit, MessageSquare, Trash2 } from 'lucide-react';
 
-const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }) => {
+const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder, onFlash }) => {
     const [order, setOrder] = useState(currentOrder);
-    const [noteModal, setNoteModal] = useState({ isOpen: false, itemIndex: null, text: '' });
+    const [noteModal, setNoteModal] = useState({ isOpen: false, itemIndex: null, text: '', discount: 0, isDisplay: false, displayQuantity: 0 });
+    const [generalNoteModal, setGeneralNoteModal] = useState(false);
     const [editModal, setEditModal] = useState({ isOpen: false, itemData: null });
     const [isSaving, setIsSaving] = useState(false);
     const listEndRef = useRef(null);
@@ -25,6 +25,25 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
     const [contactSearchQuery, setContactSearchQuery] = useState(currentOrder.customerName || '');
     const [contactSuggestions, setContactSuggestions] = useState([]);
     const [isContactLoading, setIsContactLoading] = useState(false);
+    const [lightbox, setLightbox] = useState({ isOpen: false, image: null });
+    const [highlightedItemId, setHighlightedItemId] = useState(null);
+    const itemRefs = useRef({});
+    const fileInputRef = useRef(null);
+
+    const updateOrder = useCallback((updates, isDirtyFlag = true) => {
+        setOrder(prev => {
+            const newOrder = { ...prev, ...updates, isDirty: isDirtyFlag };
+
+            // Synchronizacja z nadrzędnym stanem i localStorage (efekt uboczny)
+            setTimeout(() => {
+                setCurrentOrder(newOrder);
+                localStorage.setItem('draftOrder', JSON.stringify(newOrder));
+            }, 0);
+
+            return newOrder;
+        });
+        setDirty(isDirtyFlag);
+    }, [setCurrentOrder, setDirty]);
 
     const handleAutoSave = useCallback(async (updatedOrder) => {
         if (isSaving || !updatedOrder.customerName) return;
@@ -75,6 +94,23 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
         return sortConfig.direction === 'ascending' ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />;
     };
 
+    // Debounce dla synchronizacji nazwy klienta z głównym stanem
+    useEffect(() => {
+        if (contactSearchQuery === order.customerName) return;
+
+        const handler = setTimeout(() => {
+            const updatedOrder = {
+                ...order,
+                customerName: contactSearchQuery,
+                customerId: null,
+                items: order.items.map(item => ({...item, isSaved: false}))
+            };
+            updateOrder(updatedOrder, true);
+        }, 500);
+
+        return () => clearTimeout(handler);
+    }, [contactSearchQuery, order.customerName, order.items, updateOrder]);
+
     useEffect(() => {
         // Inicjalizuj stan zamówienia tylko jeśli currentOrder faktycznie się zmienił
         // Sprawdzamy ID lub _id, aby uniknąć resetowania lokalnego stanu przy drobnych aktualizacjach
@@ -111,7 +147,7 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
             } finally {
                 setIsContactLoading(false);
             }
-        }, 3000);
+        }, 300); // Zredukowano do 300ms dla lepszej responsywności
         return () => clearTimeout(handler);
     }, [contactSearchQuery, order.customerId, order.customerName, showNotification]);
 
@@ -119,7 +155,8 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
     useEffect(() => {
         const currentItemsLength = (order.items || []).length;
         if (currentItemsLength > prevItemsLength.current) {
-            listEndRef.current?.scrollIntoView({ behavior: "smooth" });
+            // Scroll to the new item, but don't overscroll to the bottom spacer
+            listEndRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
         }
         prevItemsLength.current = currentItemsLength;
     }, [order.items]);
@@ -140,20 +177,16 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
         };
     }, [order, handleAutoSave]);
 
-    const updateOrder = useCallback((updates, isDirtyFlag = true) => {
-        setOrder(prev => {
-            const newOrder = { ...prev, ...updates, isDirty: isDirtyFlag };
-
-            // Synchronizacja z nadrzędnym stanem i localStorage (efekt uboczny)
-            setTimeout(() => {
-                setCurrentOrder(newOrder);
-                localStorage.setItem('draftOrder', JSON.stringify(newOrder));
-            }, 0);
-
-            return newOrder;
-        });
-        setDirty(isDirtyFlag);
-    }, [setCurrentOrder, setDirty]);
+    useEffect(() => {
+        if (highlightedItemId) {
+            const element = itemRefs.current[highlightedItemId];
+            if (element) {
+                element.scrollIntoView({ behavior: "smooth", block: "center" });
+            }
+            const timer = setTimeout(() => setHighlightedItemId(null), 3000);
+            return () => clearTimeout(timer);
+        }
+    }, [highlightedItemId]);
 
     const handleSelectContact = (contact) => {
         const updates = {
@@ -166,7 +199,28 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
         setContactSuggestions([]);
     };
 
+    const handleCapturePhoto = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            const base64String = reader.result;
+            const updatedImages = [...(order.images || []), base64String];
+            updateOrder({ images: updatedImages });
+        };
+        reader.readAsDataURL(file);
+        e.target.value = null; // reset input
+    };
+
+    const removeImage = (index) => {
+        const updatedImages = [...(order.images || [])];
+        updatedImages.splice(index, 1);
+        updateOrder({ images: updatedImages });
+    };
+
     const addProductToOrder = (product, quantity) => {
+        let targetId = null;
         setOrder(prev => {
             const newItems = [...(prev.items || [])].map(item => ({ ...item, isSaved: false }));
             const productBarcode = product.barcodes && product.barcodes.length > 0 ? product.barcodes[0] : null;
@@ -180,14 +234,18 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
 
             if (existingItemIndex > -1) {
                 newItems[existingItemIndex].quantity += quantity;
+                targetId = newItems[existingItemIndex]._id || newItems[existingItemIndex].product_code;
             } else {
-                newItems.push({ ...product, quantity: quantity, note: '', isSaved: false });
+                const newItem = { ...product, quantity: quantity, note: '', isSaved: false };
+                newItems.push(newItem);
+                targetId = newItem._id || newItem.product_code;
             }
 
             const newOrder = { ...prev, items: newItems, isDirty: true };
             setTimeout(() => {
                 setCurrentOrder(newOrder);
                 localStorage.setItem('draftOrder', JSON.stringify(newOrder));
+                if (targetId) setHighlightedItemId(targetId);
             }, 0);
             return newOrder;
         });
@@ -258,7 +316,26 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
     const handleNoteSave = () => {
         setOrder(prev => {
             const newItems = [...prev.items].map(item => ({...item, isSaved: false}));
-            newItems[noteModal.itemIndex].note = noteModal.text;
+            let noteText = noteModal.text;
+
+            // Czyszczenie starych tagów
+            noteText = noteText.replace(/\[RABAT \d+%\]/g, '').replace(/\[DISPLAY\]/g, '').trim();
+
+            if (noteModal.discount > 0) {
+                noteText = `[RABAT ${noteModal.discount}%] ${noteText}`.trim();
+            }
+            if (noteModal.isDisplay) {
+                noteText = `[DISPLAY] ${noteText}`.trim();
+            }
+
+            newItems[noteModal.itemIndex].note = noteText;
+            newItems[noteModal.itemIndex].itemDiscount = noteModal.discount;
+            newItems[noteModal.itemIndex].isDisplay = noteModal.isDisplay;
+
+            if (noteModal.isDisplay && noteModal.displayQuantity > 0) {
+                newItems[noteModal.itemIndex].quantity = noteModal.displayQuantity;
+            }
+
             const newOrder = { ...prev, items: newItems, isDirty: true };
             setTimeout(() => {
                 setCurrentOrder(newOrder);
@@ -267,7 +344,24 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
             return newOrder;
         });
         setDirty(true);
-        setNoteModal({ isOpen: false, itemIndex: null, text: '' });
+        setNoteModal({ isOpen: false, itemIndex: null, text: '', discount: 0, isDisplay: false, displayQuantity: 0 });
+    };
+
+    const openNoteModal = (index, item) => {
+        // Ekstrakcja rabatu z notatki jeśli istnieje
+        const discountMatch = item.note ? item.note.match(/\[RABAT (\d+)%\]/) : null;
+        const discount = discountMatch ? parseInt(discountMatch[1], 10) : (item.itemDiscount || 0);
+        const isDisplay = item.note ? item.note.includes('[DISPLAY]') : (item.isDisplay || false);
+        const cleanNote = item.note ? item.note.replace(/\[RABAT \d+%\]/g, '').replace(/\[DISPLAY\]/g, '').trim() : '';
+
+        setNoteModal({
+            isOpen: true,
+            itemIndex: index,
+            text: cleanNote,
+            discount: discount,
+            isDisplay: isDisplay,
+            displayQuantity: item.quantity || 0
+        });
     };
 
     const handleDiscountChange = (e) => {
@@ -350,8 +444,16 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
         doc.text(`Zamówienie dla: ${order.customerName}`, 14, 15);
         doc.text(`Data: ${new Date().toLocaleDateString()}`, 14, 22);
 
+        let startY = 30;
+        if (order.generalNote) {
+            doc.setFontSize(10);
+            const splitNote = doc.splitTextToSize(`Notatka: ${order.generalNote}`, 180);
+            doc.text(splitNote, 14, startY);
+            startY += (splitNote.length * 5) + 5;
+        }
+
         doc.autoTable({
-        startY: 30,
+        startY: startY,
         head: [['Nazwa', 'Kod produktu', 'Notatka', 'Ilość', 'Cena', 'Wartość']],
         body: order.items.map(item => [
             item.name,
@@ -374,8 +476,8 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
 };
 
     return (
-        <div className="flex flex-col">
-            <div className="flex-grow p-4 md:p-8 pb-56">
+        <div className="flex flex-col h-full">
+            <div className="flex-grow p-2 sm:p-4 md:p-8">
                 <div className="flex flex-wrap gap-2 justify-between items-center mb-4">
                     <h1 className="text-2xl md:text-3xl font-bold text-gray-800 dark:text-white">{order._id ? `Edycja Zamówienia` : 'Nowe Zamówienie'}</h1>
                     <div className="flex gap-2">
@@ -394,43 +496,80 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
                         </button>
                     </div>
                 </div>
-					<div className="flex flex-wrap items-center gap-4 mb-6">
-                    <div className="relative w-full max-w-lg">
+					<div className="flex flex-col gap-4 mb-6">
+                    <div className="flex items-center gap-2">
+                        <div className="relative flex-grow max-w-lg">
+                            <input
+                                type="text"
+                                value={contactSearchQuery}
+                                onChange={(e) => {
+                                    const newName = e.target.value;
+                                    setContactSearchQuery(newName);
+                                }}
+                                placeholder="Wprowadź nazwę klienta"
+                                className="w-full p-3 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                autoComplete="off"
+                            />
+                            {isContactLoading && <div className="absolute right-3 top-3"><div className="w-5 h-5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div></div>}
+                            {contactSuggestions.length > 0 && (
+                                <ul className="absolute z-20 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-xl max-h-60 overflow-y-auto">
+                                    {contactSuggestions.map(contact => (
+                                        <li
+                                            key={contact._id}
+                                            onClick={() => handleSelectContact(contact)}
+                                            className="p-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700"
+                                        >
+                                            <p className="font-semibold">{contact.name}</p>
+                                            {contact.company && <p className="text-sm text-gray-500">{contact.company}</p>}
+                                            {contact.address && <p className="text-xs text-gray-400">{contact.address}</p>}
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                        </div>
+                        <button
+                            onClick={() => fileInputRef.current?.click()}
+                            className="p-3 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+                            title="Dodaj zdjęcie"
+                        >
+                            <Camera className="w-6 h-6" />
+                        </button>
+                        <button
+                            onClick={() => setGeneralNoteModal(true)}
+                            className={`p-3 rounded-lg transition-colors ${order.generalNote ? 'bg-indigo-600 text-white hover:bg-indigo-700' : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600'}`}
+                            title="Notatka ogólna"
+                        >
+                            <StickyNote className="w-6 h-6" />
+                        </button>
                         <input
-                            type="text"
-                            value={contactSearchQuery}
-                            onChange={(e) => {
-                                const newName = e.target.value;
-                                setContactSearchQuery(newName);
-                                const updatedOrder = {
-                                    ...order,
-                                    customerName: newName,
-                                    customerId: null,
-                                    items: order.items.map(item => ({...item, isSaved: false}))
-                                };
-                                updateOrder(updatedOrder, true);
-                            }}
-                            placeholder="Wprowadź nazwę klienta"
-                            className="w-full p-3 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                            autoComplete="off"
+                            ref={fileInputRef}
+                            type="file"
+                            accept="image/*"
+                            capture="environment"
+                            onChange={handleCapturePhoto}
+                            className="hidden"
                         />
-                        {isContactLoading && <div className="absolute right-3 top-3"><div className="w-5 h-5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div></div>}
-                        {contactSuggestions.length > 0 && (
-                            <ul className="absolute z-20 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-xl max-h-60 overflow-y-auto">
-                                {contactSuggestions.map(contact => (
-                                    <li
-                                        key={contact._id}
-                                        onClick={() => handleSelectContact(contact)}
-                                        className="p-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700"
-                                    >
-                                        <p className="font-semibold">{contact.name}</p>
-                                        {contact.company && <p className="text-sm text-gray-500">{contact.company}</p>}
-                                        {contact.address && <p className="text-xs text-gray-400">{contact.address}</p>}
-                                    </li>
-                                ))}
-                            </ul>
-                        )}
                     </div>
+
+                    <div className="flex flex-wrap gap-2">
+                        {order.images && order.images.map((img, idx) => (
+                            <div key={idx} className="relative group">
+                                <img
+                                    src={img}
+                                    alt={`photo-${idx}`}
+                                    className="w-16 h-16 object-cover rounded-lg border dark:border-gray-600 cursor-pointer"
+                                    onClick={() => setLightbox({ isOpen: true, image: img })}
+                                />
+                                <button
+                                    onClick={() => removeImage(idx)}
+                                    className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
+                                >
+                                    <X className="w-4 h-4" />
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+
                     {order._id && (
                         <label className="flex items-center gap-2 cursor-pointer p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
                             <input
@@ -458,8 +597,15 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
                             <div className="col-span-2 text-center">Akcje</div>
                         </div>
                         <div className="lg:divide-y lg:divide-gray-200 lg:dark:divide-gray-700">
-                            {sortedItems.map((item, index) => (
-                                <div key={item._id || index} className={`block lg:grid lg:grid-cols-12 gap-4 items-center p-4 lg:p-2 ${item.isCustom ? 'bg-yellow-50 dark:bg-yellow-900/20' : 'bg-white dark:bg-gray-800'} lg:bg-transparent lg:dark:bg-transparent mb-4 lg:mb-0 rounded-lg shadow-md lg:shadow-none`}>
+                            {sortedItems.map((item, index) => {
+                                const itemId = item._id || item.product_code;
+                                const isHighlighted = highlightedItemId === itemId;
+                                return (
+                                <div
+                                    key={item._id || index}
+                                    ref={el => itemRefs.current[itemId] = el}
+                                    className={`block lg:grid lg:grid-cols-12 gap-4 items-center p-4 lg:p-2 transition-colors duration-500 ${isHighlighted ? 'bg-green-100 dark:bg-green-900/40 ring-2 ring-green-500 shadow-lg scale-[1.02] lg:scale-100' : item.isCustom ? 'bg-yellow-50 dark:bg-yellow-900/20' : 'bg-white dark:bg-gray-800'} lg:bg-transparent lg:dark:bg-transparent mb-4 lg:mb-0 rounded-lg shadow-md lg:shadow-none`}
+                                >
                                     <div className="hidden lg:flex lg:col-span-5 font-medium items-center">
                                         {item.isSaved && <CheckCircle2 className="w-5 h-5 text-green-500 mr-2" />}
                                         <div className="flex flex-col truncate">
@@ -506,23 +652,30 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
                                             </div>
                                             <div className="flex items-center gap-2">
                                                  <span className="text-sm text-gray-500">Cena:</span>
-                                                 <span className="font-semibold">{item.price.toFixed(2)}</span>
+                                                 {item.itemDiscount > 0 ? (
+                                                     <div className="flex items-center gap-1.5">
+                                                         <span className="text-sm line-through text-gray-400">{item.price.toFixed(2)}</span>
+                                                         <span className="font-bold text-indigo-600">{(item.price * (1 - item.itemDiscount/100)).toFixed(2)}</span>
+                                                     </div>
+                                                 ) : (
+                                                     <span className="font-semibold">{item.price.toFixed(2)}</span>
+                                                 )}
                                             </div>
                                         </div>
                                     </div>
                                     <div className="lg:col-span-2 flex justify-end lg:justify-center items-center mt-2 lg:mt-0">
                                         <button onClick={() => setEditModal({ isOpen: true, itemData: { ...item, originalIndex: index } })} className="p-2 text-gray-500 hover:text-yellow-500"><Edit className="w-5 h-5"/></button>
-                                        <button onClick={() => setNoteModal({ isOpen: true, itemIndex: index, text: item.note || '' })} className="p-2 text-gray-500 hover:text-blue-500"><MessageSquare className="w-5 h-5"/></button>
+                                        <button onClick={() => openNoteModal(index, item)} className="p-2 text-gray-500 hover:text-blue-500"><MessageSquare className="w-5 h-5"/></button>
                                         <button onClick={() => removeItemFromOrder(index)} className="p-2 text-gray-500 hover:text-red-500"><Trash2 className="w-5 h-5"/></button>
                                     </div>
                                 </div>
-                            ))}
+                            )})}
                         </div>
                     </div>
                     {(!order.items || order.items.length === 0) && <p className="text-center text-gray-500 py-8">Brak pozycji na zamówieniu.</p>}
                     <div ref={listEndRef} />
                 </div>
-                <div className="flex flex-wrap justify-end items-center gap-4 mt-4">
+                <div className="flex flex-wrap justify-end items-center gap-4 mt-4 lg:hidden">
                     <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-right">
                         <span className="text-md font-medium text-gray-600 dark:text-gray-400">Kwota bez rabatu:</span>
                         <span className="text-md font-semibold text-gray-800 dark:text-gray-200">{totalValue.toFixed(2)} PLN</span>
@@ -542,13 +695,91 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder }
                         <span className="text-2xl font-bold text-indigo-600 dark:text-indigo-400 mt-2">{totalValueWithDiscount.toFixed(2)} PLN</span>
                     </div>
                 </div>
+                {/* Final spacer to ensure NOTHING is hidden behind PinnedInputBar */}
+                <div className="h-40 md:h-32 print:hidden" aria-hidden="true" />
             </div>
 
-            <PinnedInputBar onProductAdd={addProductToOrder} onSave={handleSaveOrder} isDirty={order.isDirty} currentItems={order.items || []} />
+            <PinnedInputBar
+                onProductAdd={addProductToOrder}
+                onSave={handleSaveOrder}
+                isDirty={order.isDirty}
+                currentItems={order.items || []}
+                totalValue={totalValue}
+                totalValueWithDiscount={totalValueWithDiscount}
+                discount={order.discount}
+                onDiscountChange={handleDiscountChange}
+                onFlash={onFlash}
+            />
 
-            <Modal isOpen={noteModal.isOpen} onClose={() => setNoteModal({ isOpen: false, itemIndex: null, text: '' })} title="Dodaj notatkę do pozycji">
-                <textarea value={noteModal.text} onChange={(e) => setNoteModal({...noteModal, text: e.target.value})} className="w-full p-2 border rounded-md min-h-[100px] bg-white dark:bg-gray-700"></textarea>
-                <div className="flex justify-end gap-4 mt-4"><button onClick={() => setNoteModal({ isOpen: false, itemIndex: null, text: '' })} className="px-4 py-2 bg-gray-200 dark:bg-gray-600 rounded-lg">Anuluj</button><button onClick={handleNoteSave} className="px-4 py-2 bg-blue-600 text-white rounded-lg">Zapisz notatkę</button></div>
+            <Modal isOpen={noteModal.isOpen} onClose={() => setNoteModal({ isOpen: false, itemIndex: null, text: '', discount: 0, isDisplay: false, displayQuantity: 0 })} title="Dodaj notatkę i rabat do pozycji">
+                <div className="space-y-4">
+                    <div>
+                        <label className="block text-sm font-medium mb-1">Notatka</label>
+                        <textarea
+                            value={noteModal.text}
+                            onChange={(e) => setNoteModal({...noteModal, text: e.target.value})}
+                            className="w-full p-2 border rounded-md min-h-[100px] bg-white dark:bg-gray-700"
+                            placeholder="Wpisz treść notatki..."
+                        />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-sm font-medium mb-1">Rabat na tę pozycję (%)</label>
+                            <input
+                                type="number"
+                                value={noteModal.discount}
+                                onChange={(e) => setNoteModal({...noteModal, discount: parseInt(e.target.value, 10) || 0})}
+                                className="w-full p-2 border rounded-md bg-white dark:bg-gray-700"
+                            />
+                        </div>
+                        <div className="flex items-center gap-2 pt-6">
+                            <input
+                                type="checkbox"
+                                id="noteIsDisplay"
+                                checked={noteModal.isDisplay}
+                                onChange={(e) => setNoteModal({...noteModal, isDisplay: e.target.checked})}
+                                className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500"
+                            />
+                            <label htmlFor="noteIsDisplay" className="text-sm font-medium cursor-pointer">DISPLAY</label>
+                        </div>
+                    </div>
+                    {noteModal.isDisplay && (
+                        <div className="animate-fade-in">
+                             <label className="block text-sm font-medium mb-1 text-orange-600 dark:text-orange-400">Ile sztuk w displayu? (zaktualizuje ilość pozycji)</label>
+                             <input
+                                 type="number"
+                                 value={noteModal.displayQuantity}
+                                 onChange={(e) => setNoteModal({...noteModal, displayQuantity: parseInt(e.target.value, 10) || 0})}
+                                 className="w-full p-2 border-2 border-orange-500 rounded-md bg-white dark:bg-gray-700 focus:ring-orange-500 outline-none"
+                                 autoFocus
+                             />
+                        </div>
+                    )}
+                    <p className="text-xs text-gray-500 italic">Informacja o rabacie i tagu DISPLAY zostanie automatycznie dopisana do notatki.</p>
+                </div>
+                <div className="flex justify-end gap-4 mt-6">
+                    <button onClick={() => setNoteModal({ isOpen: false, itemIndex: null, text: '', discount: 0, isDisplay: false, displayQuantity: 0 })} className="px-4 py-2 bg-gray-200 dark:bg-gray-600 rounded-lg">Anuluj</button>
+                    <button onClick={handleNoteSave} className="px-4 py-2 bg-blue-600 text-white rounded-lg">Zapisz</button>
+                </div>
+            </Modal>
+
+            {/* Lightbox */}
+            <Modal isOpen={lightbox.isOpen} onClose={() => setLightbox({ isOpen: false, image: null })} title="Podgląd zdjęcia" maxWidth="4xl">
+                <div className="flex justify-center">
+                    <img src={lightbox.image} alt="Full size" className="max-w-full max-h-[70vh] object-contain" />
+                </div>
+            </Modal>
+
+            <Modal isOpen={generalNoteModal} onClose={() => setGeneralNoteModal(false)} title="Notatka ogólna do zamówienia">
+                <textarea
+                    value={order.generalNote || ''}
+                    onChange={(e) => updateOrder({ generalNote: e.target.value })}
+                    className="w-full p-3 border rounded-md min-h-[150px] bg-white dark:bg-gray-700"
+                    placeholder="Wpisz treść notatki ogólnej..."
+                />
+                <div className="flex justify-end mt-4">
+                    <button onClick={() => setGeneralNoteModal(false)} className="px-6 py-2 bg-blue-600 text-white rounded-lg font-bold">Zamknij</button>
+                </div>
             </Modal>
 
             <EditProductModal

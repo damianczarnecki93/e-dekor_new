@@ -24,7 +24,8 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions)); // Umożliwia obsługę zapytań preflight (OPTIONS)
 
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Serwowanie plików statycznych z folderu 'build' musi być PRZED trasami API
 const buildPath = path.join(__dirname, '..', 'build');
@@ -112,6 +113,7 @@ const orderSchema = new mongoose.Schema({
     items: Array,
     total: Number,
     discount: { type: Number, default: 0 },
+    images: [String],
     status: {
         type: String,
         default: 'Zapisane',

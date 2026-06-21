@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Search, ChevronRight, ChevronLeft, Plus, Minus, ShoppingCart, Trash2, Save } from 'lucide-react';
+import { Search, ChevronLeft, Plus, Minus, ShoppingCart, Trash2, Save } from 'lucide-react';
 import { api } from '../../api';
 import { saveOrderOfflineFirst } from '../../data/repository';
 import { useNotification } from '../../contexts/NotificationContext';
@@ -12,31 +12,51 @@ const TilesOrderView = ({ currentOrder, setCurrentOrder, user, setDirty }) => {
     const [cart, setCart] = useState(currentOrder.items || []);
     const [customerName, setCustomerName] = useState(currentOrder.customerName || '');
     const { showNotification } = useNotification();
+    const [viewMode, setViewMode] = useState('categories'); // 'categories' or 'products'
 
     const fetchCategorizedProducts = useCallback(async (query = '') => {
         setIsLoading(true);
         try {
             const data = await api.searchProducts(query, false, true); // categorized=true
             setCategories(data);
-            if (!activeCategory || !data[activeCategory]) {
-                setActiveCategory(Object.keys(data)[0]);
+
+            // Jeśli mamy zapytanie, przełączamy na widok produktów
+            if (query) {
+                setViewMode('products');
             }
         } catch (error) {
             showNotification('Błąd pobierania produktów.', 'error');
         } finally {
             setIsLoading(false);
         }
-    }, [activeCategory, showNotification]);
+    }, [showNotification]);
 
     useEffect(() => {
         fetchCategorizedProducts();
     }, []);
 
+    useEffect(() => {
+        const handler = setTimeout(() => {
+            if (searchQuery) {
+                setViewMode('products');
+            }
+        }, 300);
+        return () => clearTimeout(handler);
+    }, [searchQuery]);
+
     const handleSearch = (e) => {
         const query = e.target.value;
         setSearchQuery(query);
-        // Debounce search in a real app, here we just filter if already loaded
     };
+
+    const updateParentState = useCallback((newItems) => {
+        const updatedOrder = { ...currentOrder, items: newItems, customerName, isDirty: true };
+        setTimeout(() => {
+            setCurrentOrder(updatedOrder);
+            localStorage.setItem('draftOrder', JSON.stringify(updatedOrder));
+            setDirty(true);
+        }, 0);
+    }, [currentOrder, customerName, setCurrentOrder, setDirty]);
 
     const addToCart = (product) => {
         setCart(prev => {
@@ -74,15 +94,6 @@ const TilesOrderView = ({ currentOrder, setCurrentOrder, user, setDirty }) => {
         });
     };
 
-    const updateParentState = (newItems) => {
-        const updatedOrder = { ...currentOrder, items: newItems, customerName, isDirty: true };
-        setTimeout(() => {
-            setCurrentOrder(updatedOrder);
-            localStorage.setItem('draftOrder', JSON.stringify(updatedOrder));
-            setDirty(true);
-        }, 0);
-    };
-
     const handleSaveOrder = async () => {
         if (!customerName) {
             showNotification('Proszę podać nazwę klienta.', 'error');
@@ -117,18 +128,29 @@ const TilesOrderView = ({ currentOrder, setCurrentOrder, user, setDirty }) => {
 
     return (
         <div className="flex h-full bg-gray-100 dark:bg-gray-900 overflow-hidden">
-            {/* Sidebar with Categories */}
-            <div className="w-64 bg-white dark:bg-gray-800 border-r dark:border-gray-700 flex flex-col">
-                <div className="p-4 font-bold border-b dark:border-gray-700">Kategorie</div>
+            {/* Sidebar with Categories - Hidden on mobile, shown as tiles instead */}
+            <div className="hidden lg:flex w-64 bg-white dark:bg-gray-800 border-r dark:border-gray-700 flex-col">
+                <div className="p-4 font-bold border-b dark:border-gray-700 flex justify-between items-center">
+                    Kategorie
+                    <button
+                        onClick={() => {setViewMode('categories'); setActiveCategory(null);}}
+                        className="text-xs text-indigo-600 hover:underline"
+                    >
+                        Pokaż wszystkie
+                    </button>
+                </div>
                 <div className="flex-1 overflow-y-auto">
-                    {Object.keys(filteredCategories).map(cat => (
+                    {Object.keys(filteredCategories).sort().map(cat => (
                         <button
                             key={cat}
-                            onClick={() => setActiveCategory(cat)}
+                            onClick={() => {
+                                setActiveCategory(cat);
+                                setViewMode('products');
+                            }}
                             className={`w-full text-left p-4 hover:bg-indigo-50 dark:hover:bg-gray-700 border-b dark:border-gray-700 flex justify-between items-center ${activeCategory === cat ? 'bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-200' : ''}`}
                         >
-                            <span className="truncate">{cat}</span>
-                            <span className="bg-gray-200 dark:bg-gray-600 px-2 py-1 rounded text-xs">{filteredCategories[cat].length}</span>
+                            <span className="truncate text-sm">{cat}</span>
+                            <span className="bg-gray-200 dark:bg-gray-600 px-2 py-1 rounded text-[10px]">{filteredCategories[cat].length}</span>
                         </button>
                     ))}
                 </div>
@@ -137,11 +159,19 @@ const TilesOrderView = ({ currentOrder, setCurrentOrder, user, setDirty }) => {
             {/* Main Content - Tiles */}
             <div className="flex-1 flex flex-col overflow-hidden">
                 <div className="p-4 bg-white dark:bg-gray-800 border-b dark:border-gray-700 flex gap-4 items-center">
+                    {activeCategory && (
+                        <button
+                            onClick={() => {setActiveCategory(null); setViewMode('categories');}}
+                            className="lg:hidden p-2 bg-gray-100 dark:bg-gray-700 rounded-lg"
+                        >
+                            <ChevronLeft size={20} />
+                        </button>
+                    )}
                     <div className="relative flex-1">
                         <Search className="absolute left-3 top-3 text-gray-400 w-5 h-5" />
                         <input
                             type="text"
-                            placeholder="Szukaj produktu..."
+                            placeholder="Szukaj produktu lub kategorii..."
                             className="w-full pl-10 pr-4 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600"
                             value={searchQuery}
                             onChange={handleSearch}
@@ -152,25 +182,58 @@ const TilesOrderView = ({ currentOrder, setCurrentOrder, user, setDirty }) => {
                 <div className="flex-1 overflow-y-auto p-4">
                     {isLoading ? (
                         <div className="flex items-center justify-center h-full">Ładowanie...</div>
-                    ) : (
-                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-                            {(filteredCategories[activeCategory] || []).map(product => (
-                                <div key={product._id} className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm hover:shadow-md transition-shadow flex flex-col justify-between border border-transparent hover:border-indigo-300">
-                                    <div>
-                                        <h3 className="font-semibold text-sm mb-1 line-clamp-2">{product.polish_name || product.name}</h3>
-                                        <p className="text-xs text-gray-500 mb-2">{product.product_code}</p>
+                    ) : viewMode === 'categories' && !activeCategory ? (
+                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                            {Object.keys(filteredCategories).sort().map(cat => (
+                                <button
+                                    key={cat}
+                                    onClick={() => {
+                                        setActiveCategory(cat);
+                                        setViewMode('products');
+                                    }}
+                                    className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm hover:shadow-md transition-all border-2 border-transparent hover:border-indigo-500 flex flex-col items-center justify-center text-center group"
+                                >
+                                    <div className="w-12 h-12 bg-indigo-100 dark:bg-indigo-900 text-indigo-600 dark:text-indigo-300 rounded-full flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                                        <ShoppingCart size={24} />
                                     </div>
-                                    <div className="flex justify-between items-center mt-auto">
-                                        <span className="font-bold text-indigo-600">{product.price.toFixed(2)} zł</span>
-                                        <button
-                                            onClick={() => addToCart(product)}
-                                            className="p-2 bg-indigo-600 text-white rounded-full hover:bg-indigo-700"
-                                        >
-                                            <Plus size={20} />
-                                        </button>
-                                    </div>
-                                </div>
+                                    <h3 className="font-bold text-gray-800 dark:text-white truncate w-full">{cat}</h3>
+                                    <p className="text-xs text-gray-500 mt-1">{filteredCategories[cat].length} produktów</p>
+                                </button>
                             ))}
+                        </div>
+                    ) : (
+                        <div>
+                            {activeCategory && (
+                                <div className="flex items-center gap-2 mb-4">
+                                    <button
+                                        onClick={() => {setActiveCategory(null); setViewMode('categories');}}
+                                        className="text-indigo-600 hover:text-indigo-800 flex items-center gap-1 text-sm font-medium"
+                                    >
+                                        <ChevronLeft size={16} /> Powrót do kategorii
+                                    </button>
+                                    <span className="text-gray-400">/</span>
+                                    <h2 className="font-bold text-lg">{activeCategory}</h2>
+                                </div>
+                            )}
+                            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                                {(activeCategory ? (filteredCategories[activeCategory] || []) : Object.values(filteredCategories).flat()).map(product => (
+                                    <div key={product._id} className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm hover:shadow-md transition-shadow flex flex-col justify-between border border-transparent hover:border-indigo-300">
+                                        <div>
+                                            <h3 className="font-semibold text-sm mb-1 line-clamp-2">{product.polish_name || product.name}</h3>
+                                            <p className="text-xs text-gray-500 mb-2">{product.product_code}</p>
+                                        </div>
+                                        <div className="flex justify-between items-center mt-auto">
+                                            <span className="font-bold text-indigo-600">{product.price.toFixed(2)} zł</span>
+                                            <button
+                                                onClick={() => addToCart(product)}
+                                                className="p-2 bg-indigo-600 text-white rounded-full hover:bg-indigo-700"
+                                            >
+                                                <Plus size={20} />
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                     )}
                 </div>
