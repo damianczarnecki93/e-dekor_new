@@ -148,12 +148,15 @@ const Note = mongoose.models.Note || mongoose.model('Note', noteSchema);
 
 const kanbanTaskSchema = new mongoose.Schema({
     content: { type: String, required: true },
-    status: { type: String, required: true, enum: ['todo', 'inprogress', 'done'], default: 'todo' },
+    status: { type: String, required: true, enum: ['todo', 'today', 'inprogress', 'done'], default: 'todo' },
     author: String,
     authorId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     assignedTo: String,
     assignedToId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     date: { type: Date, default: Date.now },
+    deadline: { type: Date },
+    priority: { type: String, enum: ['Niski', 'Normalny', 'Wysoki'], default: 'Normalny' },
+    order: { type: Number, default: 0 },
     isAccepted: { type: Boolean, default: false },
     details: { type: String, default: '' },
     subtasks: [{
@@ -1741,12 +1744,17 @@ app.delete('/api/notes/:id', authMiddleware, async (req, res) => {
 app.get('/api/kanban/tasks', authMiddleware, async (req, res) => {
     try {
         let query = {};
-        if (req.user.role === 'administrator' && req.query.userId) {
-            query = { authorId: req.query.userId };
+        const { userId } = req.query;
+
+        if (req.user.role === 'administrator') {
+            if (userId && userId !== 'all') {
+                query.assignedToId = userId;
+            }
         } else {
-            query = { authorId: req.user.userId };
+            query.assignedToId = req.user.userId;
         }
-        const tasks = await KanbanTask.find(query).sort({ date: -1 });
+
+        const tasks = await KanbanTask.find(query).sort({ order: 1, date: -1 });
         res.json(tasks);
     } catch (error) {
         res.status(500).json({ message: 'Błąd pobierania zadań' });
@@ -1755,18 +1763,24 @@ app.get('/api/kanban/tasks', authMiddleware, async (req, res) => {
 
 app.post('/api/kanban/tasks', authMiddleware, async (req, res) => {
     try {
-        const { content, details, subtasks, priority, authorId, author } = req.body;
+        const { content, details, subtasks, priority, assignedToId, deadline, status } = req.body;
+
+        let assignedUser = null;
+        if (assignedToId) {
+            assignedUser = await User.findById(assignedToId);
+        }
 
         const newTask = new KanbanTask({
             content,
             details: details || '',
             subtasks: subtasks || [],
-            priority: priority || 'normal',
-            status: 'todo',
-            author: author,
-            authorId: authorId,
-            assignedTo: author,
-            assignedToId: authorId,
+            priority: priority || 'Normalny',
+            status: status || 'todo',
+            author: req.user.username,
+            authorId: req.user.userId,
+            assignedTo: assignedUser ? assignedUser.username : req.user.username,
+            assignedToId: assignedToId || req.user.userId,
+            deadline: deadline || null,
             isAccepted: true
         });
         await newTask.save();
@@ -1778,14 +1792,18 @@ app.post('/api/kanban/tasks', authMiddleware, async (req, res) => {
 
 app.put('/api/kanban/tasks/:id', authMiddleware, async (req, res) => {
     try {
-        const { content, status, details, subtasks, priority } = req.body;
+        const { content, status, details, subtasks, priority, deadline, order, assignedToId } = req.body;
         const task = await KanbanTask.findById(req.params.id);
 
         if (!task) {
             return res.status(404).json({ message: 'Nie znaleziono zadania' });
         }
 
-        if (task.authorId.toString() !== req.user.userId && req.user.role !== 'administrator') {
+        const isAuthor = task.authorId?.toString() === req.user.userId;
+        const isAssignee = task.assignedToId?.toString() === req.user.userId;
+        const isAdmin = req.user.role === 'administrator';
+
+        if (!isAuthor && !isAssignee && !isAdmin) {
             return res.status(403).json({ message: 'Brak uprawnień do edycji tego zadania' });
         }
 
@@ -1794,6 +1812,16 @@ app.put('/api/kanban/tasks/:id', authMiddleware, async (req, res) => {
         if (details !== undefined) task.details = details;
         if (subtasks !== undefined) task.subtasks = subtasks;
         if (priority !== undefined) task.priority = priority;
+        if (deadline !== undefined) task.deadline = deadline;
+        if (order !== undefined) task.order = order;
+
+        if (assignedToId !== undefined) {
+            const assignedUser = await User.findById(assignedToId);
+            if (assignedUser) {
+                task.assignedTo = assignedUser.username;
+                task.assignedToId = assignedUser._id;
+            }
+        }
 
         const updatedTask = await task.save();
         res.json(updatedTask);
