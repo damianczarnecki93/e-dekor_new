@@ -311,6 +311,71 @@ async function sendPushNotification(userIds, notificationType, title, body) {
     }
 }
 
+// --- Funkcja pomocnicza do wzbogacania zamówień o zdjęcia i opisy z bazy produktów ---
+async function enrichOrdersWithProductDetails(orders) {
+    if (!orders || orders.length === 0) return orders;
+
+    const productCodes = new Set();
+    const barcodes = new Set();
+
+    orders.forEach(order => {
+        (order.items || []).forEach(item => {
+            if (item.product_code) productCodes.add(item.product_code);
+            if (item.barcodes && Array.isArray(item.barcodes)) {
+                item.barcodes.forEach(b => barcodes.add(b));
+            } else if (item.barcode) {
+                barcodes.add(item.barcode);
+            }
+        });
+    });
+
+    const products = await Product.find({
+        $or: [
+            { product_code: { $in: Array.from(productCodes) } },
+            { barcodes: { $in: Array.from(barcodes) } }
+        ]
+    }).lean();
+
+    const productByCode = new Map();
+    const productByBarcode = new Map();
+
+    products.forEach(p => {
+        if (p.product_code) productByCode.set(p.product_code, p);
+        if (p.barcodes && Array.isArray(p.barcodes)) {
+            p.barcodes.forEach(b => productByBarcode.set(b, p));
+        }
+    });
+
+    return orders.map(orderDoc => {
+        const orderObj = typeof orderDoc.toObject === 'function' ? orderDoc.toObject() : orderDoc;
+        if (Array.isArray(orderObj.items)) {
+            orderObj.items = orderObj.items.map(item => {
+                let match = null;
+                if (item.barcodes && Array.isArray(item.barcodes)) {
+                    for (const b of item.barcodes) {
+                        if (productByBarcode.has(b)) { match = productByBarcode.get(b); break; }
+                    }
+                } else if (item.barcode && productByBarcode.has(item.barcode)) {
+                    match = productByBarcode.get(item.barcode);
+                }
+                if (!match && item.product_code && productByCode.has(item.product_code)) {
+                    match = productByCode.get(item.product_code);
+                }
+
+                if (match) {
+                    return {
+                        ...item,
+                        image: match.image || item.image,
+                        description: match.description || item.description
+                    };
+                }
+                return item;
+            });
+        }
+        return orderObj;
+    });
+}
+
 // --- Funkcja pomocnicza do importu CSV ---
 const parseCsv = (buffer) => {
     return new Promise((resolve, reject) => {
@@ -1548,7 +1613,8 @@ app.get('/api/orders', authMiddleware, async (req, res) => {
                 query.date.$lte = endDate;
             }
         }
-        const orders = await Order.find(query).sort({ date: -1 });
+        const rawOrders = await Order.find(query).sort({ date: -1 });
+        const orders = await enrichOrdersWithProductDetails(rawOrders);
         res.status(200).json(orders);
     } catch (error) {
         res.status(500).json({ message: 'Błąd pobierania zamówień', error: error.message });
@@ -1558,7 +1624,8 @@ app.get('/api/orders/:id', authMiddleware, async (req, res) => {
     try {
         const order = await Order.findById(req.params.id);
         if (!order) return res.status(404).json({ message: 'Nie znaleziono zamówienia.' });
-        res.json(order);
+        const enriched = await enrichOrdersWithProductDetails([order]);
+        res.json(enriched[0]);
     } catch (error) {
         res.status(500).json({ message: 'Błąd pobierania zamówienia.' });
     }
