@@ -580,6 +580,81 @@ app.delete('/api/crm/contacts/:id', authMiddleware, async (req, res) => {
     }
 });
 
+// --- CRM / Admin: Pobieranie wszystkich kontaktów dla Administratora ---
+app.get('/api/admin/contacts', authMiddleware, adminMiddleware, async (req, res) => {
+    try {
+        const { search, status, accountManager } = req.query;
+        const query = {};
+
+        if (search) {
+            const searchRegex = new RegExp(search, 'i');
+            query.$or = [
+                { name: searchRegex },
+                { company: searchRegex },
+                { email: searchRegex },
+                { phone: searchRegex }
+            ];
+        }
+
+        if (status) {
+            query.status = status;
+        }
+
+        if (accountManager) {
+            query.accountManager = accountManager;
+        }
+
+        const contacts = await Contact.find(query).sort({ createdAt: -1 });
+        res.json(contacts);
+    } catch (error) {
+        res.status(500).json({ message: 'Błąd podczas pobierania kontaktów administratora.' });
+    }
+});
+
+// Admin: Dodawanie nowego kontaktu
+app.post('/api/admin/contacts', authMiddleware, adminMiddleware, async (req, res) => {
+    try {
+        const newContact = new Contact({
+            ...req.body,
+            ownerId: req.body.ownerId || req.user.userId
+        });
+        await newContact.save();
+        res.status(201).json(newContact);
+    } catch (error) {
+        res.status(400).json({ message: 'Błąd podczas tworzenia kontaktu.', error: error.message });
+    }
+});
+
+// Admin: Aktualizacja kontaktu
+app.put('/api/admin/contacts/:id', authMiddleware, adminMiddleware, async (req, res) => {
+    try {
+        const updatedContact = await Contact.findByIdAndUpdate(
+            req.params.id,
+            req.body,
+            { new: true }
+        );
+        if (!updatedContact) {
+            return res.status(404).json({ message: 'Nie znaleziono kontaktu.' });
+        }
+        res.json(updatedContact);
+    } catch (error) {
+        res.status(400).json({ message: 'Błąd podczas aktualizacji kontaktu.', error: error.message });
+    }
+});
+
+// Admin: Usuwanie kontaktu
+app.delete('/api/admin/contacts/:id', authMiddleware, adminMiddleware, async (req, res) => {
+    try {
+        const deletedContact = await Contact.findByIdAndDelete(req.params.id);
+        if (!deletedContact) {
+            return res.status(404).json({ message: 'Nie znaleziono kontaktu.' });
+        }
+        res.json({ message: 'Kontakt został usunięty.' });
+    } catch (error) {
+        res.status(500).json({ message: 'Błąd podczas usuwania kontaktu.' });
+    }
+});
+
 // Import kontaktów z pliku CSV (aktualizacja istniejących + dodawanie nowych bez duplikatów)
 app.post('/api/crm/import-contacts', authMiddleware, upload.single('contactsFile'), async (req, res) => {
     if (!req.file) {

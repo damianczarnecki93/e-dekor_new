@@ -1,5 +1,5 @@
 import React from 'react';
-import { Users, Package, Mail } from 'lucide-react';
+import { Users, Package, Mail, Contact } from 'lucide-react';
 
 const AdminView = ({ onNavigate }) => {
     return (
@@ -16,23 +16,32 @@ const AdminView = ({ onNavigate }) => {
                     </div>
                 </div>
                 <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md cursor-pointer hover:shadow-xl transition-shadow" onClick={() => onNavigate('admin-products')}>
-				<div className="flex items-center">
+                    <div className="flex items-center">
                         <Package className="w-10 h-10 text-green-500 mr-4"/>
                         <div>
                             <h2 className="text-2xl font-semibold">Zarządzanie Produktami</h2>
                             <p className="text-gray-500">Przeglądaj, importuj i synchronizuj bazę produktów.</p>
                         </div>
                     </div>
-				</div>
-				<div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md cursor-pointer hover:shadow-xl transition-shadow" onClick={() => onNavigate('admin-email')}>
-				<div className="flex items-center">
-						<Mail className="w-10 h-10 text-orange-500 mr-4"/>
-						<div>
-							<h2 className="text-2xl font-semibold">Ustawienia E-mail</h2>
-							<p className="text-gray-500">Zarządzaj konfiguracją wysyłki powiadomień.</p>
-						</div>
-					</div>
-				</div>
+                </div>
+                <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md cursor-pointer hover:shadow-xl transition-shadow" onClick={() => onNavigate('admin-contacts')}>
+                    <div className="flex items-center">
+                        <Contact className="w-10 h-10 text-blue-500 mr-4"/>
+                        <div>
+                            <h2 className="text-2xl font-semibold">Zarządzanie Kontaktami</h2>
+                            <p className="text-gray-500">Przeglądaj, dodawaj, edytuj i importuj kontakty CRM.</p>
+                        </div>
+                    </div>
+                </div>
+                <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md cursor-pointer hover:shadow-xl transition-shadow" onClick={() => onNavigate('admin-email')}>
+                    <div className="flex items-center">
+                        <Mail className="w-10 h-10 text-orange-500 mr-4"/>
+                        <div>
+                            <h2 className="text-2xl font-semibold">Ustawienia E-mail</h2>
+                            <p className="text-gray-500">Zarządzaj konfiguracją wysyłki powiadomień.</p>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     );

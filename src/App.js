@@ -22,6 +22,7 @@ import CrmView from './components/crm/CrmView';
 import AdminView from './components/admin/AdminView';
 import AdminUsersView from './components/admin/AdminUsersView';
 import AdminProductsView from './components/admin/AdminProductsView';
+import AdminContactsView from './components/admin/AdminContactsView';
 import AdminEmailConfigView from './components/admin/AdminEmailConfigView';
 import ShortageReportView from './components/reports/ShortageReportView';
 import LabelsView from './components/labels/LabelsView';
@@ -265,6 +266,7 @@ function App() {
                                 <Route path="/admin" element={<AdminView user={user} onNavigate={navigate} />} />
                                 <Route path="/admin-users" element={<AdminUsersView user={user} />} />
                                 <Route path="/admin-products" element={<AdminProductsView />} />
+                                <Route path="/admin-contacts" element={<AdminContactsView />} />
                                 <Route path="/shortage-report" element={<ShortageReportView />} />
                                 <Route path="/admin-email" element={<AdminEmailConfigView />} />
                                 <Route path="/labels" element={<LabelsView />} />

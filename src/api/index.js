@@ -364,6 +364,34 @@ unarchiveOrder: async (orderId) => {
         if (!response.ok) throw new Error('Błąd pobierania kontaktów');
         return await response.json();
     },
+    getAdminContacts: async (params = '') => {
+        const response = await fetchWithAuth(`/api/admin/contacts${params ? '?' + params : ''}`);
+        if (!response.ok) throw new Error('Błąd pobierania kontaktów administratora');
+        return await response.json();
+    },
+    addAdminContact: async (contactData) => {
+        const response = await fetchWithAuth(`/api/admin/contacts`, {
+            method: 'POST',
+            body: JSON.stringify(contactData)
+        });
+        if (!response.ok) throw new Error('Błąd dodawania kontaktu');
+        return await response.json();
+    },
+    updateAdminContact: async (contactId, contactData) => {
+        const response = await fetchWithAuth(`/api/admin/contacts/${contactId}`, {
+            method: 'PUT',
+            body: JSON.stringify(contactData)
+        });
+        if (!response.ok) throw new Error('Błąd aktualizacji kontaktu');
+        return await response.json();
+    },
+    deleteAdminContact: async (contactId) => {
+        const response = await fetchWithAuth(`/api/admin/contacts/${contactId}`, {
+            method: 'DELETE'
+        });
+        if (!response.ok) throw new Error('Błąd usuwania kontaktu');
+        return await response.json();
+    },
     addContact: async (contactData) => {
         const response = await fetchWithAuth(`/api/crm/contacts`, { method: 'POST', body: JSON.stringify(contactData) });
         if (!response.ok) throw new Error('Błąd dodawania kontaktu');
