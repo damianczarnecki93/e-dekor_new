@@ -916,39 +916,92 @@ app.post('/api/admin/upload-products', authMiddleware, adminMiddleware, upload.s
             const result = await Product.bulkWrite(bulkOps);
             res.status(200).json({ message: `Aktualizacja ilości zakończona. Zaktualizowano ${result.modifiedCount} produktów.` });
         } else if (mode === 'update_details') {
-            const setObjForProd = (p) => {
-                const setObj = {};
-                if (p.description !== undefined && p.description !== '') setObj.description = p.description;
-                if (p.image !== undefined && p.image !== '') setObj.image = p.image;
-                return setObj;
-            };
+            const decodedBuffer = req.file.buffer.toString('utf8');
+            const firstLine = decodedBuffer.split(/\r?\n/)[0] || '';
+            const separator = firstLine.includes(';') ? ';' : ',';
+
+            const rawRows = [];
+            const readableStream = Readable.from(decodedBuffer);
+
+            await new Promise((resolve, reject) => {
+                readableStream.pipe(csv({ headers: false, separator: separator }))
+                    .on('data', (row) => rawRows.push(row))
+                    .on('end', resolve)
+                    .on('error', reject);
+            });
+
+            if (rawRows.length === 0) {
+                return res.status(400).json({ message: 'Plik CSV jest pusty.' });
+            }
+
+            const firstRowValues = Object.values(rawRows[0]).map(v => String(v || '').trim().toLowerCase().replace(/^["']|["']$/g, ''));
+
+            let codeIdx = -1, barcodeIdx = -1, descIdx = -1, imageIdx = -1;
+
+            firstRowValues.forEach((val, idx) => {
+                if (val.includes('bar') || val.includes('ean')) {
+                    barcodeIdx = idx;
+                } else if (val.includes('code') || val.includes('kod')) {
+                    codeIdx = idx;
+                } else if (val.includes('desc') || val.includes('opis')) {
+                    descIdx = idx;
+                } else if (val.includes('img') || val.includes('image') || val.includes('zdjec') || val.includes('zdjęć') || val.includes('foto') || val.includes('url')) {
+                    imageIdx = idx;
+                }
+            });
+
+            const hasHeaderMatch = (codeIdx !== -1 || barcodeIdx !== -1 || descIdx !== -1 || imageIdx !== -1);
+            const startIdx = hasHeaderMatch ? 1 : 0;
+
+            if (!hasHeaderMatch) {
+                codeIdx = 0;
+                barcodeIdx = 1;
+                descIdx = 2;
+                imageIdx = 3;
+            }
 
             let updatedCount = 0;
-            for (const p of productsToImport) {
-                const setObj = setObjForProd(p);
-                if (Object.keys(setObj).length === 0 && !p.barcode) continue;
+            for (let i = startIdx; i < rawRows.length; i++) {
+                const rowObj = rawRows[i];
+                const cols = Object.values(rowObj).map(c => String(c || '').trim());
+                const p_code = codeIdx !== -1 && cols[codeIdx] ? cols[codeIdx] : '';
+                const p_barcode = barcodeIdx !== -1 && cols[barcodeIdx] ? cols[barcodeIdx] : '';
+                const p_desc = descIdx !== -1 && cols[descIdx] ? cols[descIdx] : '';
+                const p_image = imageIdx !== -1 && cols[imageIdx] ? cols[imageIdx] : '';
+
+                if (!p_code && !p_barcode) continue;
+
+                const setObj = {};
+                if (p_desc) setObj.description = p_desc;
+                if (p_image) setObj.image = p_image;
+
+                if (Object.keys(setObj).length === 0 && !p_barcode) continue;
 
                 const updateObj = {};
                 if (Object.keys(setObj).length > 0) updateObj.$set = setObj;
-                if (p.barcode) updateObj.$addToSet = { barcodes: p.barcode };
+                if (p_barcode) updateObj.$addToSet = { barcodes: p_barcode };
 
-                let result = null;
-                // 1. Domyślnie w pierwszej kolejności szukamy po EAN (barcode)
-                if (p.barcode) {
-                    result = await Product.updateOne({ barcodes: p.barcode }, updateObj);
+                let matchedInDb = false;
+
+                // 1. Domyślnie i w pierwszej kolejności aktualizuj po EAN (barcode)
+                if (p_barcode) {
+                    const resEan = await Product.updateMany({ barcodes: p_barcode }, updateObj);
+                    if (resEan.matchedCount > 0) {
+                        matchedInDb = true;
+                        updatedCount += resEan.modifiedCount;
+                    }
                 }
 
-                // 2. Jeśli nie znaleziono po EAN (lub brak EAN w pliku), szukamy po kodzie produktu
-                if ((!result || result.matchedCount === 0) && p.product_code) {
-                    result = await Product.updateOne({ product_code: p.product_code }, updateObj);
-                }
-
-                if (result && result.modifiedCount > 0) {
-                    updatedCount += result.modifiedCount;
+                // 2. Jeśli nie znaleziono po EAN, albo w wierszu podano kod produktu, spróbuj też po kodzie produktu
+                if (p_code) {
+                    const resCode = await Product.updateMany({ product_code: p_code }, updateObj);
+                    if (resCode.matchedCount > 0 && !matchedInDb) {
+                        updatedCount += resCode.modifiedCount;
+                    }
                 }
             }
 
-            res.status(200).json({ message: `Aktualizacja opisów i zdjęć zakończona. Zaktualizowano ${updatedCount} produktów.` });
+            return res.status(200).json({ message: `Aktualizacja opisów i zdjęć zakończona. Zaktualizowano ${updatedCount} produktów.` });
         }
     } catch (error) { res.status(500).json({ message: 'Wystąpił błąd serwera podczas importu.', error: error.message }); }
 });
