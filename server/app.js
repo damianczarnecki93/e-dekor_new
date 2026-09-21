@@ -918,20 +918,27 @@ app.post('/api/admin/upload-products', authMiddleware, adminMiddleware, upload.s
         } else if (mode === 'update_details') {
             const bulkOps = [];
             for (const p of productsToImport) {
-                const filter = {};
+                const orConditions = [];
                 if (p.product_code) {
-                    filter.product_code = p.product_code;
-                } else if (p.barcode) {
-                    filter.barcodes = p.barcode;
-                } else {
-                    continue;
+                    orConditions.push({ product_code: p.product_code });
                 }
+                if (p.barcode) {
+                    orConditions.push({ barcodes: p.barcode });
+                }
+                if (orConditions.length === 0) continue;
+
+                const filter = orConditions.length === 1 ? orConditions[0] : { $or: orConditions };
 
                 const setObj = {};
-                if (p.description !== undefined) setObj.description = p.description;
-                if (p.image !== undefined) setObj.image = p.image;
+                if (p.description !== undefined && p.description !== '') setObj.description = p.description;
+                if (p.image !== undefined && p.image !== '') setObj.image = p.image;
 
-                const updateObj = { $set: setObj };
+                if (Object.keys(setObj).length === 0 && !p.barcode) continue;
+
+                const updateObj = {};
+                if (Object.keys(setObj).length > 0) {
+                    updateObj.$set = setObj;
+                }
                 if (p.barcode) {
                     updateObj.$addToSet = { barcodes: p.barcode };
                 }
