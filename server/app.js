@@ -101,7 +101,9 @@ const productSchema = new mongoose.Schema({
     barcodes: { type: [String], index: true },
     price: Number,
     quantity: Number,
-    availability: Boolean
+    availability: Boolean,
+    description: String,
+    image: String
 });
 const Product = mongoose.models.Product || mongoose.model('Product', productSchema);
 
@@ -307,6 +309,71 @@ async function sendPushNotification(userIds, notificationType, title, body) {
     } catch (error) {
         console.error('Błąd podczas wysyłania powiadomień push:', error);
     }
+}
+
+// --- Funkcja pomocnicza do wzbogacania zamówień o zdjęcia i opisy z bazy produktów ---
+async function enrichOrdersWithProductDetails(orders) {
+    if (!orders || orders.length === 0) return orders;
+
+    const productCodes = new Set();
+    const barcodes = new Set();
+
+    orders.forEach(order => {
+        (order.items || []).forEach(item => {
+            if (item.product_code) productCodes.add(item.product_code);
+            if (item.barcodes && Array.isArray(item.barcodes)) {
+                item.barcodes.forEach(b => barcodes.add(b));
+            } else if (item.barcode) {
+                barcodes.add(item.barcode);
+            }
+        });
+    });
+
+    const products = await Product.find({
+        $or: [
+            { product_code: { $in: Array.from(productCodes) } },
+            { barcodes: { $in: Array.from(barcodes) } }
+        ]
+    }).lean();
+
+    const productByCode = new Map();
+    const productByBarcode = new Map();
+
+    products.forEach(p => {
+        if (p.product_code) productByCode.set(p.product_code, p);
+        if (p.barcodes && Array.isArray(p.barcodes)) {
+            p.barcodes.forEach(b => productByBarcode.set(b, p));
+        }
+    });
+
+    return orders.map(orderDoc => {
+        const orderObj = typeof orderDoc.toObject === 'function' ? orderDoc.toObject() : orderDoc;
+        if (Array.isArray(orderObj.items)) {
+            orderObj.items = orderObj.items.map(item => {
+                let match = null;
+                if (item.barcodes && Array.isArray(item.barcodes)) {
+                    for (const b of item.barcodes) {
+                        if (productByBarcode.has(b)) { match = productByBarcode.get(b); break; }
+                    }
+                } else if (item.barcode && productByBarcode.has(item.barcode)) {
+                    match = productByBarcode.get(item.barcode);
+                }
+                if (!match && item.product_code && productByCode.has(item.product_code)) {
+                    match = productByCode.get(item.product_code);
+                }
+
+                if (match) {
+                    return {
+                        ...item,
+                        image: match.image || item.image,
+                        description: match.description || item.description
+                    };
+                }
+                return item;
+            });
+        }
+        return orderObj;
+    });
 }
 
 // --- Funkcja pomocnicza do importu CSV ---
@@ -832,10 +899,99 @@ app.delete('/api/admin/users/:id', authMiddleware, adminMiddleware, async (req, 
 app.post('/api/admin/upload-products', authMiddleware, adminMiddleware, upload.single('productsFile'), async (req, res) => {
     if (!req.file) return res.status(400).json({ message: 'Nie przesłano pliku.' });
     const { mode } = req.query;
-    if (!['overwrite', 'append', 'update_quantity'].includes(mode)) {
+    if (!['overwrite', 'append', 'update_quantity', 'update_details'].includes(mode)) {
         return res.status(400).json({ message: 'Nieprawidłowy tryb importu.' });
     }
     try {
+        if (mode === 'update_details') {
+            const decodedBuffer = req.file.buffer.toString('utf8');
+            const firstLine = decodedBuffer.split(/\r?\n/)[0] || '';
+            const separator = firstLine.includes(';') ? ';' : ',';
+
+            const rawRows = [];
+            const readableStream = Readable.from(decodedBuffer);
+
+            await new Promise((resolve, reject) => {
+                readableStream.pipe(csv({ headers: false, separator: separator }))
+                    .on('data', (row) => rawRows.push(row))
+                    .on('end', resolve)
+                    .on('error', reject);
+            });
+
+            if (rawRows.length === 0) {
+                return res.status(400).json({ message: 'Plik CSV jest pusty.' });
+            }
+
+            const firstRowValues = Object.values(rawRows[0]).map(v => String(v || '').trim().toLowerCase().replace(/^["']|["']$/g, ''));
+
+            let codeIdx = -1, barcodeIdx = -1, descIdx = -1, imageIdx = -1;
+
+            firstRowValues.forEach((val, idx) => {
+                if (val.includes('bar') || val.includes('ean')) {
+                    barcodeIdx = idx;
+                } else if (val.includes('code') || val.includes('kod')) {
+                    codeIdx = idx;
+                } else if (val.includes('desc') || val.includes('opis')) {
+                    descIdx = idx;
+                } else if (val.includes('img') || val.includes('image') || val.includes('zdjec') || val.includes('zdjęć') || val.includes('foto') || val.includes('url')) {
+                    imageIdx = idx;
+                }
+            });
+
+            const hasHeaderMatch = (codeIdx !== -1 || barcodeIdx !== -1 || descIdx !== -1 || imageIdx !== -1);
+            const startIdx = hasHeaderMatch ? 1 : 0;
+
+            if (!hasHeaderMatch) {
+                codeIdx = 0;
+                barcodeIdx = 1;
+                descIdx = 2;
+                imageIdx = 3;
+            }
+
+            let updatedCount = 0;
+            for (let i = startIdx; i < rawRows.length; i++) {
+                const rowObj = rawRows[i];
+                const cols = Object.values(rowObj).map(c => String(c || '').trim().replace(/^["']|["']$/g, ''));
+                const p_code = codeIdx !== -1 && cols[codeIdx] ? cols[codeIdx] : '';
+                const p_barcode = barcodeIdx !== -1 && cols[barcodeIdx] ? cols[barcodeIdx] : '';
+                const p_desc = descIdx !== -1 && cols[descIdx] ? cols[descIdx] : '';
+                const p_image = imageIdx !== -1 && cols[imageIdx] ? cols[imageIdx] : '';
+
+                if (!p_code && !p_barcode) continue;
+
+                const setObj = {};
+                if (p_desc) setObj.description = p_desc;
+                if (p_image) setObj.image = p_image;
+
+                if (Object.keys(setObj).length === 0 && !p_barcode) continue;
+
+                const updateObj = {};
+                if (Object.keys(setObj).length > 0) updateObj.$set = setObj;
+                if (p_barcode) updateObj.$addToSet = { barcodes: p_barcode };
+
+                let matchedInDb = false;
+
+                // 1. Domyślnie i w pierwszej kolejności aktualizuj po EAN (barcode)
+                if (p_barcode) {
+                    const resEan = await Product.updateMany({ barcodes: p_barcode }, updateObj);
+                    if (resEan.matchedCount > 0) {
+                        matchedInDb = true;
+                        updatedCount += resEan.modifiedCount;
+                    }
+                }
+
+                // 2. Jeśli nie znaleziono po EAN, albo w wierszu podano kod produktu, spróbuj też po kodzie produktu
+                if (p_code) {
+                    const resCode = await Product.updateMany({ product_code: p_code }, updateObj);
+                    if (resCode.matchedCount > 0 && !matchedInDb) {
+                        updatedCount += resCode.modifiedCount;
+                    }
+                }
+            }
+
+            return res.status(200).json({ message: `Aktualizacja opisów i zdjęć zakończona. Zaktualizowano ${updatedCount} produktów.` });
+        }
+
         const productsToImport = [];
         const isUpdateQuantity = mode === 'update_quantity';
         const csvHeaders = isUpdateQuantity
@@ -1457,7 +1613,8 @@ app.get('/api/orders', authMiddleware, async (req, res) => {
                 query.date.$lte = endDate;
             }
         }
-        const orders = await Order.find(query).sort({ date: -1 });
+        const rawOrders = await Order.find(query).sort({ date: -1 });
+        const orders = await enrichOrdersWithProductDetails(rawOrders);
         res.status(200).json(orders);
     } catch (error) {
         res.status(500).json({ message: 'Błąd pobierania zamówień', error: error.message });
@@ -1467,7 +1624,8 @@ app.get('/api/orders/:id', authMiddleware, async (req, res) => {
     try {
         const order = await Order.findById(req.params.id);
         if (!order) return res.status(404).json({ message: 'Nie znaleziono zamówienia.' });
-        res.json(order);
+        const enriched = await enrichOrdersWithProductDetails([order]);
+        res.json(enriched[0]);
     } catch (error) {
         res.status(500).json({ message: 'Błąd pobierania zamówienia.' });
     }

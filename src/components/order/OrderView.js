@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { PlusCircle, FileText, FileDown, FileUp, CheckCircle2, Camera, X, ChevronsUpDown, ChevronUp, ChevronDown, Edit, MessageSquare, Trash2, StickyNote } from 'lucide-react';
+import { PlusCircle, FileText, FileDown, FileUp, CheckCircle2, Camera, X, ChevronsUpDown, ChevronUp, ChevronDown, Edit, MessageSquare, Trash2, StickyNote, Info } from 'lucide-react';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { api } from '../../api';
@@ -9,12 +9,15 @@ import { useSortableData } from '../../hooks/useSortableData';
 import Modal from '../common/Modal';
 import EditProductModal from '../modals/EditProductModal';
 import PinnedInputBar from './PinnedInputBar';
+import ProductImage from '../common/ProductImage';
+import ProductDetailsModal from '../common/ProductDetailsModal';
 
 const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder, onFlash }) => {
     const [order, setOrder] = useState(currentOrder);
     const [noteModal, setNoteModal] = useState({ isOpen: false, itemIndex: null, text: '', discount: 0, isDisplay: false, displayQuantity: 0 });
     const [generalNoteModal, setGeneralNoteModal] = useState(false);
     const [editModal, setEditModal] = useState({ isOpen: false, itemData: null });
+    const [selectedDetailProduct, setSelectedDetailProduct] = useState(null);
     const [isSaving, setIsSaving] = useState(false);
     const listEndRef = useRef(null);
     const printRef = useRef(null);
@@ -606,8 +609,9 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder, 
                                     ref={el => itemRefs.current[itemId] = el}
                                     className={`block lg:grid lg:grid-cols-12 gap-4 items-center p-4 lg:p-2 transition-colors duration-500 ${isHighlighted ? 'bg-green-100 dark:bg-green-900/40 ring-2 ring-green-500 shadow-lg scale-[1.02] lg:scale-100' : item.isCustom ? 'bg-yellow-50 dark:bg-yellow-900/20' : 'bg-white dark:bg-gray-800'} lg:bg-transparent lg:dark:bg-transparent mb-4 lg:mb-0 rounded-lg shadow-md lg:shadow-none`}
                                 >
-                                    <div className="hidden lg:flex lg:col-span-5 font-medium items-center">
-                                        {item.isSaved && <CheckCircle2 className="w-5 h-5 text-green-500 mr-2" />}
+                                    <div className="hidden lg:flex lg:col-span-5 font-medium items-center gap-3">
+                                        {item.isSaved && <CheckCircle2 className="w-5 h-5 text-green-500 flex-shrink-0" />}
+                                        <ProductImage src={item.image} alt={item.name} className="w-10 h-10" iconSize={18} />
                                         <div className="flex flex-col truncate">
                                             <div className="flex items-center gap-2">
                                                 <span className="truncate block">{item.name}</span>
@@ -632,14 +636,17 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder, 
                                         {((item.price * (1 - (item.itemDiscount || 0) / 100)) * (item.quantity || 0)).toFixed(2)}
                                     </div>
                                     <div className="w-full lg:hidden">
-                                        <div className="flex justify-between items-start mb-2">
-                                            <div>
-                                                <div className="flex items-center gap-2">
-                                                    <p className="font-bold text-lg">{item.name}</p>
-                                                    {item.isDisplay && <span className="bg-orange-500 text-white text-[10px] px-1.5 py-0.5 rounded font-bold">DISPLAY</span>}
+                                        <div className="flex justify-between items-start mb-2 gap-3">
+                                            <div className="flex gap-3 items-center min-w-0">
+                                                <ProductImage src={item.image} alt={item.name} className="w-12 h-12" iconSize={20} />
+                                                <div className="truncate">
+                                                    <div className="flex items-center gap-2">
+                                                        <p className="font-bold text-lg truncate">{item.name}</p>
+                                                        {item.isDisplay && <span className="bg-orange-500 text-white text-[10px] px-1.5 py-0.5 rounded font-bold">DISPLAY</span>}
+                                                    </div>
+                                                    <p className="text-sm text-gray-500">{item.product_code}</p>
+                                                    {item.note && <p className="text-xs text-gray-400 mt-1">Notatka: {item.note}</p>}
                                                 </div>
-                                                <p className="text-sm text-gray-500">{item.product_code}</p>
-                                                {item.note && <p className="text-xs text-gray-400 mt-1">Notatka: {item.note}</p>}
                                             </div>
                                             <p className="font-bold text-lg whitespace-nowrap pl-2">
                                                 {((item.price * (1 - (item.itemDiscount || 0) / 100)) * (item.quantity || 0)).toFixed(2)} PLN
@@ -664,6 +671,7 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder, 
                                         </div>
                                     </div>
                                     <div className="lg:col-span-2 flex justify-end lg:justify-center items-center mt-2 lg:mt-0">
+                                        <button onClick={() => setSelectedDetailProduct(item)} title="Szczegóły" className="p-2 text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400"><Info className="w-5 h-5"/></button>
                                         <button onClick={() => setEditModal({ isOpen: true, itemData: { ...item, originalIndex: index } })} className="p-2 text-gray-500 hover:text-yellow-500"><Edit className="w-5 h-5"/></button>
                                         <button onClick={() => openNoteModal(index, item)} className="p-2 text-gray-500 hover:text-blue-500"><MessageSquare className="w-5 h-5"/></button>
                                         <button onClick={() => removeItemFromOrder(index)} className="p-2 text-gray-500 hover:text-red-500"><Trash2 className="w-5 h-5"/></button>
@@ -797,6 +805,12 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder, 
                     }
                     setEditModal({ isOpen: false, itemData: null });
                 }}
+            />
+
+            <ProductDetailsModal
+                product={selectedDetailProduct}
+                isOpen={!!selectedDetailProduct}
+                onClose={() => setSelectedDetailProduct(null)}
             />
         </div>
     );
