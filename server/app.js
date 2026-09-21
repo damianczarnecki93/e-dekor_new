@@ -580,7 +580,7 @@ app.delete('/api/crm/contacts/:id', authMiddleware, async (req, res) => {
     }
 });
 
-// Import kontaktów z pliku CSV
+// Import kontaktów z pliku CSV (aktualizacja istniejących + dodawanie nowych bez duplikatów)
 app.post('/api/crm/import-contacts', authMiddleware, upload.single('contactsFile'), async (req, res) => {
     if (!req.file) {
         return res.status(400).json({ message: 'Nie przesłano pliku.' });
@@ -590,29 +590,81 @@ app.post('/api/crm/import-contacts', authMiddleware, upload.single('contactsFile
         const contactsToImport = [];
         const readableStream = Readable.from(req.file.buffer.toString('utf8'));
 
-        readableStream
-            .pipe(csv({ headers: ['name', 'company', 'email', 'phone', 'address', 'status', 'notes', 'accountManager'], skipLines: 1 }))
-            .on('data', (row) => {
-                if (row.name && row.name.trim()) {
-                    const contactData = {
-                        ...row,
-                        ownerId: req.user.userId
-                    };
-                    // POPRAWKA: Ustaw domyślny status, jeśli w pliku jest pusty
-                    if (!contactData.status || !['Lead', 'Klient', 'Utracony', 'Partner'].includes(contactData.status)) {
-                        contactData.status = 'Lead';
+        await new Promise((resolve, reject) => {
+            readableStream
+                .pipe(csv({ headers: ['name', 'company', 'email', 'phone', 'address', 'status', 'notes', 'accountManager'], skipLines: 1 }))
+                .on('data', (row) => {
+                    const trimmedName = row.name ? row.name.trim() : '';
+                    if (trimmedName) {
+                        const contactData = {
+                            name: trimmedName,
+                            company: row.company ? row.company.trim() : '',
+                            email: row.email ? row.email.trim() : '',
+                            phone: row.phone ? row.phone.trim() : '',
+                            address: row.address ? row.address.trim() : '',
+                            status: row.status ? row.status.trim() : '',
+                            notes: row.notes ? row.notes.trim() : '',
+                            accountManager: row.accountManager ? row.accountManager.trim() : '',
+                            ownerId: req.user.userId
+                        };
+                        if (!contactData.status || !['Lead', 'Klient', 'Utracony', 'Partner'].includes(contactData.status)) {
+                            contactData.status = 'Lead';
+                        }
+                        contactsToImport.push(contactData);
                     }
-                    contactsToImport.push(contactData);
-                }
-            })
-            .on('end', async () => {
-                if (contactsToImport.length > 0) {
-                    await Contact.insertMany(contactsToImport);
-                    res.status(201).json({ message: `Pomyślnie zaimportowano ${contactsToImport.length} kontaktów.` });
+                })
+                .on('end', resolve)
+                .on('error', reject);
+        });
+
+        if (contactsToImport.length === 0) {
+            return res.status(400).json({ message: 'Plik nie zawierał poprawnych danych do importu.' });
+        }
+
+        const bulkOps = contactsToImport.map(contact => {
+            const filterConditions = [];
+            if (contact.email) {
+                filterConditions.push({ email: contact.email });
+            }
+            if (contact.name) {
+                if (contact.company) {
+                    filterConditions.push({ name: contact.name, company: contact.company });
                 } else {
-                    res.status(400).json({ message: 'Plik nie zawierał poprawnych danych do importu.' });
+                    filterConditions.push({ name: contact.name });
                 }
-            });
+            }
+
+            return {
+                updateOne: {
+                    filter: {
+                        ownerId: req.user.userId,
+                        $or: filterConditions
+                    },
+                    update: {
+                        $set: {
+                            name: contact.name,
+                            company: contact.company,
+                            email: contact.email,
+                            phone: contact.phone,
+                            address: contact.address,
+                            status: contact.status,
+                            notes: contact.notes,
+                            accountManager: contact.accountManager,
+                            ownerId: req.user.userId
+                        }
+                    },
+                    upsert: true
+                }
+            };
+        });
+
+        const result = await Contact.bulkWrite(bulkOps);
+        const insertedCount = result.upsertedCount || 0;
+        const updatedCount = result.modifiedCount || 0;
+
+        res.status(200).json({
+            message: `Import zakończony sukcesem. Dodano ${insertedCount} nowych kontaktów, zaktualizowano ${updatedCount}.`
+        });
 
     } catch (error) {
         res.status(500).json({ message: 'Wystąpił błąd serwera podczas importu.', error: error.message });
