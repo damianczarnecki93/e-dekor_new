@@ -838,84 +838,7 @@ app.post('/api/admin/upload-products', authMiddleware, adminMiddleware, upload.s
         return res.status(400).json({ message: 'Nieprawidłowy tryb importu.' });
     }
     try {
-        const productsToImport = [];
-        const isUpdateQuantity = mode === 'update_quantity';
-        const isUpdateDetails = mode === 'update_details';
-        let csvHeaders;
-        if (isUpdateQuantity) {
-            csvHeaders = ['product_code', 'quantity'];
-        } else if (isUpdateDetails) {
-            csvHeaders = ['product_code', 'barcode', 'description', 'image'];
-        } else {
-            csvHeaders = ['barcode', 'name', 'price', 'product_code', 'quantity', 'availability'];
-        }
-
-        const decodedBuffer = req.file.buffer.toString('utf8');
-        const readableStream = Readable.from(decodedBuffer);
-
-        await new Promise((resolve, reject) => {
-            readableStream.pipe(csv({ headers: csvHeaders, separator: ';', skipLines: 1 }))
-                .on('data', (row) => {
-                    if (isUpdateQuantity) {
-                        if (!row.product_code) return;
-                        productsToImport.push({
-                            product_code: row.product_code.trim(),
-                            quantity: parseInt(row.quantity) || 0
-                        });
-                    } else if (isUpdateDetails) {
-                        if (!row.product_code && !row.barcode) return;
-                        productsToImport.push({
-                            product_code: row.product_code ? row.product_code.trim() : '',
-                            barcode: row.barcode ? row.barcode.trim() : '',
-                            description: row.description ? row.description.trim() : '',
-                            image: row.image ? row.image.trim() : ''
-                        });
-                    } else {
-                        if (!row.barcode) return;
-                        productsToImport.push({
-                            name: row.name || 'Brak nazwy',
-                            product_code: row.product_code || '',
-                            barcodes: [row.barcode],
-                            price: parseFloat((row.price || '0').replace(',', '.')) || 0,
-                            quantity: parseInt(row.quantity) || 0,
-                            availability: String(row.availability).toLowerCase() === 'true'
-                        });
-                    }
-                }).on('end', resolve).on('error', reject);
-        });
-
-        if (productsToImport.length === 0) return res.status(400).json({ message: 'Plik CSV jest pusty lub nie zawiera poprawnych danych.' });
-
-        if (mode === 'overwrite') {
-            await Product.deleteMany({});
-            await Product.insertMany(productsToImport);
-            res.status(200).json({ message: `Import zakończony. Nadpisano bazę ${productsToImport.length} produktami.` });
-        } else if (mode === 'append') {
-            const bulkOps = productsToImport.map(p => ({
-                updateOne: {
-                    filter: { product_code: p.product_code },
-                    update: {
-                        $set: { name: p.name, price: p.price, quantity: p.quantity, availability: p.availability },
-                        $addToSet: { barcodes: p.barcodes[0] }
-                    },
-                    upsert: true
-                }
-            }));
-            const result = await Product.bulkWrite(bulkOps);
-            res.status(200).json({ message: `Import zakończony. Zmodyfikowano ${result.modifiedCount + result.upsertedCount} produktów.` });
-        } else if (mode === 'update_quantity') {
-            const bulkOps = productsToImport.map(p => ({
-                updateOne: {
-                    filter: { product_code: p.product_code },
-                    update: {
-                        $set: { quantity: p.quantity, availability: p.quantity > 0 }
-                    },
-                    upsert: false
-                }
-            }));
-            const result = await Product.bulkWrite(bulkOps);
-            res.status(200).json({ message: `Aktualizacja ilości zakończona. Zaktualizowano ${result.modifiedCount} produktów.` });
-        } else if (mode === 'update_details') {
+        if (mode === 'update_details') {
             const decodedBuffer = req.file.buffer.toString('utf8');
             const firstLine = decodedBuffer.split(/\r?\n/)[0] || '';
             const separator = firstLine.includes(';') ? ';' : ',';
@@ -963,7 +886,7 @@ app.post('/api/admin/upload-products', authMiddleware, adminMiddleware, upload.s
             let updatedCount = 0;
             for (let i = startIdx; i < rawRows.length; i++) {
                 const rowObj = rawRows[i];
-                const cols = Object.values(rowObj).map(c => String(c || '').trim());
+                const cols = Object.values(rowObj).map(c => String(c || '').trim().replace(/^["']|["']$/g, ''));
                 const p_code = codeIdx !== -1 && cols[codeIdx] ? cols[codeIdx] : '';
                 const p_barcode = barcodeIdx !== -1 && cols[barcodeIdx] ? cols[barcodeIdx] : '';
                 const p_desc = descIdx !== -1 && cols[descIdx] ? cols[descIdx] : '';
@@ -1002,6 +925,71 @@ app.post('/api/admin/upload-products', authMiddleware, adminMiddleware, upload.s
             }
 
             return res.status(200).json({ message: `Aktualizacja opisów i zdjęć zakończona. Zaktualizowano ${updatedCount} produktów.` });
+        }
+
+        const productsToImport = [];
+        const isUpdateQuantity = mode === 'update_quantity';
+        const csvHeaders = isUpdateQuantity
+            ? ['product_code', 'quantity']
+            : ['barcode', 'name', 'price', 'product_code', 'quantity', 'availability'];
+
+        const decodedBuffer = req.file.buffer.toString('utf8');
+        const readableStream = Readable.from(decodedBuffer);
+
+        await new Promise((resolve, reject) => {
+            readableStream.pipe(csv({ headers: csvHeaders, separator: ';', skipLines: 1 }))
+                .on('data', (row) => {
+                    if (isUpdateQuantity) {
+                        if (!row.product_code) return;
+                        productsToImport.push({
+                            product_code: row.product_code.trim(),
+                            quantity: parseInt(row.quantity) || 0
+                        });
+                    } else {
+                        if (!row.barcode) return;
+                        productsToImport.push({
+                            name: row.name || 'Brak nazwy',
+                            product_code: row.product_code || '',
+                            barcodes: [row.barcode],
+                            price: parseFloat((row.price || '0').replace(',', '.')) || 0,
+                            quantity: parseInt(row.quantity) || 0,
+                            availability: String(row.availability).toLowerCase() === 'true'
+                        });
+                    }
+                }).on('end', resolve).on('error', reject);
+        });
+
+        if (productsToImport.length === 0) return res.status(400).json({ message: 'Plik CSV jest pusty lub nie zawiera poprawnych danych.' });
+
+        if (mode === 'overwrite') {
+            await Product.deleteMany({});
+            await Product.insertMany(productsToImport);
+            res.status(200).json({ message: `Import zakończony. Nadpisano bazę ${productsToImport.length} produktami.` });
+        } else if (mode === 'append') {
+            const bulkOps = productsToImport.map(p => ({
+                updateOne: {
+                    filter: { product_code: p.product_code },
+                    update: {
+                        $set: { name: p.name, price: p.price, quantity: p.quantity, availability: p.availability },
+                        $addToSet: { barcodes: p.barcodes[0] }
+                    },
+                    upsert: true
+                }
+            }));
+            const result = await Product.bulkWrite(bulkOps);
+            res.status(200).json({ message: `Import zakończony. Zmodyfikowano ${result.modifiedCount + result.upsertedCount} produktów.` });
+        } else if (mode === 'update_quantity') {
+            const bulkOps = productsToImport.map(p => ({
+                updateOne: {
+                    filter: { product_code: p.product_code },
+                    update: {
+                        $set: { quantity: p.quantity, availability: p.quantity > 0 }
+                    },
+                    upsert: false
+                }
+            }));
+            const result = await Product.bulkWrite(bulkOps);
+            res.status(200).json({ message: `Aktualizacja ilości zakończona. Zaktualizowano ${result.modifiedCount} produktów.` });
         }
     } catch (error) { res.status(500).json({ message: 'Wystąpił błąd serwera podczas importu.', error: error.message }); }
 });
