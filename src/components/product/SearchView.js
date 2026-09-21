@@ -1,13 +1,16 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Search } from 'lucide-react';
+import { Search, Info } from 'lucide-react';
 import { searchProducts } from '../../data/repository';
 import { useNotification } from '../../contexts/NotificationContext';
+import ProductImage from '../common/ProductImage';
+import ProductDetailsModal from '../common/ProductDetailsModal';
 
 const SearchView = ({ onProductSelect }) => {
     const [query, setQuery] = useState('');
     const [suggestions, setSuggestions] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
     const [filterByQuantity, setFilterByQuantity] = useState(false);
+    const [modalProduct, setModalProduct] = useState(null);
     const { showNotification } = useNotification();
     const searchInputRef = useRef(null);
 
@@ -56,6 +59,11 @@ const SearchView = ({ onProductSelect }) => {
         setSuggestions([]);
     };
 
+    const handleInfoClick = (e, product) => {
+        e.stopPropagation();
+        setModalProduct(product);
+    };
+
     return (
         <div className="relative max-w-2xl mx-auto">
             <div className="flex items-center bg-white dark:bg-gray-700 rounded-full shadow-lg">
@@ -81,15 +89,38 @@ const SearchView = ({ onProductSelect }) => {
             </div>
             {isLoading && <div className="absolute w-full mt-2 text-center text-gray-500">Szukam...</div>}
             {suggestions.length > 0 && (
-                <ul className="absolute z-10 w-full mt-2 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg shadow-xl">
+                <ul className="absolute z-10 w-full mt-2 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg shadow-xl max-h-80 overflow-y-auto">
                     {suggestions.map(p => (
-                        <li key={p._id} onClick={() => handleSelectSuggestion(p)} className="p-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 border-b dark:border-gray-600 last:border-b-0">
-                            <p className="font-semibold text-gray-800 dark:text-gray-100">{p.name}</p>
-                            <p className="text-sm text-gray-500 dark:text-gray-400">{p.product_code}</p>
+                        <li
+                            key={p._id}
+                            onClick={() => handleSelectSuggestion(p)}
+                            className="p-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 border-b dark:border-gray-600 last:border-b-0 flex items-center justify-between gap-3"
+                        >
+                            <div className="flex items-center gap-3 min-w-0">
+                                <ProductImage src={p.image} alt={p.name} className="w-10 h-10" iconSize={18} />
+                                <div className="truncate">
+                                    <p className="font-semibold text-gray-800 dark:text-gray-100 truncate">{p.name}</p>
+                                    <p className="text-sm text-gray-500 dark:text-gray-400">{p.product_code}</p>
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={(e) => handleInfoClick(e, p)}
+                                title="Szczegóły produktu"
+                                className="p-1.5 text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 rounded-full hover:bg-gray-200 dark:hover:bg-gray-500 flex-shrink-0"
+                            >
+                                <Info className="w-5 h-5" />
+                            </button>
                         </li>
                     ))}
                 </ul>
             )}
+
+            <ProductDetailsModal
+                product={modalProduct}
+                isOpen={!!modalProduct}
+                onClose={() => setModalProduct(null)}
+            />
         </div>
     );
 };

@@ -101,7 +101,9 @@ const productSchema = new mongoose.Schema({
     barcodes: { type: [String], index: true },
     price: Number,
     quantity: Number,
-    availability: Boolean
+    availability: Boolean,
+    description: String,
+    image: String
 });
 const Product = mongoose.models.Product || mongoose.model('Product', productSchema);
 
@@ -832,15 +834,21 @@ app.delete('/api/admin/users/:id', authMiddleware, adminMiddleware, async (req, 
 app.post('/api/admin/upload-products', authMiddleware, adminMiddleware, upload.single('productsFile'), async (req, res) => {
     if (!req.file) return res.status(400).json({ message: 'Nie przesłano pliku.' });
     const { mode } = req.query;
-    if (!['overwrite', 'append', 'update_quantity'].includes(mode)) {
+    if (!['overwrite', 'append', 'update_quantity', 'update_details'].includes(mode)) {
         return res.status(400).json({ message: 'Nieprawidłowy tryb importu.' });
     }
     try {
         const productsToImport = [];
         const isUpdateQuantity = mode === 'update_quantity';
-        const csvHeaders = isUpdateQuantity
-            ? ['product_code', 'quantity']
-            : ['barcode', 'name', 'price', 'product_code', 'quantity', 'availability'];
+        const isUpdateDetails = mode === 'update_details';
+        let csvHeaders;
+        if (isUpdateQuantity) {
+            csvHeaders = ['product_code', 'quantity'];
+        } else if (isUpdateDetails) {
+            csvHeaders = ['product_code', 'barcode', 'description', 'image'];
+        } else {
+            csvHeaders = ['barcode', 'name', 'price', 'product_code', 'quantity', 'availability'];
+        }
 
         const decodedBuffer = req.file.buffer.toString('utf8');
         const readableStream = Readable.from(decodedBuffer);
@@ -853,6 +861,14 @@ app.post('/api/admin/upload-products', authMiddleware, adminMiddleware, upload.s
                         productsToImport.push({
                             product_code: row.product_code.trim(),
                             quantity: parseInt(row.quantity) || 0
+                        });
+                    } else if (isUpdateDetails) {
+                        if (!row.product_code && !row.barcode) return;
+                        productsToImport.push({
+                            product_code: row.product_code ? row.product_code.trim() : '',
+                            barcode: row.barcode ? row.barcode.trim() : '',
+                            description: row.description ? row.description.trim() : '',
+                            image: row.image ? row.image.trim() : ''
                         });
                     } else {
                         if (!row.barcode) return;
@@ -899,6 +915,41 @@ app.post('/api/admin/upload-products', authMiddleware, adminMiddleware, upload.s
             }));
             const result = await Product.bulkWrite(bulkOps);
             res.status(200).json({ message: `Aktualizacja ilości zakończona. Zaktualizowano ${result.modifiedCount} produktów.` });
+        } else if (mode === 'update_details') {
+            const bulkOps = [];
+            for (const p of productsToImport) {
+                const filter = {};
+                if (p.product_code) {
+                    filter.product_code = p.product_code;
+                } else if (p.barcode) {
+                    filter.barcodes = p.barcode;
+                } else {
+                    continue;
+                }
+
+                const setObj = {};
+                if (p.description !== undefined) setObj.description = p.description;
+                if (p.image !== undefined) setObj.image = p.image;
+
+                const updateObj = { $set: setObj };
+                if (p.barcode) {
+                    updateObj.$addToSet = { barcodes: p.barcode };
+                }
+
+                bulkOps.push({
+                    updateOne: {
+                        filter: filter,
+                        update: updateObj,
+                        upsert: false
+                    }
+                });
+            }
+            if (bulkOps.length > 0) {
+                const result = await Product.bulkWrite(bulkOps);
+                res.status(200).json({ message: `Aktualizacja opisów i zdjęć zakończona. Zaktualizowano ${result.modifiedCount} produktów.` });
+            } else {
+                res.status(200).json({ message: `Brak produktów do zaktualizowania.` });
+            }
         }
     } catch (error) { res.status(500).json({ message: 'Wystąpił błąd serwera podczas importu.', error: error.message }); }
 });

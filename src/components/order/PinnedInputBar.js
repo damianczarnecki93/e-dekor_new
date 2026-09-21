@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Save } from 'lucide-react';
-import { api } from '../../api';
+import { Save, Info } from 'lucide-react';
 import { searchProducts } from '../../data/repository';
 import { useNotification } from '../../contexts/NotificationContext';
 import { useBarcodeScanner } from '../../hooks/useBarcodeScanner';
 import Modal from '../common/Modal';
 import CustomProductForm from './CustomProductForm';
+import ProductImage from '../common/ProductImage';
+import ProductDetailsModal from '../common/ProductDetailsModal';
 
 const PinnedInputBar = ({ onProductAdd, onSave, isDirty, currentItems, totalValue, totalValueWithDiscount, discount, onDiscountChange, onFlash }) => {
     const [query, setQuery] = useState('');
@@ -13,6 +14,7 @@ const PinnedInputBar = ({ onProductAdd, onSave, isDirty, currentItems, totalValu
     const [suggestions, setSuggestions] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
     const [inputMode, setInputMode] = useState('none');
+    const [detailProductModal, setDetailProductModal] = useState(null);
     const { showNotification } = useNotification();
     const inputRef = useRef(null);
     const [customProductModal, setCustomProductModal] = useState({ isOpen: false, ean: '' });
@@ -81,7 +83,7 @@ const PinnedInputBar = ({ onProductAdd, onSave, isDirty, currentItems, totalValu
 
     useBarcodeScanner(handleGlobalScan);
 
-	 const handleQueryChange = (e) => {
+    const handleQueryChange = (e) => {
         const value = e.target.value;
         setQuery(value);
     };
@@ -144,6 +146,11 @@ const PinnedInputBar = ({ onProductAdd, onSave, isDirty, currentItems, totalValu
         inputRef.current?.focus();
     };
 
+    const handleInfoClick = (e, product) => {
+        e.stopPropagation();
+        setDetailProductModal(product);
+    };
+
     return (
         <>
             <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t dark:border-gray-700 shadow-[0_-4px_10px_rgba(0,0,0,0.1)] z-40 p-4 px-6 md:px-12">
@@ -151,9 +158,26 @@ const PinnedInputBar = ({ onProductAdd, onSave, isDirty, currentItems, totalValu
                     {suggestions.length > 0 && (
                         <ul className="absolute bottom-full mb-2 w-full md:max-w-xl bg-white dark:bg-gray-700 border rounded-lg shadow-xl max-h-60 overflow-y-auto z-30">
                             {suggestions.map(p => (
-                                <li key={p._id} onClick={() => handleAdd(p)} className="p-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 border-b last:border-b-0">
-                                    <p className="font-semibold">{p.name}</p>
-                                    <p className="text-sm text-gray-500">{p.product_code}</p>
+                                <li
+                                    key={p._id}
+                                    onClick={() => handleAdd(p)}
+                                    className="p-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 border-b last:border-b-0 flex items-center justify-between gap-3"
+                                >
+                                    <div className="flex items-center gap-3 min-w-0">
+                                        <ProductImage src={p.image} alt={p.name} className="w-10 h-10" iconSize={18} />
+                                        <div className="truncate">
+                                            <p className="font-semibold truncate">{p.name}</p>
+                                            <p className="text-sm text-gray-500">{p.product_code}</p>
+                                        </div>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={(e) => handleInfoClick(e, p)}
+                                        title="Szczegóły"
+                                        className="p-1.5 text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 rounded-full hover:bg-gray-200 dark:hover:bg-gray-500 flex-shrink-0"
+                                    >
+                                        <Info className="w-5 h-5" />
+                                    </button>
                                 </li>
                             ))}
                         </ul>
@@ -228,6 +252,12 @@ const PinnedInputBar = ({ onProductAdd, onSave, isDirty, currentItems, totalValu
                     onSkip={handleCustomSkip}
                 />
             </Modal>
+
+            <ProductDetailsModal
+                product={detailProductModal}
+                isOpen={!!detailProductModal}
+                onClose={() => setDetailProductModal(null)}
+            />
         </>
     );
 };
