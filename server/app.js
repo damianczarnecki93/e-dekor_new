@@ -916,47 +916,39 @@ app.post('/api/admin/upload-products', authMiddleware, adminMiddleware, upload.s
             const result = await Product.bulkWrite(bulkOps);
             res.status(200).json({ message: `Aktualizacja ilości zakończona. Zaktualizowano ${result.modifiedCount} produktów.` });
         } else if (mode === 'update_details') {
-            const bulkOps = [];
-            for (const p of productsToImport) {
-                const orConditions = [];
-                if (p.product_code) {
-                    orConditions.push({ product_code: p.product_code });
-                }
-                if (p.barcode) {
-                    orConditions.push({ barcodes: p.barcode });
-                }
-                if (orConditions.length === 0) continue;
-
-                const filter = orConditions.length === 1 ? orConditions[0] : { $or: orConditions };
-
+            const setObjForProd = (p) => {
                 const setObj = {};
                 if (p.description !== undefined && p.description !== '') setObj.description = p.description;
                 if (p.image !== undefined && p.image !== '') setObj.image = p.image;
+                return setObj;
+            };
 
+            let updatedCount = 0;
+            for (const p of productsToImport) {
+                const setObj = setObjForProd(p);
                 if (Object.keys(setObj).length === 0 && !p.barcode) continue;
 
                 const updateObj = {};
-                if (Object.keys(setObj).length > 0) {
-                    updateObj.$set = setObj;
-                }
+                if (Object.keys(setObj).length > 0) updateObj.$set = setObj;
+                if (p.barcode) updateObj.$addToSet = { barcodes: p.barcode };
+
+                let result = null;
+                // 1. Domyślnie w pierwszej kolejności szukamy po EAN (barcode)
                 if (p.barcode) {
-                    updateObj.$addToSet = { barcodes: p.barcode };
+                    result = await Product.updateOne({ barcodes: p.barcode }, updateObj);
                 }
 
-                bulkOps.push({
-                    updateOne: {
-                        filter: filter,
-                        update: updateObj,
-                        upsert: false
-                    }
-                });
+                // 2. Jeśli nie znaleziono po EAN (lub brak EAN w pliku), szukamy po kodzie produktu
+                if ((!result || result.matchedCount === 0) && p.product_code) {
+                    result = await Product.updateOne({ product_code: p.product_code }, updateObj);
+                }
+
+                if (result && result.modifiedCount > 0) {
+                    updatedCount += result.modifiedCount;
+                }
             }
-            if (bulkOps.length > 0) {
-                const result = await Product.bulkWrite(bulkOps);
-                res.status(200).json({ message: `Aktualizacja opisów i zdjęć zakończona. Zaktualizowano ${result.modifiedCount} produktów.` });
-            } else {
-                res.status(200).json({ message: `Brak produktów do zaktualizowania.` });
-            }
+
+            res.status(200).json({ message: `Aktualizacja opisów i zdjęć zakończona. Zaktualizowano ${updatedCount} produktów.` });
         }
     } catch (error) { res.status(500).json({ message: 'Wystąpił błąd serwera podczas importu.', error: error.message }); }
 });
