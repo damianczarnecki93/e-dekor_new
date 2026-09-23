@@ -11,7 +11,6 @@ import Topbar from './components/layout/Topbar';
 import DashboardView from './components/dashboard/DashboardView';
 import MainSearchView from './components/product/MainSearchView';
 import OrderView from './components/order/OrderView';
-import TilesOrderView from './components/order/TilesOrderView';
 import OrdersListView from './components/order/OrdersListView';
 import PickingView from './components/picking/PickingView';
 import InventoryView from './components/inventory/InventoryView';
@@ -254,7 +253,6 @@ function App() {
                                 <Route path="/dashboard" element={<DashboardView user={user} onNewOrder={handleNewOrder} />} />
                                 <Route path="/search" element={<MainSearchView />} />
                                 <Route path="/order" element={<OrderView currentOrder={currentOrder} setCurrentOrder={setCurrentOrder} user={user} setDirty={setIsDirty} onNewOrder={handleNewOrder} onFlash={triggerFlash} />} />
-                                <Route path="/order-tiles" element={<TilesOrderView currentOrder={currentOrder} setCurrentOrder={setCurrentOrder} user={user} setDirty={setIsDirty} />} />
                                 <Route path="/orders" element={<OrdersListView onEdit={loadOrderForEditing} />} />
                                 <Route path="/picking" element={<PickingView />} />
                                 <Route path="/inventory" element={<InventoryView user={user} onNavigate={navigate} isDirty={isDirty} setIsDirty={setIsDirty} />} />
