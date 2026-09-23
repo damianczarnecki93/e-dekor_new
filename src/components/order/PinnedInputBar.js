@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Save, Info } from 'lucide-react';
+import { Save, Info, Palette } from 'lucide-react';
 import { searchProducts } from '../../data/repository';
 import { useNotification } from '../../contexts/NotificationContext';
 import { useBarcodeScanner } from '../../hooks/useBarcodeScanner';
@@ -7,6 +7,7 @@ import Modal from '../common/Modal';
 import CustomProductForm from './CustomProductForm';
 import ProductImage from '../common/ProductImage';
 import ProductDetailsModal from '../common/ProductDetailsModal';
+import FeltSelectionModal from '../modals/FeltSelectionModal';
 
 const PinnedInputBar = ({ onProductAdd, onSave, isDirty, currentItems, totalValue, totalValueWithDiscount, discount, onDiscountChange, onFlash }) => {
     const [query, setQuery] = useState('');
@@ -15,9 +16,12 @@ const PinnedInputBar = ({ onProductAdd, onSave, isDirty, currentItems, totalValu
     const [isLoading, setIsLoading] = useState(false);
     const [inputMode, setInputMode] = useState('none');
     const [detailProductModal, setDetailProductModal] = useState(null);
+    const [isFeltModalOpen, setIsFeltModalOpen] = useState(false);
     const { showNotification } = useNotification();
     const inputRef = useRef(null);
     const [customProductModal, setCustomProductModal] = useState({ isOpen: false, ean: '' });
+
+    const showFeltOption = query.toLowerCase().includes('filc');
 
     useEffect(() => {
         if (query.length < 2) {
@@ -52,6 +56,17 @@ const PinnedInputBar = ({ onProductAdd, onSave, isDirty, currentItems, totalValu
         setQuantity(1);
         inputRef.current?.focus();
     }, [quantity, onProductAdd, showNotification, onFlash]);
+
+    const handleFeltAddProducts = useCallback((itemsToAdd) => {
+        itemsToAdd.forEach(({ product, quantity }) => {
+            onProductAdd(product, quantity);
+        });
+        onFlash?.('success');
+        setQuery('');
+        setSuggestions([]);
+        setIsFeltModalOpen(false);
+        inputRef.current?.focus();
+    }, [onProductAdd, onFlash]);
 
     const handleGlobalScan = useCallback(async (code) => {
         setIsLoading(true);
@@ -155,13 +170,30 @@ const PinnedInputBar = ({ onProductAdd, onSave, isDirty, currentItems, totalValu
         <>
             <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t dark:border-gray-700 shadow-[0_-4px_10px_rgba(0,0,0,0.1)] z-40 p-4 px-6 md:px-12">
                 <div className="w-full relative">
-                    {suggestions.length > 0 && (
-                        <ul className="absolute bottom-full mb-2 w-full md:max-w-xl bg-white dark:bg-gray-700 border rounded-lg shadow-xl max-h-60 overflow-y-auto z-30">
+                    {(suggestions.length > 0 || showFeltOption) && (
+                        <ul className="absolute bottom-full mb-2 w-full md:max-w-xl bg-white dark:bg-gray-700 border dark:border-gray-600 rounded-lg shadow-xl max-h-72 overflow-y-auto z-30 divide-y dark:divide-gray-600">
+                            {showFeltOption && (
+                                <li
+                                    onClick={() => setIsFeltModalOpen(true)}
+                                    className="p-3 cursor-pointer bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-950 dark:to-purple-950 hover:bg-indigo-100 dark:hover:bg-indigo-900 flex items-center justify-between gap-3"
+                                >
+                                    <div className="flex items-center gap-3 min-w-0">
+                                        <div className="p-2 bg-indigo-600 text-white rounded-lg flex-shrink-0">
+                                            <Palette className="w-5 h-5" />
+                                        </div>
+                                        <div className="truncate">
+                                            <p className="font-bold text-indigo-900 dark:text-indigo-200 truncate">Otwórz paletę kolorów filców</p>
+                                            <p className="text-xs text-indigo-600 dark:text-indigo-400">Tabela z kolorami, kodami i ilością</p>
+                                        </div>
+                                    </div>
+                                    <span className="text-xs bg-indigo-600 text-white px-2.5 py-1 rounded-md font-semibold flex-shrink-0">Paleta</span>
+                                </li>
+                            )}
                             {suggestions.map(p => (
                                 <li
                                     key={p._id}
                                     onClick={() => handleAdd(p)}
-                                    className="p-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 border-b last:border-b-0 flex items-center justify-between gap-3"
+                                    className="p-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 flex items-center justify-between gap-3"
                                 >
                                     <div className="flex items-center gap-3 min-w-0">
                                         <ProductImage src={p.image} alt={p.name} className="w-10 h-10" iconSize={18} />
@@ -257,6 +289,13 @@ const PinnedInputBar = ({ onProductAdd, onSave, isDirty, currentItems, totalValu
                 product={detailProductModal}
                 isOpen={!!detailProductModal}
                 onClose={() => setDetailProductModal(null)}
+            />
+
+            <FeltSelectionModal
+                isOpen={isFeltModalOpen}
+                onClose={() => setIsFeltModalOpen(false)}
+                onAddProducts={handleFeltAddProducts}
+                readOnly={false}
             />
         </>
     );
