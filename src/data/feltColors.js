@@ -52,22 +52,59 @@ export const FELT_COLOR_LIST = [
  */
 export async function getFeltProductsWithDetails() {
     const codes = FELT_COLOR_LIST.map(f => f.code);
-    let dbProducts = [];
+    const productMap = new Map();
+
     try {
-        dbProducts = await db.products.where('product_code').anyOf(codes).toArray();
+        // 1. Direct index lookup by product_code
+        const dbProducts = await db.products.where('product_code').anyOf(codes).toArray();
+        dbProducts.forEach(p => {
+            if (p.product_code) {
+                productMap.set(p.product_code.trim().toUpperCase(), p);
+            }
+        });
+
+        // 2. Fallback search for missing items in Dexie
+        const missingCodes = codes.filter(c => !productMap.has(c.toUpperCase()));
+        if (missingCodes.length > 0) {
+            const allProducts = await db.products.filter(p => {
+                if (!p.product_code) return false;
+                const pCode = p.product_code.trim().toUpperCase();
+                return missingCodes.some(m => pCode === m.toUpperCase() || pCode.includes(m.toUpperCase()));
+            }).toArray();
+
+            allProducts.forEach(p => {
+                const matchedCode = codes.find(c => p.product_code && p.product_code.trim().toUpperCase() === c.toUpperCase());
+                if (matchedCode && !productMap.has(matchedCode.toUpperCase())) {
+                    productMap.set(matchedCode.toUpperCase(), p);
+                }
+            });
+        }
     } catch (e) {
         console.warn('Could not fetch felt products from local db:', e);
     }
 
-    const productMap = new Map();
-    dbProducts.forEach(p => {
-        if (p.product_code) {
-            productMap.set(p.product_code, p);
+    // 3. Fallback online search if online and still missing items
+    const stillMissing = codes.filter(c => !productMap.has(c.toUpperCase()));
+    if (stillMissing.length > 0 && navigator.onLine) {
+        try {
+            const apiResults = await api.searchProducts('632-');
+            if (Array.isArray(apiResults)) {
+                apiResults.forEach(p => {
+                    if (p.product_code) {
+                        const codeKey = p.product_code.trim().toUpperCase();
+                        if (!productMap.has(codeKey)) {
+                            productMap.set(codeKey, p);
+                        }
+                    }
+                });
+            }
+        } catch (e) {
+            console.warn('Could not fetch felt products from API:', e);
         }
-    });
+    }
 
     return FELT_COLOR_LIST.map(item => {
-        const found = productMap.get(item.code);
+        const found = productMap.get(item.code.toUpperCase());
         return {
             code: item.code,
             hex: item.hex,
