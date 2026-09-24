@@ -252,6 +252,22 @@ unarchiveOrder: async (orderId) => {
         if (!response.ok) throw new Error('Błąd pobierania produktów');
         return await response.json();
     },
+    getProductDiscount: async () => {
+        const response = await fetchWithAuth(`/api/settings/product-discount`);
+        if (!response.ok) throw new Error('Błąd pobierania domyślnego rabatu');
+        return await response.json();
+    },
+    updateProductDiscount: async (discount) => {
+        const response = await fetchWithAuth(`/api/admin/product-discount`, {
+            method: 'POST',
+            body: JSON.stringify({ discount })
+        });
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || 'Błąd zapisywania rabatu');
+        }
+        return await response.json();
+    },
     setUserGoal: async (goal) => {
         const response = await fetchWithAuth(`/api/user/goal`, { method: 'POST', body: JSON.stringify({ goal }) });
         if (!response.ok) throw new Error('Błąd ustawiania celu');
