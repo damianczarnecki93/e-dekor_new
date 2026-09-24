@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Upload, GitMerge, Info } from 'lucide-react';
+import { Upload, GitMerge, Info, Percent } from 'lucide-react';
 import { api } from '../../api';
 import { useNotification } from '../../contexts/NotificationContext';
 import ProductImage from '../common/ProductImage';
 import ProductDetailsModal from '../common/ProductDetailsModal';
+import { synchronizeData } from '../../data/synchronization';
 
 const AdminProductsView = () => {
     const [products, setProducts] = useState([]);
@@ -17,6 +18,22 @@ const AdminProductsView = () => {
     const [isMerging, setIsMerging] = useState(false);
     const [importMode, setImportMode] = useState('append');
     const [selectedProductModal, setSelectedProductModal] = useState(null);
+    const [discount, setDiscount] = useState('0');
+    const [isSavingDiscount, setIsSavingDiscount] = useState(false);
+
+    useEffect(() => {
+        const fetchDiscount = async () => {
+            try {
+                const data = await api.getProductDiscount();
+                if (data && data.discount !== undefined) {
+                    setDiscount(String(data.discount));
+                }
+            } catch (error) {
+                console.error("Błąd pobierania rabatu:", error);
+            }
+        };
+        fetchDiscount();
+    }, []);
 
     const fetchProducts = useCallback(async () => {
         setIsLoading(true);
@@ -67,10 +84,63 @@ const AdminProductsView = () => {
         }
     };
 
+    const handleSaveDiscount = async (e) => {
+        e.preventDefault();
+        setIsSavingDiscount(true);
+        try {
+            const val = parseFloat(discount) || 0;
+            const result = await api.updateProductDiscount(val);
+            showNotification(result.message, 'success');
+            fetchProducts();
+            synchronizeData(() => {}).catch(() => {});
+        } catch (error) {
+            showNotification(error.message, 'error');
+        } finally {
+            setIsSavingDiscount(false);
+        }
+    };
+
     return (
         <div className="p-4 md:p-8">
             <h2 className="text-2xl font-semibold mb-4">Zarządzanie Produktami</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+                <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+                    <h3 className="text-lg font-medium mb-2 flex items-center">
+                        <Percent className="w-5 h-5 mr-2 text-indigo-500" />
+                        Domyślny rabat cennika
+                    </h3>
+                    <p className="text-sm text-gray-500 mb-4">
+                        Wprowadź domyślny rabat w % dla całego cennika produktów. Wartości dodatnie obniżają cenę, ujemne nakładają narzut, a 0 przywraca cennik oryginalny.
+                    </p>
+                    <form onSubmit={handleSaveDiscount} className="space-y-4">
+                        <div>
+                            <label htmlFor="price-discount-input" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                Rabat na cennik (%)
+                            </label>
+                            <div className="relative rounded-md shadow-sm">
+                                <input
+                                    id="price-discount-input"
+                                    type="number"
+                                    step="0.01"
+                                    value={discount}
+                                    onChange={(e) => setDiscount(e.target.value)}
+                                    placeholder="0"
+                                    className="w-full p-2.5 pr-8 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 focus:ring-2 focus:ring-indigo-500"
+                                />
+                                <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-gray-500 font-bold">
+                                    %
+                                </div>
+                            </div>
+                        </div>
+                        <button
+                            type="submit"
+                            disabled={isSavingDiscount}
+                            className="w-full px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:bg-indigo-400 font-medium transition-colors"
+                        >
+                            {isSavingDiscount ? 'Zapisywanie...' : 'Zapisz rabat'}
+                        </button>
+                    </form>
+                </div>
                 <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
                     <h3 className="text-lg font-medium mb-2">Synchronizuj bazę danych</h3>
                     <p className="text-sm text-gray-500 mb-1">Kolumny (Pełny): barcode, name, price, product_code, quantity, availability</p>

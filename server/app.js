@@ -204,6 +204,36 @@ const emailConfigSchema = new mongoose.Schema({
 });
 const EmailConfig = mongoose.models.EmailConfig || mongoose.model('EmailConfig', emailConfigSchema);
 
+const settingsSchema = new mongoose.Schema({
+    key: { type: String, required: true, unique: true },
+    value: mongoose.Schema.Types.Mixed
+});
+const Settings = mongoose.models.Settings || mongoose.model('Settings', settingsSchema);
+
+async function getProductDiscount() {
+    try {
+        const setting = await Settings.findOne({ key: 'productDiscount' }).lean();
+        return setting && typeof setting.value === 'number' ? setting.value : 0;
+    } catch (e) {
+        return 0;
+    }
+}
+
+function applyDiscountToPrice(price, discountPercent) {
+    if (price === null || price === undefined || isNaN(price)) return 0;
+    const numPrice = Number(price);
+    if (!discountPercent || isNaN(discountPercent)) return numPrice;
+    const factor = 1 - (Number(discountPercent) / 100);
+    const discounted = numPrice * factor;
+    return Number(Math.max(0, discounted).toFixed(2));
+}
+
+function applyDiscountToProduct(product, discountPercent) {
+    if (!product) return product;
+    const price = applyDiscountToPrice(product.price, discountPercent);
+    return { ...product, price };
+}
+
 // --- Middleware ---
 const authMiddleware = (req, res, next) => {
     const authHeader = req.headers.authorization;
@@ -943,6 +973,33 @@ app.post('/api/admin/email-config', authMiddleware, adminMiddleware, async (req,
     }
 });
 
+app.get('/api/settings/product-discount', authMiddleware, async (req, res) => {
+    try {
+        const discount = await getProductDiscount();
+        res.json({ discount });
+    } catch (error) {
+        res.status(500).json({ message: 'Błąd pobierania domyślnego rabatu.' });
+    }
+});
+
+app.post('/api/admin/product-discount', authMiddleware, adminMiddleware, async (req, res) => {
+    try {
+        const { discount } = req.body;
+        const discountNum = parseFloat(discount);
+        if (isNaN(discountNum)) {
+            return res.status(400).json({ message: 'Wartość rabatu musi być liczbą.' });
+        }
+        await Settings.findOneAndUpdate(
+            { key: 'productDiscount' },
+            { value: discountNum },
+            { new: true, upsert: true }
+        );
+        res.json({ message: 'Rabat cennika zapisany pomyślnie.', discount: discountNum });
+    } catch (error) {
+        res.status(500).json({ message: 'Błąd zapisywania rabatu cennika.' });
+    }
+});
+
 app.get('/api/admin/users', authMiddleware, adminMiddleware, async (req, res) => {
     try {
         const users = await User.find({}, '-password');
@@ -1337,12 +1394,15 @@ app.get('/api/admin/all-products', authMiddleware, adminMiddleware, async (req, 
             ]
         } : {};
 
-        const products = await Product.find(query)
+        const rawProducts = await Product.find(query)
             .limit(limit * 1)
             .skip((page - 1) * limit)
+            .lean()
             .exec();
 
         const count = await Product.countDocuments(query);
+        const discountPercent = await getProductDiscount();
+        const products = rawProducts.map(p => applyDiscountToProduct(p, discountPercent));
 
         res.json({
             products,
@@ -1507,7 +1567,9 @@ app.get('/api/sync/products', authMiddleware, async (req, res) => {
         const limit = parseInt(req.query.limit, 10) || 1000;
         const skip = (page - 1) * limit;
 
-        const products = await Product.find({}).skip(skip).limit(limit).lean();
+        const rawProducts = await Product.find({}).skip(skip).limit(limit).lean();
+        const discountPercent = await getProductDiscount();
+        const products = rawProducts.map(p => applyDiscountToProduct(p, discountPercent));
         res.json({ products }); // Zwracamy w formacie { products: [...] }
     } catch (error) {
         res.status(500).json({ message: 'Błąd pobierania paczki produktów.' });
@@ -1554,8 +1616,11 @@ app.get('/api/products', authMiddleware, async (req, res) => {
             query.quantity = { $gt: 0 };
         }
 
+        const discountPercent = await getProductDiscount();
+
         if (categorized === 'true') {
-            const products = await Product.find(query).lean();
+            const rawProducts = await Product.find(query).lean();
+            const products = rawProducts.map(p => applyDiscountToProduct(p, discountPercent));
             const categories = {};
             products.forEach(p => {
                 const cat = p.category || 'Inne';
@@ -1565,7 +1630,8 @@ app.get('/api/products', authMiddleware, async (req, res) => {
             return res.json(categories);
         }
 
-        const products = await Product.find(query).limit(50);
+        const rawProducts = await Product.find(query).limit(50).lean();
+        const products = rawProducts.map(p => applyDiscountToProduct(p, discountPercent));
         res.status(200).json(products);
     } catch (error) {
         res.status(500).json({ message: 'Błąd pobierania produktów', error: error.message });
@@ -1583,9 +1649,11 @@ app.post('/api/orders/import-csv', authMiddleware, upload.single('orderFile'), a
 
         const barcodes = itemsFromCsv.map(item => item.identifier);
         const foundProducts = await Product.find({ barcodes: { $in: barcodes } }).lean();
+        const discountPercent = await getProductDiscount();
         const productMap = new Map();
         foundProducts.forEach(p => {
-            p.barcodes.forEach(b => productMap.set(b, p));
+            const discountedProduct = applyDiscountToProduct(p, discountPercent);
+            p.barcodes.forEach(b => productMap.set(b, discountedProduct));
         });
 
         const orderItems = [];
@@ -1617,8 +1685,12 @@ app.post('/api/orders/import-multiple-csv', authMiddleware, upload.array('orderF
             if (itemsFromCsv.length > 0) {
                 const barcodes = itemsFromCsv.map(item => item.identifier);
                 const foundProducts = await Product.find({ barcodes: { $in: barcodes } }).lean();
+                const discountPercent = await getProductDiscount();
                 const productMap = new Map();
-                foundProducts.forEach(p => p.barcodes.forEach(b => productMap.set(b, p)));
+                foundProducts.forEach(p => {
+                    const discountedProduct = applyDiscountToProduct(p, discountPercent);
+                    p.barcodes.forEach(b => productMap.set(b, discountedProduct));
+                });
 
                 const orderItems = [];
                 for (const csvItem of itemsFromCsv) {
