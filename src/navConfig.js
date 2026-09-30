@@ -11,7 +11,7 @@ export const navConfig = (onNewOrder) => [
     {
         category: 'Sprzedaż',
         items: [
-            { id: 'order', label: 'Nowe Zamówienie', icon: PlusCircle, roles: ['user', 'administrator'], action: onNewOrder, color: 'bg-yellow-200' },
+            { id: 'order', label: 'Zamówienie', icon: PlusCircle, roles: ['user', 'administrator'], color: 'bg-yellow-200' },
             { id: 'orders', label: 'Zamówienia', icon: Archive, roles: ['user', 'administrator'], color: 'bg-red-200' },
         ]
     },

@@ -32,6 +32,7 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder, 
     const [isContactLoading, setIsContactLoading] = useState(false);
     const [lightbox, setLightbox] = useState({ isOpen: false, image: null });
     const [highlightedItemId, setHighlightedItemId] = useState(null);
+    const [completedModal, setCompletedModal] = useState({ isOpen: false, name: '', email: '', phone: '' });
     const itemRefs = useRef({});
     const fileInputRef = useRef(null);
 
@@ -53,6 +54,36 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder, 
         });
         setDirty(isDirtyFlag);
     }, [setCurrentOrder, setDirty]);
+
+    const fetchNipData = useCallback(async (nip) => {
+        try {
+            setIsContactLoading(true);
+            const today = new Date().toISOString().split('T')[0];
+            const res = await fetch(`https://wl-api.mf.gov.pl/api/search/nip/${nip}?date=${today}`);
+            if (res.ok) {
+                const data = await res.json();
+                if (data?.result?.subject?.name) {
+                    const companyName = data.result.subject.name;
+                    const address = data.result.subject.workingAddress || data.result.subject.residenceAddress || '';
+                    const fullName = address ? `${companyName} (${address})` : companyName;
+
+                    setContactSearchQuery(fullName);
+                    updateOrder({
+                        customerName: fullName,
+                        customerId: null
+                    }, true);
+                    showNotification(`Pobrano dane z GUS/MF: ${companyName}`, 'success');
+                    setContactSuggestions([]);
+                    return true;
+                }
+            }
+        } catch (err) {
+            console.warn('Błąd pobierania NIP:', err);
+        } finally {
+            setIsContactLoading(false);
+        }
+        return false;
+    }, [showNotification, updateOrder]);
 
     const handleAutoSave = useCallback(async (updatedOrder) => {
         if (isSaving) return;
@@ -172,6 +203,26 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder, 
             setContactSuggestions([]);
             return;
         }
+
+        const cleanNip = contactSearchQuery.replace(/\D/g, '');
+        if (cleanNip.length === 10) {
+            const handler = setTimeout(async () => {
+                const found = await fetchNipData(cleanNip);
+                if (!found && contactSearchQuery.trim().length >= 2) {
+                    setIsContactLoading(true);
+                    try {
+                        const results = await searchContacts(contactSearchQuery);
+                        setContactSuggestions(results);
+                    } catch (error) {
+                        showNotification(error.message, 'error');
+                    } finally {
+                        setIsContactLoading(false);
+                    }
+                }
+            }, 400);
+            return () => clearTimeout(handler);
+        }
+
         if (contactSearchQuery.trim().length < 2) {
             setContactSuggestions([]);
             return;
@@ -186,9 +237,9 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder, 
             } finally {
                 setIsContactLoading(false);
             }
-        }, 300); // Zredukowano do 300ms dla lepszej responsywności
+        }, 300);
         return () => clearTimeout(handler);
-    }, [contactSearchQuery, order.customerId, order.customerName, showNotification]);
+    }, [contactSearchQuery, fetchNipData, order.customerId, order.customerName, showNotification]);
 
     const prevItemsLength = useRef((order.items || []).length);
     useEffect(() => {
@@ -397,6 +448,16 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder, 
     };
 
     const handleStatusChange = async (newStatus) => {
+        if (newStatus === 'Zakończono') {
+            setCompletedModal({
+                isOpen: true,
+                name: order.customerName && order.customerName !== 'Nieznany' ? order.customerName : '',
+                email: '',
+                phone: ''
+            });
+            return;
+        }
+
         const updatedOrder = { ...order, status: newStatus, isDirty: true };
 
         // Aktualizacja lokalnego stanu natychmiast dla UI
@@ -410,6 +471,47 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder, 
             showNotification(`Status zmieniony na: ${newStatus}`, 'success');
         } catch (error) {
             showNotification('Błąd zmiany statusu.', 'error');
+        }
+    };
+
+    const handleSaveCompletedCustomerInfo = async (skip = false) => {
+        let updatedNote = order.generalNote || '';
+        if (!skip) {
+            const { name, email, phone } = completedModal;
+            const details = [];
+            if (name) details.push(`Klient: ${name}`);
+            if (email) details.push(`Email: ${email}`);
+            if (phone) details.push(`Tel: ${phone}`);
+
+            if (details.length > 0) {
+                const contactNote = `[DANE KLIENTA]\n${details.join('\n')}`;
+                updatedNote = updatedNote ? `${updatedNote}\n\n${contactNote}` : contactNote;
+            }
+        }
+
+        const finalCustomerName = (!skip && completedModal.name.trim()) ? completedModal.name.trim() : (order.customerName || 'Nieznany');
+
+        const updatedOrder = {
+            ...order,
+            customerName: finalCustomerName,
+            status: 'Zakończono',
+            generalNote: updatedNote,
+            isDirty: true
+        };
+
+        setOrder(updatedOrder);
+        setCurrentOrder(updatedOrder);
+        setDirty(true);
+        if (!skip && completedModal.name.trim()) {
+            setContactSearchQuery(completedModal.name.trim());
+        }
+        setCompletedModal({ isOpen: false, name: '', email: '', phone: '' });
+
+        try {
+            await handleAutoSave(updatedOrder);
+            showNotification('Zamówienie oznaczono jako zakończone.', 'success');
+        } catch (error) {
+            showNotification('Błąd zapisu zamówienia.', 'error');
         }
     };
 
@@ -983,6 +1085,62 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder, 
                 isOpen={!!selectedDetailProduct}
                 onClose={() => setSelectedDetailProduct(null)}
             />
+
+            <Modal
+                isOpen={completedModal.isOpen}
+                onClose={() => handleSaveCompletedCustomerInfo(true)}
+                title="Dane kontaktowe klienta"
+            >
+                <div className="space-y-4">
+                    <p className="text-sm text-gray-600 dark:text-gray-300">
+                        Podaj dane kontaktowe klienta przed zakończeniem zamówienia (opcjonalnie):
+                    </p>
+                    <div>
+                        <label className="block text-sm font-medium mb-1">Imię i nazwisko / Nazwa</label>
+                        <input
+                            type="text"
+                            value={completedModal.name}
+                            onChange={(e) => setCompletedModal({ ...completedModal, name: e.target.value })}
+                            placeholder="Imię i nazwisko klienta"
+                            className="w-full p-2 border rounded-md bg-white dark:bg-gray-700"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium mb-1">E-mail</label>
+                        <input
+                            type="email"
+                            value={completedModal.email}
+                            onChange={(e) => setCompletedModal({ ...completedModal, email: e.target.value })}
+                            placeholder="email@example.com"
+                            className="w-full p-2 border rounded-md bg-white dark:bg-gray-700"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium mb-1">Telefon</label>
+                        <input
+                            type="tel"
+                            value={completedModal.phone}
+                            onChange={(e) => setCompletedModal({ ...completedModal, phone: e.target.value })}
+                            placeholder="123 456 789"
+                            className="w-full p-2 border rounded-md bg-white dark:bg-gray-700"
+                        />
+                    </div>
+                </div>
+                <div className="flex justify-end gap-3 mt-6">
+                    <button
+                        onClick={() => handleSaveCompletedCustomerInfo(true)}
+                        className="px-4 py-2 bg-gray-200 dark:bg-gray-600 rounded-lg hover:bg-gray-300 transition-colors"
+                    >
+                        Pomiń
+                    </button>
+                    <button
+                        onClick={() => handleSaveCompletedCustomerInfo(false)}
+                        className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-semibold transition-colors"
+                    >
+                        Zapisz i zakończ
+                    </button>
+                </div>
+            </Modal>
         </div>
     );
 };
