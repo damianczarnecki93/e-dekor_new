@@ -115,6 +115,7 @@ const orderSchema = new mongoose.Schema({
     items: Array,
     total: Number,
     discount: { type: Number, default: 0 },
+    generalNote: String,
     images: [String],
     status: {
         type: String,
