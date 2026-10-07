@@ -316,7 +316,7 @@ async function sendPushNotification(userIds, notificationType, title, body) {
 }
 
 // --- Funkcja pomocnicza do wzbogacania zamówień o zdjęcia i opisy z bazy produktów ---
-async function enrichOrdersWithProductDetails(orders) {
+async function enrichOrdersWithProductDetails(orders, includeImages = false) {
     if (!orders || orders.length === 0) return orders;
 
     const productCodes = new Set();
@@ -333,12 +333,13 @@ async function enrichOrdersWithProductDetails(orders) {
         });
     });
 
+    const projection = includeImages ? 'product_code barcodes description image' : 'product_code barcodes description';
     const products = await Product.find({
         $or: [
             { product_code: { $in: Array.from(productCodes) } },
             { barcodes: { $in: Array.from(barcodes) } }
         ]
-    }).lean();
+    }).select(projection).lean();
 
     const productByCode = new Map();
     const productByBarcode = new Map();
@@ -1744,7 +1745,7 @@ app.get('/api/orders', authMiddleware, async (req, res) => {
                 query.date.$lte = endDate;
             }
         }
-        const rawOrders = await Order.find(query).sort({ date: -1 });
+        const rawOrders = await Order.find(query).select('-images').lean().sort({ date: -1 });
         const orders = await enrichOrdersWithProductDetails(rawOrders);
         res.status(200).json(orders);
     } catch (error) {
@@ -1753,9 +1754,9 @@ app.get('/api/orders', authMiddleware, async (req, res) => {
 });
 app.get('/api/orders/:id', authMiddleware, async (req, res) => {
     try {
-        const order = await Order.findById(req.params.id);
+        const order = await Order.findById(req.params.id).lean();
         if (!order) return res.status(404).json({ message: 'Nie znaleziono zamówienia.' });
-        const enriched = await enrichOrdersWithProductDetails([order]);
+        const enriched = await enrichOrdersWithProductDetails([order], true);
         res.json(enriched[0]);
     } catch (error) {
         res.status(500).json({ message: 'Błąd pobierania zamówienia.' });
