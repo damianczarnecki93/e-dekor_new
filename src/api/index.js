@@ -438,7 +438,11 @@ unarchiveOrder: async (orderId) => {
     },
     getProductsPage: async (page, limit) => {
         const response = await fetchWithAuth(`/api/sync/products?page=${page}&limit=${limit}`);
-        if (!response.ok) throw new Error('Błąd pobierania strony produktów');
+        if (!response.ok) {
+            let msg = 'Błąd pobierania strony produktów';
+            try { const err = await response.json(); if (err.message) msg += `: ${err.message}`; } catch (e) {}
+            throw new Error(msg);
+        }
         return await response.json(); // Serwer zwróci { products: [...] }
     },
     getContactsCount: async () => {
@@ -448,7 +452,11 @@ unarchiveOrder: async (orderId) => {
     },
     getContactsPage: async (page, limit) => {
         const response = await fetchWithAuth(`/api/sync/contacts?page=${page}&limit=${limit}`);
-        if (!response.ok) throw new Error('Błąd pobierania strony kontaktów');
+        if (!response.ok) {
+            let msg = 'Błąd pobierania strony kontaktów';
+            try { const err = await response.json(); if (err.message) msg += `: ${err.message}`; } catch (e) {}
+            throw new Error(msg);
+        }
         return await response.json(); // Serwer zwróci { contacts: [...] }
     },
     subscribeToPush: async (subscription) => {
