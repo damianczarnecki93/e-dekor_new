@@ -43,7 +43,7 @@ async function synchronizeTable(tableName, countApiFn, pageApiFn, onProgress) {
     console.log(`Synchronizacja tabeli: ${tableName}`);
     onProgress({ status: 'fetching_count', table: tableName });
     const { total: count } = await countApiFn(); // API zwraca { total: ... }
-    const limit = 1000;
+    const limit = 250;
     const totalPages = Math.ceil(count / limit);
     let loadedCount = 0;
 

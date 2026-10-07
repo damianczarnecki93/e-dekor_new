@@ -15,6 +15,9 @@ const fetchWithAuth = async (url, options = {}) => {
             window.dispatchEvent(new Event('auth-error'));
             throw new Error('Sesja wygasła. Proszę zalogować się ponownie.');
         }
+        if (response.status === 429) {
+            throw new Error('Przekroczono limit żądań do serwera (429). Spróbuj ponownie za chwilę.');
+        }
         return response;
     } catch (error) {
         if (error.name === 'TypeError' && error.message === 'Failed to fetch') {
@@ -103,7 +106,14 @@ unarchiveOrder: async (orderId) => {
         }
         const url = `/api/orders?${params.toString()}`;
         const response = await fetchWithAuth(url);
-        if (!response.ok) { const errorData = await response.json(); throw new Error(errorData.message || 'Błąd pobierania zamówień'); }
+        if (!response.ok) {
+            let errorMsg = 'Błąd pobierania zamówień';
+            try {
+                const errorData = await response.json();
+                if (errorData && errorData.message) errorMsg = errorData.message;
+            } catch (e) {}
+            throw new Error(errorMsg);
+        }
         return await response.json();
     },
     getOrderById: async (id) => {
@@ -438,7 +448,11 @@ unarchiveOrder: async (orderId) => {
     },
     getProductsPage: async (page, limit) => {
         const response = await fetchWithAuth(`/api/sync/products?page=${page}&limit=${limit}`);
-        if (!response.ok) throw new Error('Błąd pobierania strony produktów');
+        if (!response.ok) {
+            let msg = 'Błąd pobierania strony produktów';
+            try { const err = await response.json(); if (err.message) msg += `: ${err.message}`; } catch (e) {}
+            throw new Error(msg);
+        }
         return await response.json(); // Serwer zwróci { products: [...] }
     },
     getContactsCount: async () => {
@@ -448,7 +462,11 @@ unarchiveOrder: async (orderId) => {
     },
     getContactsPage: async (page, limit) => {
         const response = await fetchWithAuth(`/api/sync/contacts?page=${page}&limit=${limit}`);
-        if (!response.ok) throw new Error('Błąd pobierania strony kontaktów');
+        if (!response.ok) {
+            let msg = 'Błąd pobierania strony kontaktów';
+            try { const err = await response.json(); if (err.message) msg += `: ${err.message}`; } catch (e) {}
+            throw new Error(msg);
+        }
         return await response.json(); // Serwer zwróci { contacts: [...] }
     },
     subscribeToPush: async (subscription) => {

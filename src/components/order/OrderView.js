@@ -19,6 +19,8 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder, 
     const [editModal, setEditModal] = useState({ isOpen: false, itemData: null });
     const [selectedDetailProduct, setSelectedDetailProduct] = useState(null);
     const [isSaving, setIsSaving] = useState(false);
+    const [selectedKeys, setSelectedKeys] = useState(new Set());
+    const [bulkQuantity, setBulkQuantity] = useState('');
     const listEndRef = useRef(null);
     const printRef = useRef(null);
     const importFileRef = useRef(null);
@@ -30,8 +32,13 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder, 
     const [isContactLoading, setIsContactLoading] = useState(false);
     const [lightbox, setLightbox] = useState({ isOpen: false, image: null });
     const [highlightedItemId, setHighlightedItemId] = useState(null);
+    const [completedModal, setCompletedModal] = useState({ isOpen: false, name: '', email: '', phone: '' });
     const itemRefs = useRef({});
     const fileInputRef = useRef(null);
+
+    const getItemKey = useCallback((item, index) => {
+        return item._id || item.product_code || `item-${index}`;
+    }, []);
 
     const updateOrder = useCallback((updates, isDirtyFlag = true) => {
         setOrder(prev => {
@@ -48,11 +55,46 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder, 
         setDirty(isDirtyFlag);
     }, [setCurrentOrder, setDirty]);
 
+    const fetchNipData = useCallback(async (nip) => {
+        try {
+            setIsContactLoading(true);
+            const today = new Date().toISOString().split('T')[0];
+            const res = await fetch(`https://wl-api.mf.gov.pl/api/search/nip/${nip}?date=${today}`);
+            if (res.ok) {
+                const data = await res.json();
+                if (data?.result?.subject?.name) {
+                    const companyName = data.result.subject.name;
+                    const address = data.result.subject.workingAddress || data.result.subject.residenceAddress || '';
+                    const fullName = address ? `${companyName} (${address})` : companyName;
+
+                    setContactSearchQuery(fullName);
+                    updateOrder({
+                        customerName: fullName,
+                        customerId: null
+                    }, true);
+                    showNotification(`Pobrano dane z GUS/MF: ${companyName}`, 'success');
+                    setContactSuggestions([]);
+                    return true;
+                }
+            }
+        } catch (err) {
+            console.warn('Błąd pobierania NIP:', err);
+        } finally {
+            setIsContactLoading(false);
+        }
+        return false;
+    }, [showNotification, updateOrder]);
+
     const handleAutoSave = useCallback(async (updatedOrder) => {
-        if (isSaving || !updatedOrder.customerName) return;
+        if (isSaving) return;
+        const finalCustomerName = updatedOrder.customerName && updatedOrder.customerName.trim() ? updatedOrder.customerName : 'Nieznany';
+        const orderToSave = {
+            ...updatedOrder,
+            customerName: finalCustomerName
+        };
         setIsSaving(true);
         try {
-            const savedOrder = await saveOrderOfflineFirst(updatedOrder, user);
+            const savedOrder = await saveOrderOfflineFirst(orderToSave, user);
 
             const finalOrder = {
                 ...savedOrder,
@@ -78,6 +120,10 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder, 
             localStorage.setItem('draftOrder', JSON.stringify(finalOrder));
             setDirty(finalOrder.isDirty);
 
+            if (!updatedOrder.customerName || !updatedOrder.customerName.trim()) {
+                setContactSearchQuery('Nieznany');
+            }
+
             if (savedOrder.statusSync === 'pending_sync') {
                 showNotification('Jesteś offline. Zamówienie zostało zapisane lokalnie i zostanie wysłane po odzyskaniu połączenia.', 'info');
             }
@@ -89,6 +135,27 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder, 
             setIsSaving(false);
         }
     }, [isSaving, user, setCurrentOrder, setDirty, showNotification]);
+
+    const orderRef = useRef(order);
+    useEffect(() => {
+        orderRef.current = order;
+    }, [order]);
+
+    useEffect(() => {
+        return () => {
+            const latestOrder = orderRef.current;
+            if (latestOrder && (latestOrder.isDirty || (latestOrder.items && latestOrder.items.length > 0) || latestOrder.generalNote || (latestOrder.images && latestOrder.images.length > 0))) {
+                const finalCustomerName = latestOrder.customerName && latestOrder.customerName.trim() ? latestOrder.customerName : 'Nieznany';
+                const orderToSave = {
+                    ...latestOrder,
+                    customerName: finalCustomerName
+                };
+                saveOrderOfflineFirst(orderToSave, user).then(saved => {
+                    localStorage.setItem('draftOrder', JSON.stringify(saved));
+                }).catch(err => console.error("Błąd zapisu przy wyjściu:", err));
+            }
+        };
+    }, [user]);
 
     const getSortIcon = (name) => {
         if (!sortConfig || sortConfig.key !== name) {
@@ -136,6 +203,26 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder, 
             setContactSuggestions([]);
             return;
         }
+
+        const cleanNip = contactSearchQuery.replace(/\D/g, '');
+        if (cleanNip.length === 10) {
+            const handler = setTimeout(async () => {
+                const found = await fetchNipData(cleanNip);
+                if (!found && contactSearchQuery.trim().length >= 2) {
+                    setIsContactLoading(true);
+                    try {
+                        const results = await searchContacts(contactSearchQuery);
+                        setContactSuggestions(results);
+                    } catch (error) {
+                        showNotification(error.message, 'error');
+                    } finally {
+                        setIsContactLoading(false);
+                    }
+                }
+            }, 400);
+            return () => clearTimeout(handler);
+        }
+
         if (contactSearchQuery.trim().length < 2) {
             setContactSuggestions([]);
             return;
@@ -150,9 +237,9 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder, 
             } finally {
                 setIsContactLoading(false);
             }
-        }, 300); // Zredukowano do 300ms dla lepszej responsywności
+        }, 300);
         return () => clearTimeout(handler);
-    }, [contactSearchQuery, order.customerId, order.customerName, showNotification]);
+    }, [contactSearchQuery, fetchNipData, order.customerId, order.customerName, showNotification]);
 
     const prevItemsLength = useRef((order.items || []).length);
     useEffect(() => {
@@ -210,7 +297,9 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder, 
         reader.onloadend = () => {
             const base64String = reader.result;
             const updatedImages = [...(order.images || []), base64String];
+            const updatedOrder = { ...order, images: updatedImages, isDirty: true };
             updateOrder({ images: updatedImages });
+            handleAutoSave(updatedOrder);
         };
         reader.readAsDataURL(file);
         e.target.value = null; // reset input
@@ -219,7 +308,85 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder, 
     const removeImage = (index) => {
         const updatedImages = [...(order.images || [])];
         updatedImages.splice(index, 1);
+        const updatedOrder = { ...order, images: updatedImages, isDirty: true };
         updateOrder({ images: updatedImages });
+        handleAutoSave(updatedOrder);
+    };
+
+    const handleGeneralNoteClose = () => {
+        setGeneralNoteModal(false);
+        handleAutoSave(orderRef.current);
+    };
+
+    const toggleSelectItem = (key) => {
+        setSelectedKeys(prev => {
+            const next = new Set(prev);
+            if (next.has(key)) {
+                next.delete(key);
+            } else {
+                next.add(key);
+            }
+            return next;
+        });
+    };
+
+    const toggleSelectAll = () => {
+        if (selectedKeys.size === sortedItems.length && sortedItems.length > 0) {
+            setSelectedKeys(new Set());
+        } else {
+            const allKeys = new Set(sortedItems.map((item, index) => getItemKey(item, index)));
+            setSelectedKeys(allKeys);
+        }
+    };
+
+    const handleApplyBulkQuantity = () => {
+        const qty = parseInt(bulkQuantity, 10);
+        if (isNaN(qty) || qty < 0) {
+            showNotification('Proszę podać poprawną ilość.', 'error');
+            return;
+        }
+
+        setOrder(prev => {
+            const newItems = prev.items.map((item, index) => {
+                const key = getItemKey(item, index);
+                if (selectedKeys.has(key)) {
+                    return { ...item, quantity: qty, isSaved: false };
+                }
+                return item;
+            });
+            const newOrder = { ...prev, items: newItems, isDirty: true };
+            setTimeout(() => {
+                setCurrentOrder(newOrder);
+                localStorage.setItem('draftOrder', JSON.stringify(newOrder));
+            }, 0);
+            return newOrder;
+        });
+        setDirty(true);
+        showNotification(`Zaktualizowano ilość dla ${selectedKeys.size} pozycji.`, 'success');
+        setBulkQuantity('');
+    };
+
+    const handleBulkDelete = () => {
+        if (selectedKeys.size === 0) return;
+        if (!window.confirm(`Czy na pewno chcesz usunąć ${selectedKeys.size} zaznaczonych pozycji?`)) {
+            return;
+        }
+
+        setOrder(prev => {
+            const newItems = prev.items.filter((item, index) => {
+                const key = getItemKey(item, index);
+                return !selectedKeys.has(key);
+            });
+            const newOrder = { ...prev, items: newItems, isDirty: true };
+            setTimeout(() => {
+                setCurrentOrder(newOrder);
+                localStorage.setItem('draftOrder', JSON.stringify(newOrder));
+            }, 0);
+            return newOrder;
+        });
+        setDirty(true);
+        showNotification(`Usunięto ${selectedKeys.size} pozycji.`, 'success');
+        setSelectedKeys(new Set());
     };
 
     const addProductToOrder = (product, quantity) => {
@@ -281,6 +448,16 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder, 
     };
 
     const handleStatusChange = async (newStatus) => {
+        if (newStatus === 'Zakończono') {
+            setCompletedModal({
+                isOpen: true,
+                name: order.customerName && order.customerName !== 'Nieznany' ? order.customerName : '',
+                email: '',
+                phone: ''
+            });
+            return;
+        }
+
         const updatedOrder = { ...order, status: newStatus, isDirty: true };
 
         // Aktualizacja lokalnego stanu natychmiast dla UI
@@ -294,6 +471,47 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder, 
             showNotification(`Status zmieniony na: ${newStatus}`, 'success');
         } catch (error) {
             showNotification('Błąd zmiany statusu.', 'error');
+        }
+    };
+
+    const handleSaveCompletedCustomerInfo = async (skip = false) => {
+        let updatedNote = order.generalNote || '';
+        if (!skip) {
+            const { name, email, phone } = completedModal;
+            const details = [];
+            if (name) details.push(`Klient: ${name}`);
+            if (email) details.push(`Email: ${email}`);
+            if (phone) details.push(`Tel: ${phone}`);
+
+            if (details.length > 0) {
+                const contactNote = `[DANE KLIENTA]\n${details.join('\n')}`;
+                updatedNote = updatedNote ? `${updatedNote}\n\n${contactNote}` : contactNote;
+            }
+        }
+
+        const finalCustomerName = (!skip && completedModal.name.trim()) ? completedModal.name.trim() : (order.customerName || 'Nieznany');
+
+        const updatedOrder = {
+            ...order,
+            customerName: finalCustomerName,
+            status: 'Zakończono',
+            generalNote: updatedNote,
+            isDirty: true
+        };
+
+        setOrder(updatedOrder);
+        setCurrentOrder(updatedOrder);
+        setDirty(true);
+        if (!skip && completedModal.name.trim()) {
+            setContactSearchQuery(completedModal.name.trim());
+        }
+        setCompletedModal({ isOpen: false, name: '', email: '', phone: '' });
+
+        try {
+            await handleAutoSave(updatedOrder);
+            showNotification('Zamówienie oznaczono jako zakończone.', 'success');
+        } catch (error) {
+            showNotification('Błąd zapisu zamówienia.', 'error');
         }
     };
 
@@ -591,8 +809,49 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder, 
                 <div ref={printRef} className="flex-grow bg-gray-50 dark:bg-gray-900 p-2 sm:p-4 rounded-lg shadow-inner mt-6">
                     <div className="print-header hidden p-4"><h2 className="text-2xl font-bold">Zamówienie dla: {order.customerName}</h2><p>Data: {new Date().toLocaleDateString()}</p></div>
                     <div>
+                        {selectedKeys.size > 0 && (
+                            <div className="bg-indigo-50 dark:bg-indigo-900/40 p-3 rounded-lg mb-4 flex flex-wrap items-center justify-between gap-3 border border-indigo-200 dark:border-indigo-700 print:hidden">
+                                <span className="font-medium text-indigo-900 dark:text-indigo-200">
+                                    Zaznaczono pozycji: {selectedKeys.size}
+                                </span>
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <div className="flex items-center gap-2">
+                                        <input
+                                            type="number"
+                                            value={bulkQuantity}
+                                            onChange={(e) => setBulkQuantity(e.target.value)}
+                                            placeholder="Nowa ilość"
+                                            className="w-28 p-1.5 border rounded-md bg-white dark:bg-gray-700 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                                        />
+                                        <button
+                                            onClick={handleApplyBulkQuantity}
+                                            className="px-3 py-1.5 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 text-sm font-medium transition-colors"
+                                        >
+                                            Zastosuj dla zaznaczonych
+                                        </button>
+                                    </div>
+                                    <button
+                                        onClick={handleBulkDelete}
+                                        className="px-3 py-1.5 bg-red-600 text-white rounded-md hover:bg-red-700 text-sm font-medium transition-colors flex items-center gap-1"
+                                    >
+                                        <Trash2 className="w-4 h-4" /> Usuń zaznaczone
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
                         <div className="hidden lg:grid lg:grid-cols-12 gap-4 items-center font-bold p-2 border-b border-gray-200 dark:border-gray-700">
-                            <div className="col-span-5 cursor-pointer" onClick={() => requestSort('name')}><div className="flex items-center">Nazwa {getSortIcon('name')}</div></div>
+                            <div className="col-span-5 flex items-center gap-3">
+                                <input
+                                    type="checkbox"
+                                    className="h-4 w-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                                    checked={sortedItems.length > 0 && selectedKeys.size === sortedItems.length}
+                                    onChange={toggleSelectAll}
+                                />
+                                <div className="cursor-pointer flex items-center" onClick={() => requestSort('name')}>
+                                    Nazwa {getSortIcon('name')}
+                                </div>
+                            </div>
                             <div className="col-span-2 cursor-pointer" onClick={() => requestSort('product_code')}><div className="flex items-center">Kod produktu {getSortIcon('product_code')}</div></div>
                             <div className="col-span-1 text-right cursor-pointer" onClick={() => requestSort('price')}><div className="flex items-center justify-end">Cena {getSortIcon('price')}</div></div>
                             <div className="col-span-1 text-center cursor-pointer" onClick={() => requestSort('quantity')}><div className="flex items-center justify-center">Ilość {getSortIcon('quantity')}</div></div>
@@ -602,14 +861,22 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder, 
                         <div className="lg:divide-y lg:divide-gray-200 lg:dark:divide-gray-700">
                             {sortedItems.map((item, index) => {
                                 const itemId = item._id || item.product_code;
+                                const itemKey = getItemKey(item, index);
                                 const isHighlighted = highlightedItemId === itemId;
+                                const isSelected = selectedKeys.has(itemKey);
                                 return (
                                 <div
                                     key={item._id || index}
                                     ref={el => itemRefs.current[itemId] = el}
-                                    className={`block lg:grid lg:grid-cols-12 gap-4 items-center p-4 lg:p-2 transition-colors duration-500 ${isHighlighted ? 'bg-green-100 dark:bg-green-900/40 ring-2 ring-green-500 shadow-lg scale-[1.02] lg:scale-100' : item.isCustom ? 'bg-yellow-50 dark:bg-yellow-900/20' : 'bg-white dark:bg-gray-800'} lg:bg-transparent lg:dark:bg-transparent mb-4 lg:mb-0 rounded-lg shadow-md lg:shadow-none`}
+                                    className={`block lg:grid lg:grid-cols-12 gap-4 items-center p-4 lg:p-2 transition-colors duration-500 ${isHighlighted ? 'bg-green-100 dark:bg-green-900/40 ring-2 ring-green-500 shadow-lg scale-[1.02] lg:scale-100' : isSelected ? 'bg-indigo-50 dark:bg-indigo-900/30' : item.isCustom ? 'bg-yellow-50 dark:bg-yellow-900/20' : 'bg-white dark:bg-gray-800'} lg:bg-transparent lg:dark:bg-transparent mb-4 lg:mb-0 rounded-lg shadow-md lg:shadow-none`}
                                 >
                                     <div className="hidden lg:flex lg:col-span-5 font-medium items-center gap-3">
+                                        <input
+                                            type="checkbox"
+                                            className="h-4 w-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                                            checked={isSelected}
+                                            onChange={() => toggleSelectItem(itemKey)}
+                                        />
                                         {item.isSaved && <CheckCircle2 className="w-5 h-5 text-green-500 flex-shrink-0" />}
                                         <ProductImage src={item.image} alt={item.name} className="w-10 h-10" iconSize={18} />
                                         <div className="flex flex-col truncate">
@@ -638,6 +905,12 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder, 
                                     <div className="w-full lg:hidden">
                                         <div className="flex justify-between items-start mb-2 gap-3">
                                             <div className="flex gap-3 items-center min-w-0">
+                                                <input
+                                                    type="checkbox"
+                                                    className="h-5 w-5 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer flex-shrink-0"
+                                                    checked={isSelected}
+                                                    onChange={() => toggleSelectItem(itemKey)}
+                                                />
                                                 <ProductImage src={item.image} alt={item.name} className="w-12 h-12" iconSize={20} />
                                                 <div className="truncate">
                                                     <div className="flex items-center gap-2">
@@ -778,7 +1051,7 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder, 
                 </div>
             </Modal>
 
-            <Modal isOpen={generalNoteModal} onClose={() => setGeneralNoteModal(false)} title="Notatka ogólna do zamówienia">
+            <Modal isOpen={generalNoteModal} onClose={handleGeneralNoteClose} title="Notatka ogólna do zamówienia">
                 <textarea
                     value={order.generalNote || ''}
                     onChange={(e) => updateOrder({ generalNote: e.target.value })}
@@ -786,7 +1059,7 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder, 
                     placeholder="Wpisz treść notatki ogólnej..."
                 />
                 <div className="flex justify-end mt-4">
-                    <button onClick={() => setGeneralNoteModal(false)} className="px-6 py-2 bg-blue-600 text-white rounded-lg font-bold">Zamknij</button>
+                    <button onClick={handleGeneralNoteClose} className="px-6 py-2 bg-blue-600 text-white rounded-lg font-bold">Zamknij</button>
                 </div>
             </Modal>
 
@@ -812,6 +1085,62 @@ const OrderView = ({ currentOrder, setCurrentOrder, user, setDirty, onNewOrder, 
                 isOpen={!!selectedDetailProduct}
                 onClose={() => setSelectedDetailProduct(null)}
             />
+
+            <Modal
+                isOpen={completedModal.isOpen}
+                onClose={() => handleSaveCompletedCustomerInfo(true)}
+                title="Dane kontaktowe klienta"
+            >
+                <div className="space-y-4">
+                    <p className="text-sm text-gray-600 dark:text-gray-300">
+                        Podaj dane kontaktowe klienta przed zakończeniem zamówienia (opcjonalnie):
+                    </p>
+                    <div>
+                        <label className="block text-sm font-medium mb-1">Imię i nazwisko / Nazwa</label>
+                        <input
+                            type="text"
+                            value={completedModal.name}
+                            onChange={(e) => setCompletedModal({ ...completedModal, name: e.target.value })}
+                            placeholder="Imię i nazwisko klienta"
+                            className="w-full p-2 border rounded-md bg-white dark:bg-gray-700"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium mb-1">E-mail</label>
+                        <input
+                            type="email"
+                            value={completedModal.email}
+                            onChange={(e) => setCompletedModal({ ...completedModal, email: e.target.value })}
+                            placeholder="email@example.com"
+                            className="w-full p-2 border rounded-md bg-white dark:bg-gray-700"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium mb-1">Telefon</label>
+                        <input
+                            type="tel"
+                            value={completedModal.phone}
+                            onChange={(e) => setCompletedModal({ ...completedModal, phone: e.target.value })}
+                            placeholder="123 456 789"
+                            className="w-full p-2 border rounded-md bg-white dark:bg-gray-700"
+                        />
+                    </div>
+                </div>
+                <div className="flex justify-end gap-3 mt-6">
+                    <button
+                        onClick={() => handleSaveCompletedCustomerInfo(true)}
+                        className="px-4 py-2 bg-gray-200 dark:bg-gray-600 rounded-lg hover:bg-gray-300 transition-colors"
+                    >
+                        Pomiń
+                    </button>
+                    <button
+                        onClick={() => handleSaveCompletedCustomerInfo(false)}
+                        className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-semibold transition-colors"
+                    >
+                        Zapisz i zakończ
+                    </button>
+                </div>
+            </Modal>
         </div>
     );
 };

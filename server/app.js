@@ -115,6 +115,7 @@ const orderSchema = new mongoose.Schema({
     items: Array,
     total: Number,
     discount: { type: Number, default: 0 },
+    generalNote: String,
     images: [String],
     status: {
         type: String,
@@ -122,10 +123,13 @@ const orderSchema = new mongoose.Schema({
         // Dodajemy nowe statusy
         enum: ['Zapisane', 'Skompletowane', 'Zakończono', 'Braki']
     },
-    date: { type: Date, default: Date.now },
+    date: { type: Date, default: Date.now, index: true },
     isDirty: { type: Boolean, default: false },
-    isArchived: { type: Boolean, default: false }
+    isArchived: { type: Boolean, default: false, index: true }
 });
+orderSchema.index({ isArchived: 1, date: -1 });
+orderSchema.index({ status: 1, isArchived: 1, date: -1 });
+
 const Order = mongoose.models.Order || mongoose.model('Order', orderSchema);
 
 const inventorySchema = new mongoose.Schema({
