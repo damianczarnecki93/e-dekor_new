@@ -338,7 +338,7 @@ async function enrichOrdersWithProductDetails(orders) {
             { product_code: { $in: Array.from(productCodes) } },
             { barcodes: { $in: Array.from(barcodes) } }
         ]
-    }).lean();
+    }).select('product_code barcodes description image').lean();
 
     const productByCode = new Map();
     const productByBarcode = new Map();
@@ -1744,7 +1744,7 @@ app.get('/api/orders', authMiddleware, async (req, res) => {
                 query.date.$lte = endDate;
             }
         }
-        const rawOrders = await Order.find(query).sort({ date: -1 });
+        const rawOrders = await Order.find(query).select('-images').lean().sort({ date: -1 });
         const orders = await enrichOrdersWithProductDetails(rawOrders);
         res.status(200).json(orders);
     } catch (error) {
@@ -1753,7 +1753,7 @@ app.get('/api/orders', authMiddleware, async (req, res) => {
 });
 app.get('/api/orders/:id', authMiddleware, async (req, res) => {
     try {
-        const order = await Order.findById(req.params.id);
+        const order = await Order.findById(req.params.id).lean();
         if (!order) return res.status(404).json({ message: 'Nie znaleziono zamówienia.' });
         const enriched = await enrichOrdersWithProductDetails([order]);
         res.json(enriched[0]);
